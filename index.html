@@ -755,15 +755,16 @@ function sw(id,btn){
   document.getElementById('tp-'+id).classList.add('active');
 }
 
-// ── FOOTBALL-DATA.ORG LIVE SCORES ──
+// ── LIVE SCORES via openfootball (geen key nodig) + football-data.org (optioneel) ──
+const OF_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
 const FD_BASE = 'https://api.football-data.org/v4';
-const WC_ID = 2000; // WK 2026 competition id
+const WC_ID = 2000;
 
 function saveFdKey(){
   const key = document.getElementById('fdKeyInput').value.trim();
   if(!key){ document.getElementById('fd-status').textContent='Voer een geldige key in.'; return; }
   localStorage.setItem('wk_fd_key', key);
-  document.getElementById('fd-status').textContent='Opgeslagen! Uitslagen worden geladen...';
+  document.getElementById('fd-status').textContent='Opgeslagen! Laden...';
   document.getElementById('fd-status').style.color='var(--green)';
   loadLiveScores();
 }
@@ -774,61 +775,82 @@ function openFdSettings(){
 }
 
 async function loadLiveScores(){
-  const key = localStorage.getItem('wk_fd_key');
-  if(!key) return;
-  document.getElementById('fd-status').textContent='Uitslagen ophalen...';
+  let updated = 0;
+  // 1. Probeer openfootball (gratis, geen key)
   try {
-    // Get all WC matches
-    const resp = await fetch(`${FD_BASE}/competitions/${WC_ID}/matches`, {
-      headers: { 'X-Auth-Token': key }
-    });
-    if(!resp.ok){
-      if(resp.status===403){ document.getElementById('fd-status').textContent='Key ongeldig of geen toegang tot WK data.'; document.getElementById('fd-status').style.color='var(--red)'; return; }
-      throw new Error('HTTP '+resp.status);
-    }
-    const data = await resp.json();
-    const matches = data.matches || [];
-    let updated = 0;
-    matches.forEach(apiMatch => {
-      const home = apiMatch.homeTeam?.name || '';
-      const away = apiMatch.awayTeam?.name || '';
-      const status = apiMatch.status; // FINISHED, IN_PLAY, PAUSED, SCHEDULED, TIMED
-      const scoreH = apiMatch.score?.fullTime?.home;
-      const scoreA = apiMatch.score?.fullTime?.away;
-      const apiDate = apiMatch.utcDate ? apiMatch.utcDate.split('T')[0] : '';
-      // Match to our local data by team names (fuzzy)
-      const local = MATCHES.find(m => {
-        return (fuzzyMatch(m.home, home) && fuzzyMatch(m.away, away)) ||
-               (fuzzyMatch(m.home, away) && fuzzyMatch(m.away, home));
-      });
-      if(local){
-        if(status === 'FINISHED' && scoreH !== null && scoreA !== null){
-          // Check if home/away are swapped
-          const swapped = fuzzyMatch(local.home, away);
-          local.result = swapped ? `${scoreA}-${scoreH}` : `${scoreH}-${scoreA}`;
-          local.apiStatus = 'FINISHED';
-          updated++;
-        } else if(status === 'IN_PLAY' || status === 'PAUSED'){
-          local.apiStatus = 'LIVE';
-          const liveH = apiMatch.score?.fullTime?.home ?? apiMatch.score?.halfTime?.home ?? 0;
-          const liveA = apiMatch.score?.fullTime?.away ?? apiMatch.score?.halfTime?.away ?? 0;
-          local.liveScore = `${liveH}-${liveA}`;
-        } else {
-          local.apiStatus = status;
+    const resp = await fetch(OF_URL);
+    if(resp.ok){
+      const data = await resp.json();
+      const matches = data.matches || [];
+      matches.forEach(m => {
+        const home = m.team1 || '';
+        const away = m.team2 || '';
+        const s1 = m.score?.ft ? m.score.ft[0] : null;
+        const s2 = m.score?.ft ? m.score.ft[1] : null;
+        if(s1 !== null && s2 !== null){
+          const local = MATCHES.find(lm =>
+            (fuzzyMatch(lm.home,home) && fuzzyMatch(lm.away,away)) ||
+            (fuzzyMatch(lm.home,away) && fuzzyMatch(lm.away,home))
+          );
+          if(local){
+            const swapped = fuzzyMatch(local.home, away) && fuzzyMatch(local.away, home) && !fuzzyMatch(local.home, home);
+            local.result = swapped ? `${s2}-${s1}` : `${s1}-${s2}`;
+            updated++;
+          }
         }
+      });
+      showBanner(`✓ ${updated} uitslagen bijgewerkt (openfootball)`);
+    }
+  } catch(e){ console.log('openfootball fout:', e.message); }
+
+  // 2. Als football-data key aanwezig, gebruik die ook (betere live data)
+  const fdKey = localStorage.getItem('wk_fd_key');
+  if(fdKey){
+    try {
+      const resp2 = await fetch(`${FD_BASE}/competitions/${WC_ID}/matches`, {
+        headers: { 'X-Auth-Token': fdKey }
+      });
+      if(resp2.ok){
+        const data2 = await resp2.json();
+        (data2.matches||[]).forEach(apiMatch => {
+          const home = apiMatch.homeTeam?.name||'';
+          const away = apiMatch.awayTeam?.name||'';
+          const status = apiMatch.status;
+          const scoreH = apiMatch.score?.fullTime?.home;
+          const scoreA = apiMatch.score?.fullTime?.away;
+          const local = MATCHES.find(lm =>
+            (fuzzyMatch(lm.home,home) && fuzzyMatch(lm.away,away)) ||
+            (fuzzyMatch(lm.home,away) && fuzzyMatch(lm.away,home))
+          );
+          if(local){
+            if(status==='FINISHED' && scoreH!==null && scoreA!==null){
+              const swapped = fuzzyMatch(local.home,away) && !fuzzyMatch(local.home,home);
+              local.result = swapped ? `${scoreA}-${scoreH}` : `${scoreH}-${scoreA}`;
+              updated++;
+            } else if(status==='IN_PLAY'||status==='PAUSED'){
+              local.apiStatus='LIVE';
+              local.liveScore=`${apiMatch.score?.fullTime?.home??0}-${apiMatch.score?.fullTime?.away??0}`;
+            }
+          }
+        });
+        showBanner(`✓ ${updated} uitslagen bijgewerkt (live)`);
+      } else if(resp2.status===403){
+        document.getElementById('fd-status').textContent='⚠ Key heeft geen toegang tot WK data (betaald plan vereist)';
+        document.getElementById('fd-status').style.color='orange';
       }
-    });
-    document.getElementById('fd-status').textContent=`✓ ${updated} uitslagen bijgewerkt`;
-    document.getElementById('fd-status').style.color='var(--green)';
-    document.getElementById('fd-banner').style.display='block';
-    document.getElementById('fd-setup').style.display='none';
-    renderList();
-    // Also update current match if open
-    if(currentMatch && predCache[currentMatch.id]) renderPrediction(predCache[currentMatch.id], currentMatch);
-  } catch(e) {
-    document.getElementById('fd-status').textContent='Fout: '+e.message;
-    document.getElementById('fd-status').style.color='var(--red)';
+    } catch(e){ console.log('football-data fout:', e.message); }
   }
+  renderList();
+  if(currentMatch && predCache[currentMatch.id]) renderPrediction(predCache[currentMatch.id], currentMatch);
+}
+
+function showBanner(msg){
+  const banner = document.getElementById('fd-banner');
+  const setup = document.getElementById('fd-setup');
+  if(banner) { banner.textContent = '📡 '+msg+' — klik om instellingen te wijzigen'; banner.style.display='block'; }
+  if(setup) setup.style.display='none';
+  const st = document.getElementById('fd-status');
+  if(st){ st.textContent=msg; st.style.color='var(--green)'; }
 }
 
 function fuzzyMatch(localName, apiName){
@@ -873,15 +895,16 @@ function fuzzyMatch(localName, apiName){
 
 // ── INIT ──
 renderList();
-// Load stored FD key on startup
+// Vul opgeslagen football-data key in als die er is
 const storedFdKey = localStorage.getItem('wk_fd_key');
-if(storedFdKey){
-  document.getElementById('fdKeyInput').value = storedFdKey;
-  document.getElementById('fd-status').textContent = 'Key gevonden, uitslagen laden...';
-  loadLiveScores();
-}
-// Auto-refresh: every 60s for live status + scores
-setInterval(()=>{ renderList(); if(localStorage.getItem('wk_fd_key')) loadLiveScores(); }, 60000);
+if(storedFdKey) document.getElementById('fdKeyInput').value = storedFdKey;
+
+// Laad altijd uitslagen bij opstarten (openfootball werkt zonder key)
+document.getElementById('fd-status').textContent = 'Uitslagen laden...';
+loadLiveScores();
+
+// Auto-refresh elke 60s
+setInterval(()=>{ renderList(); loadLiveScores(); }, 60000);
 </script>
 </body>
 </html>
