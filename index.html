@@ -3,206 +3,131 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>WK 2026 — AI Voorspellingen</title>
+<title>WK 2026 — Live AI Voorspellingen</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0a0e1a;--surface:#111827;--surface2:#1a2235;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--text:#f0f4ff;--muted:#8892a4;--accent:#f97316;--accent2:#fb923c;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--gold:#fbbf24}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg)}
 body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px}
-@media(min-width:701px){
-  html,body{height:100%;overflow:hidden}
-  .app{display:grid;grid-template-columns:280px 1fr;height:100vh}
-  .sidebar{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow:hidden}
-  .main{display:flex;flex-direction:column;height:100vh;overflow:hidden}
-}
-@media(max-width:700px){
-  body{overflow-y:auto}
-  .app{display:flex;flex-direction:column;min-height:100vh}
-  .sidebar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;flex-direction:column}
-  .match-list{max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .main{display:flex;flex-direction:column;flex:1}
-  .main-header{flex-direction:column;align-items:flex-start;gap:10px}
-  .predict-btn{width:100%;justify-content:center;font-size:20px;padding:12px}
-  .content{padding:16px;overflow:visible}
-  .score-box{flex-direction:column;gap:12px;padding:14px}
-  .score-team{display:flex;align-items:center;gap:10px;text-align:left;width:100%}
-  .score-flag{font-size:26px;margin:0;flex-shrink:0}
-  .score-nums{display:flex;align-items:center;gap:10px;justify-content:center;padding:6px 0}
-  .score-num{font-size:40px}
-  .pred-grid{grid-template-columns:1fr 1fr}
-  .players-grid{grid-template-columns:1fr 1fr}
-  .tab-nav{overflow-x:auto;white-space:nowrap}
-  .tab-nav::-webkit-scrollbar{display:none}
-  .api-modal-overlay{padding:16px;align-items:flex-end}
-  .api-modal{border-radius:14px 14px 10px 10px}
-}
-
-/* sidebar pieces */
-.sidebar-header{padding:16px 18px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
-.sidebar-header h1{font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--accent);line-height:1;letter-spacing:.04em}
+@media(min-width:701px){html,body{height:100%;overflow:hidden}.app{display:grid;grid-template-columns:280px 1fr;height:100vh}.sidebar{height:100vh;overflow:hidden}.main{height:100vh;overflow:hidden}}
+@media(max-width:700px){body{overflow-y:auto}.app{display:flex;flex-direction:column;min-height:100vh}.sidebar{border-bottom:1px solid var(--border)}.match-list{max-height:45vh;overflow-y:auto;-webkit-overflow-scrolling:touch}.main-header{flex-direction:column;align-items:flex-start;gap:8px}.content{padding:14px;overflow:visible}.score-box{flex-direction:column;gap:10px;padding:14px}.score-team{display:flex;align-items:center;gap:10px;text-align:left;width:100%}.score-flag{font-size:26px!important;margin:0!important;flex-shrink:0}.score-nums{display:flex;align-items:center;gap:10px;justify-content:center;padding:6px 0}.score-num{font-size:38px!important}.pred-grid{grid-template-columns:1fr 1fr!important}.players-grid{grid-template-columns:1fr 1fr!important}.tab-nav{overflow-x:auto;white-space:nowrap}.tab-nav::-webkit-scrollbar{display:none}}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}
+.sidebar-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.sidebar-header h1{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--accent);line-height:1;letter-spacing:.04em}
 .sidebar-header p{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.06em}
-
-.filter-bar{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:5px;flex-wrap:wrap;flex-shrink:0}
-.filter-btn{padding:4px 11px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap}
+.key-bar{padding:8px 14px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:6px}
+.key-bar input{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;font-family:monospace;outline:none}
+.key-bar input:focus{border-color:var(--accent)}
+.key-bar input::placeholder{color:var(--muted)}
+.key-save{padding:5px 10px;background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif}
+.key-status{font-size:10px;padding:4px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.filter-bar{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;gap:5px;flex-wrap:wrap;flex-shrink:0}
+.filter-btn{padding:3px 10px;border:1px solid var(--border2);border-radius:20px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap}
 .filter-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500}
-.filter-btn:hover:not(.active){border-color:var(--accent);color:var(--accent)}
-
-.search-bar{padding:8px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
-.search-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif}
+.search-bar{padding:6px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.search-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;outline:none;font-family:'DM Sans',sans-serif}
 .search-input:focus{border-color:var(--accent)}
 .search-input::placeholder{color:var(--muted)}
-
 .match-list{flex:1;overflow-y:auto}
 .match-list::-webkit-scrollbar{width:3px}
 .match-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-
-.day-header{padding:6px 14px 3px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;background:rgba(10,14,26,.8);position:sticky;top:0;z-index:2;backdrop-filter:blur(4px)}
-
-.match-item{padding:9px 14px;cursor:pointer;border-left:3px solid transparent;transition:background .12s,border-color .12s;user-select:none}
-.match-item:active{background:var(--surface2)}
-.match-item:hover{background:var(--surface2)}
+.day-header{padding:5px 14px 2px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;background:rgba(10,14,26,.85);position:sticky;top:0;z-index:2;backdrop-filter:blur(4px)}
+.match-item{padding:8px 14px;cursor:pointer;border-left:3px solid transparent;transition:all .1s;user-select:none}
+.match-item:hover,.match-item:active{background:var(--surface2)}
 .match-item.active{background:var(--surface2);border-left-color:var(--accent)}
-.match-item.live-now{border-left-color:var(--green)}
-
+.match-item.is-live{border-left-color:var(--green)}
 .match-teams{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px;font-weight:500;line-height:1.3}
 .match-teams .vs{font-size:9px;color:var(--muted);flex-shrink:0}
-.match-score-inline{font-size:12px;color:var(--green);font-weight:600;margin-left:6px;white-space:nowrap}
-.match-meta{font-size:10px;color:var(--muted);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-
-.badge{font-size:9px;padding:1px 6px;border-radius:10px;border:1px solid var(--border2);color:var(--muted)}
+.match-meta{font-size:10px;color:var(--muted);margin-top:2px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.badge{font-size:9px;padding:1px 5px;border-radius:10px;border:1px solid var(--border2);color:var(--muted)}
 .badge-oef{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.2);color:#60a5fa}
 .badge-ko{background:rgba(249,115,22,.08);border-color:rgba(249,115,22,.2);color:var(--accent)}
 .badge-done{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.2);color:var(--green)}
-.badge-live{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green);animation:livepulse 1.5s infinite}
-@keyframes livepulse{0%,100%{opacity:1}50%{opacity:.5}}
-
-/* main */
-.main-header{padding:18px 24px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;flex-shrink:0}
-.match-title h2{font-family:'Bebas Neue',sans-serif;font-size:26px;line-height:1;letter-spacing:.03em}
-.match-title .subtitle{font-size:11px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
-
-.predict-btn{padding:10px 22px;background:var(--accent);border:none;border-radius:10px;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:.06em;cursor:pointer;display:flex;align-items:center;gap:8px;flex-shrink:0;transition:background .15s,transform .1s}
-.predict-btn:hover{background:var(--accent2);transform:translateY(-1px)}
-.predict-btn:active{transform:translateY(0)}
-.predict-btn:disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed;transform:none}
-.spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none;flex-shrink:0}
-.predict-btn.loading .spinner{display:block}
-.predict-btn.loading .btn-text{display:none}
-@keyframes spin{to{transform:rotate(360deg)}}
-
-.content{flex:1;overflow-y:auto;padding:20px 24px}
+.badge-live{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green);animation:lp 1.2s infinite}
+@keyframes lp{0%,100%{opacity:1}50%{opacity:.4}}
+.live-score{font-size:12px;color:var(--green);font-weight:700;margin-left:4px}
+.main{display:flex;flex-direction:column;background:var(--bg)}
+.main-header{padding:16px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;flex-shrink:0}
+.match-title h2{font-family:'Bebas Neue',sans-serif;font-size:24px;line-height:1;letter-spacing:.03em}
+.match-title .subtitle{font-size:11px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+.content{flex:1;overflow-y:auto;padding:18px 22px}
 .content::-webkit-scrollbar{width:3px}
 .content::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-
-.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:50vh;gap:12px;color:var(--muted);text-align:center;padding:20px}
-.empty-icon{font-size:52px;opacity:.2}
-.empty-state h3{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:.04em}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:50vh;gap:10px;color:var(--muted);text-align:center;padding:20px}
+.empty-icon{font-size:48px;opacity:.2}
+.empty-state h3{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:.04em}
 .empty-state p{font-size:12px;max-width:260px;line-height:1.6}
-
-/* API modal */
-.api-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center;padding:24px}
-.api-modal-overlay.show{display:flex}
-.api-modal{background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:24px;width:100%;max-width:380px}
-.api-modal h3{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--accent);margin-bottom:6px;letter-spacing:.04em}
-.api-modal p{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6}
-.api-modal input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:monospace;outline:none;margin-bottom:8px}
-.api-modal input:focus{border-color:var(--accent)}
-.api-modal input::placeholder{color:var(--muted)}
-.api-modal-btns{display:flex;gap:8px;margin-top:6px}
-.btn-primary{flex:1;padding:10px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:.04em;cursor:pointer}
-.btn-secondary{padding:10px 16px;background:transparent;border:1px solid var(--border2);border-radius:8px;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer}
-.api-link{font-size:11px;color:var(--blue);text-decoration:none;display:block;margin-bottom:12px}
-
-/* prediction output */
-.tab-nav{display:flex;border-bottom:1px solid var(--border);margin-bottom:18px;overflow-x:auto}
-.tab-nav::-webkit-scrollbar{display:none}
-.tab-btn{padding:8px 16px;background:transparent;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:all .15s;flex-shrink:0}
+.analyzing{display:flex;flex-direction:column;align-items:center;justify-content:center;height:40vh;gap:14px;color:var(--muted)}
+.analyzing-spinner{width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tab-nav{display:flex;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab-btn{padding:7px 14px;background:transparent;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:all .15s;flex-shrink:0}
 .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tab-panel{display:none}
-.tab-panel.active{display:block}
-
-.score-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:16px}
+.tab-panel{display:none}.tab-panel.active{display:block}
+.score-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:14px}
 .score-team{text-align:center;flex:1}
-.score-flag{font-size:34px;display:block;margin-bottom:5px}
-.score-name{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.04em}
-.score-winner-tag{font-size:9px;background:var(--green);color:#000;padding:2px 8px;border-radius:20px;font-weight:600;margin-top:4px;display:inline-block}
-.score-nums{display:flex;align-items:center;gap:10px;justify-content:center}
+.score-flag{font-size:32px;display:block;margin-bottom:4px}
+.score-name{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.04em}
+.score-winner-tag{font-size:9px;background:var(--green);color:#000;padding:2px 7px;border-radius:20px;font-weight:600;margin-top:3px;display:inline-block}
+.score-nums{display:flex;align-items:center;gap:10px}
 .score-num{font-size:48px;font-family:'Bebas Neue',sans-serif;color:var(--accent);line-height:1}
-.score-sep{font-size:26px;color:var(--muted);font-family:'Bebas Neue',sans-serif}
-
-.prob-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px}
+.score-sep{font-size:24px;color:var(--muted);font-family:'Bebas Neue',sans-serif}
+.live-indicator{font-size:10px;color:var(--green);text-align:center;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:4px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:lp 1s infinite;flex-shrink:0}
+.prob-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
 .prob-bar-outer{height:26px;background:var(--surface2);border-radius:5px;overflow:hidden;display:flex;margin:8px 0 5px}
-.prob-seg{display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:12px;transition:width .8s ease}
-.prob-home{background:var(--accent)}
-.prob-draw{background:transparent;border-left:1px solid var(--border);border-right:1px solid var(--border);color:var(--muted)}
-.prob-away{background:var(--blue)}
+.prob-seg{display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:12px;transition:width .6s}
+.prob-home{background:var(--accent)}.prob-draw{background:transparent;border-left:1px solid var(--border);border-right:1px solid var(--border);color:var(--muted)}.prob-away{background:var(--blue)}
 .prob-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
-
-.pred-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:16px}
+.pred-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
 .pred-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px}
 .card-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
-.card-value{font-size:20px;font-family:'Bebas Neue',sans-serif;color:var(--text);line-height:1;letter-spacing:.04em}
+.card-value{font-size:18px;font-family:'Bebas Neue',sans-serif;color:var(--text);line-height:1;letter-spacing:.03em}
 .card-sub{font-size:11px;color:var(--muted);margin-top:3px}
-.pred-card.hl{border-color:var(--accent);background:rgba(249,115,22,.05)}
-.pred-card.hl .card-value{color:var(--accent)}
-.pred-card.win{border-color:var(--green);background:rgba(34,197,94,.04)}
-.pred-card.win .card-value{color:var(--green)}
-
-.sec{font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:.04em;margin:16px 0 8px;color:var(--text)}
-.sec:first-child{margin-top:0}
-
-.players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:16px}
+.pred-card.hl{border-color:var(--accent);background:rgba(249,115,22,.05)}.pred-card.hl .card-value{color:var(--accent)}
+.pred-card.win{border-color:var(--green);background:rgba(34,197,94,.04)}.pred-card.win .card-value{color:var(--green)}
+.sec{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:.04em;margin:14px 0 8px}
+.players-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:14px}
 .player-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px}
 .player-name{font-weight:500;font-size:12px;margin-bottom:2px}
-.player-role{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.player-role{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
 .player-impact{font-size:11px;color:var(--accent)}
-
-.stat-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
-.stat-label{font-size:10px;color:var(--muted);min-width:80px;text-align:center;flex-shrink:0}
+.stat-row{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.stat-label{font-size:10px;color:var(--muted);min-width:75px;text-align:center;flex-shrink:0}
 .stat-bw{flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden}
 .bar-h{height:100%;background:var(--accent);border-radius:3px;float:right}
 .bar-a{height:100%;background:var(--blue);border-radius:3px}
-.stat-val{font-size:11px;font-weight:500;min-width:28px;flex-shrink:0}
+.stat-val{font-size:11px;font-weight:500;min-width:26px;flex-shrink:0}
 .stat-val.r{text-align:right}
-
-.ai-prose{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:16px;line-height:1.8;font-size:13px;color:var(--muted);margin-bottom:14px}
+.ai-prose{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:14px;line-height:1.8;font-size:13px;color:var(--muted);margin-bottom:12px}
 .ai-prose strong{color:var(--text)}
 .conf-dots{display:flex;gap:3px;margin-bottom:3px}
 .conf-dot{width:8px;height:8px;border-radius:50%;background:var(--border2)}
 .conf-dot.on{background:var(--accent)}
-.past-box{background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--green)}
-.live-box{background:rgba(34,197,94,.1);border:1px solid var(--green);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--green);display:flex;align-items:center;gap:8px}
-.live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:livepulse 1s infinite;flex-shrink:0}
-.error-box{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:14px;color:#fca5a5;font-size:13px;margin-bottom:14px}
-.skeleton{background:var(--surface);border-radius:8px;animation:shimmer 1.2s infinite}
-@keyframes shimmer{0%,100%{opacity:.25}50%{opacity:.6}}
-
-/* stored key indicator */
-.key-stored{font-size:10px;color:var(--green);margin-top:4px;display:none}
-.key-stored.show{display:block}
+.past-box{background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12px;color:var(--green)}
+.live-box{background:rgba(34,197,94,.1);border:1px solid var(--green);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12px;color:var(--green);display:flex;align-items:center;gap:6px}
+.error-box{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:12px;color:#fca5a5;font-size:12px;margin-bottom:12px}
+.skeleton{background:var(--surface);border-radius:8px;animation:sh 1.2s infinite}
+@keyframes sh{0%,100%{opacity:.2}50%{opacity:.6}}
+.no-key-box{background:rgba(249,115,22,.07);border:1px solid rgba(249,115,22,.25);border-radius:10px;padding:16px;text-align:center;margin:20px 0}
+.no-key-box p{font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px}
+.no-key-box strong{color:var(--accent)}
 </style>
 </head>
 <body>
 <div class="app">
-<!-- SIDEBAR -->
+
 <aside class="sidebar">
   <div class="sidebar-header">
     <h1>WK 2026</h1>
     <p>Live AI Voorspellingen</p>
   </div>
-  <div id="fd-banner" style="display:none;background:rgba(34,197,94,.08);border-bottom:1px solid rgba(34,197,94,.2);padding:8px 14px;font-size:11px;color:var(--green);cursor:pointer" onclick="openFdSettings()">
-    ✓ Live uitslagen actief — tikt om instellingen te wijzigen
+  <div class="key-bar">
+    <input type="password" id="apiKeyInput" placeholder="Anthropic API key (sk-ant-...)" oninput="onKeyInput()">
+    <button class="key-save" onclick="saveKey()">Opslaan</button>
   </div>
-  <div id="fd-setup" style="padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(249,115,22,.05)">
-    <div style="font-size:11px;font-weight:500;color:var(--accent);margin-bottom:4px">📡 Live uitslagen (optioneel)</div>
-    <div style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.5">Gratis API key via <a href="https://www.football-data.org/" target="_blank" style="color:var(--blue)">football-data.org</a> voor automatische uitslagen</div>
-    <div style="display:flex;gap:6px">
-      <input type="text" id="fdKeyInput" placeholder="Jouw gratis API key..." style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 8px;color:var(--text);font-size:11px;outline:none;font-family:monospace">
-      <button onclick="saveFdKey()" style="padding:5px 10px;background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;white-space:nowrap">Opslaan</button>
-    </div>
-    <div id="fd-status" style="font-size:10px;color:var(--muted);margin-top:4px"></div>
-  </div>
+  <div class="key-status" id="keyStatus" style="color:var(--muted)">Voer je API key in voor AI-analyses</div>
   <div class="filter-bar">
     <button class="filter-btn active" onclick="setFilter('all',this)">Alles</button>
     <button class="filter-btn" onclick="setFilter('oef',this)">Oefenwedstr.</button>
@@ -216,75 +141,52 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
   <div class="match-list" id="matchList"></div>
 </aside>
 
-<!-- MAIN -->
 <main class="main">
   <div class="main-header">
     <div class="match-title">
       <h2 id="matchHeading">Selecteer een wedstrijd</h2>
       <div class="subtitle" id="matchSubtitle">← Kies een wedstrijd uit de lijst</div>
     </div>
-    <button class="predict-btn" id="predictBtn" onclick="onPredictClick()" disabled>
-      <div class="spinner"></div>
-      <span class="btn-text">⚡ Voorspel</span>
-    </button>
   </div>
   <div class="content" id="mainContent">
     <div class="empty-state">
       <div class="empty-icon">⚽</div>
       <h3>WK 2026 AI Predictor</h3>
-      <p>Kies een wedstrijd links en klik op Voorspel. Werkt voor oefenwedstrijden, groepsfase én knock-out.</p>
+      <p>Voer je Anthropic API key in en klik op een wedstrijd. De analyse start automatisch.</p>
     </div>
   </div>
 </main>
-</div>
 
-<!-- API KEY MODAL -->
-<div class="api-modal-overlay" id="apiModal">
-  <div class="api-modal">
-    <h3>Anthropic API Key</h3>
-    <p>Voer je API key in voor AI-voorspellingen. Wordt alleen lokaal opgeslagen.</p>
-    <a class="api-link" href="https://console.anthropic.com" target="_blank">→ Gratis key via console.anthropic.com</a>
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." oninput="checkKey()">
-    <div class="key-stored" id="keyStored">✓ Key opgeslagen voor deze sessie</div>
-    <div class="api-modal-btns">
-      <button class="btn-secondary" onclick="closeModal()">Annuleer</button>
-      <button class="btn-primary" id="modalOkBtn" onclick="confirmKey()">Voorspel</button>
-    </div>
-  </div>
 </div>
-
 <script>
-// ── FLAGS ──
 const FLAGS={
   'Nederland':'🇳🇱','Japan':'🇯🇵','Zweden':'🇸🇪','Tunesië':'🇹🇳',
   'Frankrijk':'🇫🇷','Senegal':'🇸🇳','Noorwegen':'🇳🇴','Algerije':'🇩🇿',
   'Spanje':'🇪🇸','Uruguay':'🇺🇾','Saoedi-Arabië':'🇸🇦','Kaapverdië':'🇨🇻',
   'Argentinië':'🇦🇷','Oostenrijk':'🇦🇹','Jordanië':'🇯🇴','Cuba':'🇨🇺',
-  'Brazilië':'🇧🇷','Marokko':'🇲🇦','Schotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Haïti':'🇭🇹',
+  'Brazilië':'🇧🇷','Marokko':'🇲🇦','Schotland':'🏴','Haïti':'🇭🇹',
   'VS':'🇺🇸','Turkije':'🇹🇷','Australië':'🇦🇺','Paraguay':'🇵🇾',
   'Duitsland':'🇩🇪','Ecuador':'🇪🇨','Ivoorkust':'🇨🇮','Curaçao':'🇨🇼',
   'Portugal':'🇵🇹','Colombia':'🇨🇴','Oezbekistan':'🇺🇿','DR Congo':'🇨🇩',
-  'Engeland':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Kroatië':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
+  'Engeland':'🏴','Kroatië':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
   'België':'🇧🇪','Iran':'🇮🇷','Egypte':'🇪🇬','Nieuw-Zeeland':'🇳🇿',
   'Mexico':'🇲🇽','Zuid-Korea':'🇰🇷','Tsjechië':'🇨🇿','Zuid-Afrika':'🇿🇦',
   'Canada':'🇨🇦','Qatar':'🇶🇦','Bosnië-Herzegovina':'🇧🇦','Zwitserland':'🇨🇭',
   'Finland':'🇫🇮','Ierland':'🇮🇪','Noord-Macedonië':'🇲🇰','Gambia':'🇬🇲',
   'Servië':'🇷🇸','IJsland':'🇮🇸','Kosovo':'🇽🇰','Burundi':'🇧🇮',
-  'Rusland':'🇷🇺','Nicaragua':'🇳🇮','Honduras':'🇭🇳','Slovenië':'🇸🇮',
-  'Chili':'🇨🇱','Nigeria':'🇳🇬','Costa Rica':'🇨🇷','Peru':'🇵🇪',
-  'Bolivia':'🇧🇴','Guatemala':'🇬🇹','El Salvador':'🇸🇻','Griekenland':'🇬🇷',
-  'Irak':'🇮🇶','Noord-Ierland':'🇬🇧','Madagaskar':'🇲🇬','Wales':'🏴󠁧󠁢󠁷󠁬󠁳󠁿',
-  'Venezuela':'🇻🇪','Denemarken':'🇩🇰','Aruba':'🇦🇼','Bermuda':'🇧🇲',
+  'Nicaragua':'🇳🇮','Honduras':'🇭🇳','Slovenië':'🇸🇮','Chili':'🇨🇱',
+  'Nigeria':'🇳🇬','Costa Rica':'🇨🇷','Peru':'🇵🇪','Bolivia':'🇧🇴',
+  'Guatemala':'🇬🇹','El Salvador':'🇸🇻','Griekenland':'🇬🇷','Irak':'🇮🇶',
+  'Noord-Ierland':'🇬🇧','Madagaskar':'🇲🇬','Wales':'🏴','Venezuela':'🇻🇪',
+  'Denemarken':'🇩🇰','Aruba':'🇦🇼','Bermuda':'🇧🇲',
   'Trinidad en Tobago':'🇹🇹','Dominicaanse Republiek':'🇩🇴','Andorra':'🇦🇩',
+  'Rusland':'🇷🇺',
 };
-const F=n=>FLAGS[n]||'🏳';
-
-// ── MATCH DATA ──
+const F=n=>FLAGS[n]||'⚽';
 const NOW=new Date();
 const TODAY=NOW.toISOString().split('T')[0];
 
 const MATCHES=[
-  // Gespeelde oefenwedstrijden
   {id:'o1',type:'oef',date:'2026-05-23',time:'04:00',home:'Mexico',away:'Ghana',result:'2-0',venue:'VS'},
   {id:'o2',type:'oef',date:'2026-05-26',time:'13:00',home:'Marokko',away:'Burundi',result:'5-0',venue:'Marokko'},
   {id:'o3',type:'oef',date:'2026-05-28',time:'20:00',home:'Egypte',away:'Rusland',result:'1-0',venue:'Egypte'},
@@ -300,9 +202,8 @@ const MATCHES=[
   {id:'o13',type:'oef',date:'2026-05-31',time:'15:00',home:'Zwitserland',away:'Jordanië',result:'4-1',venue:'Zwitserland'},
   {id:'o14',type:'oef',date:'2026-05-31',time:'16:00',home:'Tsjechië',away:'Kosovo',result:'2-1',venue:'Tsjechië'},
   {id:'o15',type:'oef',date:'2026-05-31',time:'17:00',home:'Kaapverdië',away:'Servië',result:'3-0',venue:'Kaapverdië'},
-  {id:'o16',type:'oef',date:'2026-05-27',time:'20:45',home:'Nederland',away:'Noorwegen',result:'2-1',venue:'Johan Cruijff ArenA, Amsterdam'},
-  {id:'o17',type:'oef',date:'2026-03-31',time:'20:45',home:'Nederland',away:'Ecuador',result:'1-1',venue:'Philips Stadion, Eindhoven'},
-  // Komende oefenwedstrijden
+  {id:'o16',type:'oef',date:'2026-05-27',time:'20:45',home:'Nederland',away:'Noorwegen',result:'2-1',venue:'Johan Cruijff ArenA'},
+  {id:'o17',type:'oef',date:'2026-03-31',time:'20:45',home:'Nederland',away:'Ecuador',result:'1-1',venue:'Eindhoven'},
   {id:'o18',type:'oef',date:'2026-05-31',time:'20:45',home:'Duitsland',away:'Finland',venue:'Duitsland'},
   {id:'o19',type:'oef',date:'2026-05-31',time:'21:30',home:'VS',away:'Senegal',venue:'VS'},
   {id:'o20',type:'oef',date:'2026-05-31',time:'23:30',home:'Brazilië',away:'Panama',venue:'VS'},
@@ -351,22 +252,21 @@ const MATCHES=[
   {id:'o63',type:'oef',date:'2026-06-10',time:'21:45',home:'Portugal',away:'Nigeria',venue:'Portugal'},
   {id:'o64',type:'oef',date:'2026-06-10',time:'22:00',home:'Engeland',away:'Costa Rica',venue:'Engeland'},
   {id:'o65',type:'oef',date:'2026-06-11',time:'06:00',home:'Oostenrijk',away:'Guatemala',venue:'Oostenrijk'},
-  // Groepsfase — alle 72 wedstrijden
-  {id:'a1',type:'groep',group:'A',date:'2026-06-11',time:'21:00',home:'Mexico',away:'Tsjechië',venue:'Estadio Azteca, Mexico-Stad'},
-  {id:'a2',type:'groep',group:'A',date:'2026-06-12',time:'19:00',home:'Zuid-Afrika',away:'Zuid-Korea',venue:'SoFi Stadium, LA'},
-  {id:'a3',type:'groep',group:'A',date:'2026-06-17',time:'19:00',home:'Tsjechië',away:'Zuid-Afrika',venue:'MetLife, NY'},
-  {id:'a4',type:'groep',group:'A',date:'2026-06-18',time:'01:00',home:'Zuid-Korea',away:'Mexico',venue:'Rose Bowl, LA'},
-  {id:'a5',type:'groep',group:'A',date:'2026-06-22',time:'22:00',home:'Mexico',away:'Zuid-Afrika',venue:'Estadio Azteca'},
-  {id:'a6',type:'groep',group:'A',date:'2026-06-22',time:'22:00',home:'Zuid-Korea',away:'Tsjechië',venue:'SoFi Stadium'},
-  {id:'b1',type:'groep',group:'B',date:'2026-06-12',time:'22:00',home:'Canada',away:'Bosnië-Herzegovina',venue:'BC Place, Vancouver'},
-  {id:'b2',type:'groep',group:'B',date:'2026-06-13',time:'19:00',home:'Qatar',away:'Zwitserland',venue:'MetLife, NY'},
-  {id:'b3',type:'groep',group:'B',date:'2026-06-17',time:'22:00',home:'Bosnië-Herzegovina',away:'Qatar',venue:'AT&T Stadium, Dallas'},
-  {id:'b4',type:'groep',group:'B',date:'2026-06-18',time:'19:00',home:'Zwitserland',away:'Canada',venue:'Rose Bowl'},
+  {id:'a1',type:'groep',group:'A',date:'2026-06-11',time:'21:00',home:'Mexico',away:'Zuid-Afrika',venue:'Estadio Azteca'},
+  {id:'a2',type:'groep',group:'A',date:'2026-06-12',time:'19:00',home:'Zuid-Korea',away:'Tsjechië',venue:'SoFi Stadium'},
+  {id:'a3',type:'groep',group:'A',date:'2026-06-17',time:'19:00',home:'Tsjechië',away:'Mexico',venue:'MetLife'},
+  {id:'a4',type:'groep',group:'A',date:'2026-06-17',time:'22:00',home:'Zuid-Afrika',away:'Zuid-Korea',venue:'Rose Bowl'},
+  {id:'a5',type:'groep',group:'A',date:'2026-06-22',time:'22:00',home:'Mexico',away:'Zuid-Korea',venue:'Estadio Azteca'},
+  {id:'a6',type:'groep',group:'A',date:'2026-06-22',time:'22:00',home:'Tsjechië',away:'Zuid-Afrika',venue:'SoFi Stadium'},
+  {id:'b1',type:'groep',group:'B',date:'2026-06-12',time:'22:00',home:'Canada',away:'Bosnië-Herzegovina',venue:'BC Place'},
+  {id:'b2',type:'groep',group:'B',date:'2026-06-13',time:'19:00',home:'Qatar',away:'Zwitserland',venue:'MetLife'},
+  {id:'b3',type:'groep',group:'B',date:'2026-06-17',time:'22:00',home:'Zwitserland',away:'Canada',venue:'Rose Bowl'},
+  {id:'b4',type:'groep',group:'B',date:'2026-06-18',time:'01:00',home:'Bosnië-Herzegovina',away:'Qatar',venue:'AT&T Stadium'},
   {id:'b5',type:'groep',group:'B',date:'2026-06-22',time:'19:00',home:'Canada',away:'Qatar',venue:'BC Place'},
   {id:'b6',type:'groep',group:'B',date:'2026-06-22',time:'19:00',home:'Zwitserland',away:'Bosnië-Herzegovina',venue:'MetLife'},
-  {id:'c1',type:'groep',group:'C',date:'2026-06-12',time:'01:00',home:'Brazilië',away:'Haïti',venue:'Rose Bowl, LA'},
+  {id:'c1',type:'groep',group:'C',date:'2026-06-12',time:'01:00',home:'Brazilië',away:'Haïti',venue:'Rose Bowl'},
   {id:'c2',type:'groep',group:'C',date:'2026-06-13',time:'01:00',home:'Marokko',away:'Schotland',venue:'AT&T Stadium'},
-  {id:'c3',type:'groep',group:'C',date:'2026-06-18',time:'22:00',home:'Haïti',away:'Marokko',venue:'Hard Rock, Miami'},
+  {id:'c3',type:'groep',group:'C',date:'2026-06-18',time:'22:00',home:'Haïti',away:'Marokko',venue:'Hard Rock'},
   {id:'c4',type:'groep',group:'C',date:'2026-06-19',time:'01:00',home:'Schotland',away:'Brazilië',venue:'MetLife'},
   {id:'c5',type:'groep',group:'C',date:'2026-06-23',time:'22:00',home:'Brazilië',away:'Marokko',venue:'Rose Bowl'},
   {id:'c6',type:'groep',group:'C',date:'2026-06-23',time:'22:00',home:'Schotland',away:'Haïti',venue:'Hard Rock'},
@@ -393,7 +293,7 @@ const MATCHES=[
   {id:'g3',type:'groep',group:'G',date:'2026-06-20',time:'22:00',home:'Egypte',away:'Iran',venue:'AT&T Stadium'},
   {id:'g4',type:'groep',group:'G',date:'2026-06-21',time:'01:00',home:'Nieuw-Zeeland',away:'België',venue:'BC Place'},
   {id:'g5',type:'groep',group:'G',date:'2026-06-25',time:'19:00',home:'België',away:'Iran',venue:'MetLife'},
-  {id:'g6',type:'groep',group:'G',date:'2026-06-25',time:'19:00',home:'Nieuw-Zeeland',away:'Egypte',venue:'SoFi'},
+  {id:'g6',type:'groep',group:'G',date:'2026-06-25',time:'19:00',home:'Nieuw-Zeeland',away:'Egypte',venue:'SoFi Stadium'},
   {id:'h1',type:'groep',group:'H',date:'2026-06-15',time:'01:00',home:'Spanje',away:'Uruguay',venue:'SoFi Stadium'},
   {id:'h2',type:'groep',group:'H',date:'2026-06-16',time:'01:00',home:'Saoedi-Arabië',away:'Kaapverdië',venue:'MetLife'},
   {id:'h3',type:'groep',group:'H',date:'2026-06-20',time:'19:00',home:'Uruguay',away:'Saoedi-Arabië',venue:'Rose Bowl'},
@@ -403,12 +303,12 @@ const MATCHES=[
   {id:'i1',type:'groep',group:'I',date:'2026-06-16',time:'19:00',home:'Frankrijk',away:'Algerije',venue:'MetLife'},
   {id:'i2',type:'groep',group:'I',date:'2026-06-16',time:'22:00',home:'Noorwegen',away:'Senegal',venue:'Rose Bowl'},
   {id:'i3',type:'groep',group:'I',date:'2026-06-21',time:'22:00',home:'Algerije',away:'Noorwegen',venue:'AT&T Stadium'},
-  {id:'i4',type:'groep',group:'I',date:'2026-06-22',time:'01:00',home:'Senegal',away:'Frankrijk',venue:'SoFi'},
+  {id:'i4',type:'groep',group:'I',date:'2026-06-22',time:'01:00',home:'Senegal',away:'Frankrijk',venue:'SoFi Stadium'},
   {id:'i5',type:'groep',group:'I',date:'2026-06-26',time:'22:00',home:'Frankrijk',away:'Noorwegen',venue:'MetLife'},
   {id:'i6',type:'groep',group:'I',date:'2026-06-26',time:'22:00',home:'Senegal',away:'Algerije',venue:'Rose Bowl'},
   {id:'j1',type:'groep',group:'J',date:'2026-06-16',time:'01:00',home:'Argentinië',away:'Jordanië',venue:'Hard Rock'},
   {id:'j2',type:'groep',group:'J',date:'2026-06-17',time:'01:00',home:'Oostenrijk',away:'Cuba',venue:'BC Place'},
-  {id:'j3',type:'groep',group:'J',date:'2026-06-21',time:'01:00',home:'Jordanië',away:'Oostenrijk',venue:'SoFi'},
+  {id:'j3',type:'groep',group:'J',date:'2026-06-21',time:'01:00',home:'Jordanië',away:'Oostenrijk',venue:'SoFi Stadium'},
   {id:'j4',type:'groep',group:'J',date:'2026-06-22',time:'19:00',home:'Cuba',away:'Argentinië',venue:'MetLife'},
   {id:'j5',type:'groep',group:'J',date:'2026-06-26',time:'19:00',home:'Argentinië',away:'Oostenrijk',venue:'AT&T Stadium'},
   {id:'j6',type:'groep',group:'J',date:'2026-06-26',time:'19:00',home:'Cuba',away:'Jordanië',venue:'Hard Rock'},
@@ -420,64 +320,81 @@ const MATCHES=[
   {id:'k6',type:'groep',group:'K',date:'2026-06-26',time:'01:00',home:'Oezbekistan',away:'DR Congo',venue:'AT&T Stadium'},
   {id:'l1',type:'groep',group:'L',date:'2026-06-17',time:'01:00',home:'Engeland',away:'Panama',venue:'Hard Rock'},
   {id:'l2',type:'groep',group:'L',date:'2026-06-18',time:'22:00',home:'Ghana',away:'Kroatië',venue:'MetLife'},
-  {id:'l3',type:'groep',group:'L',date:'2026-06-22',time:'01:00',home:'Panama',away:'Ghana',venue:'SoFi'},
+  {id:'l3',type:'groep',group:'L',date:'2026-06-22',time:'01:00',home:'Panama',away:'Ghana',venue:'SoFi Stadium'},
   {id:'l4',type:'groep',group:'L',date:'2026-06-23',time:'01:00',home:'Kroatië',away:'Engeland',venue:'Rose Bowl'},
   {id:'l5',type:'groep',group:'L',date:'2026-06-27',time:'22:00',home:'Engeland',away:'Ghana',venue:'AT&T Stadium'},
   {id:'l6',type:'groep',group:'L',date:'2026-06-27',time:'22:00',home:'Kroatië',away:'Panama',venue:'BC Place'},
-  // Knock-out
   {id:'r1',type:'ko',round:'Ronde van 32',date:'2026-06-28',time:'19:00',home:'1e Gr.A',away:'2e Gr.B',venue:'MetLife'},
   {id:'r2',type:'ko',round:'Ronde van 32',date:'2026-06-28',time:'22:00',home:'1e Gr.C',away:'2e Gr.D',venue:'SoFi'},
   {id:'r3',type:'ko',round:'Ronde van 32',date:'2026-06-29',time:'19:00',home:'1e Gr.E',away:'2e Gr.F',venue:'Rose Bowl'},
-  {id:'r4',type:'ko',round:'Ronde van 32',date:'2026-06-29',time:'22:00',home:'1e Gr.G',away:'2e Gr.H',venue:'AT&T Stadium'},
+  {id:'r4',type:'ko',round:'Ronde van 32',date:'2026-06-29',time:'22:00',home:'1e Gr.G',away:'2e Gr.H',venue:'AT&T'},
   {id:'r5',type:'ko',round:'Ronde van 32',date:'2026-06-30',time:'19:00',home:'1e Gr.I',away:'2e Gr.J',venue:'Hard Rock'},
   {id:'r6',type:'ko',round:'Ronde van 32',date:'2026-06-30',time:'22:00',home:'1e Gr.K',away:'2e Gr.L',venue:'BC Place'},
   {id:'r7',type:'ko',round:'Ronde van 32',date:'2026-07-01',time:'01:00',home:'1e Gr.B',away:'2e Gr.A',venue:'MetLife'},
   {id:'r8',type:'ko',round:'Ronde van 32',date:'2026-07-01',time:'22:00',home:'1e Gr.D',away:'2e Gr.C',venue:'SoFi'},
   {id:'r9',type:'ko',round:'Ronde van 32',date:'2026-07-02',time:'01:00',home:'1e Gr.F',away:'2e Gr.E',venue:'Rose Bowl'},
-  {id:'r10',type:'ko',round:'Ronde van 32',date:'2026-07-02',time:'22:00',home:'1e Gr.H',away:'2e Gr.G',venue:'AT&T Stadium'},
+  {id:'r10',type:'ko',round:'Ronde van 32',date:'2026-07-02',time:'22:00',home:'1e Gr.H',away:'2e Gr.G',venue:'AT&T'},
   {id:'r11',type:'ko',round:'Ronde van 32',date:'2026-07-03',time:'01:00',home:'1e Gr.J',away:'2e Gr.I',venue:'Hard Rock'},
   {id:'r12',type:'ko',round:'Ronde van 32',date:'2026-07-03',time:'22:00',home:'1e Gr.L',away:'2e Gr.K',venue:'BC Place'},
-  {id:'r13',type:'ko',round:'Ronde van 32',date:'2026-07-04',time:'01:00',home:'Beste 3e (A/D/E)',away:'Winnaar (alt)',venue:'MetLife'},
-  {id:'r14',type:'ko',round:'Ronde van 32',date:'2026-07-04',time:'22:00',home:'Beste 3e (B/C/F)',away:'Winnaar (alt)',venue:'SoFi'},
-  {id:'r15',type:'ko',round:'Ronde van 32',date:'2026-07-05',time:'01:00',home:'Beste 3e (G/H/I)',away:'Winnaar (alt)',venue:'Rose Bowl'},
-  {id:'r16',type:'ko',round:'Ronde van 32',date:'2026-07-05',time:'22:00',home:'Beste 3e (J/K/L)',away:'Winnaar (alt)',venue:'AT&T Stadium'},
-  {id:'af1',type:'ko',round:'Achtste finale',date:'2026-07-05',time:'19:00',home:'W R32-1',away:'W R32-2',venue:'MetLife'},
+  {id:'r13',type:'ko',round:'Ronde van 32',date:'2026-07-04',time:'01:00',home:'Beste nr.3',away:'Winnaar bracket',venue:'MetLife'},
+  {id:'r14',type:'ko',round:'Ronde van 32',date:'2026-07-04',time:'22:00',home:'Beste nr.3',away:'Winnaar bracket',venue:'SoFi'},
+  {id:'r15',type:'ko',round:'Ronde van 32',date:'2026-07-05',time:'01:00',home:'Beste nr.3',away:'Winnaar bracket',venue:'Rose Bowl'},
+  {id:'r16',type:'ko',round:'Ronde van 32',date:'2026-07-05',time:'22:00',home:'Beste nr.3',away:'Winnaar bracket',venue:'AT&T'},
+  {id:'af1',type:'ko',round:'Achtste finale',date:'2026-07-06',time:'19:00',home:'W R32-1',away:'W R32-2',venue:'MetLife'},
   {id:'af2',type:'ko',round:'Achtste finale',date:'2026-07-06',time:'22:00',home:'W R32-3',away:'W R32-4',venue:'SoFi'},
   {id:'af3',type:'ko',round:'Achtste finale',date:'2026-07-07',time:'19:00',home:'W R32-5',away:'W R32-6',venue:'Rose Bowl'},
-  {id:'af4',type:'ko',round:'Achtste finale',date:'2026-07-07',time:'22:00',home:'W R32-7',away:'W R32-8',venue:'AT&T Stadium'},
+  {id:'af4',type:'ko',round:'Achtste finale',date:'2026-07-07',time:'22:00',home:'W R32-7',away:'W R32-8',venue:'AT&T'},
   {id:'af5',type:'ko',round:'Achtste finale',date:'2026-07-08',time:'19:00',home:'W R32-9',away:'W R32-10',venue:'Hard Rock'},
   {id:'af6',type:'ko',round:'Achtste finale',date:'2026-07-08',time:'22:00',home:'W R32-11',away:'W R32-12',venue:'BC Place'},
   {id:'af7',type:'ko',round:'Achtste finale',date:'2026-07-09',time:'19:00',home:'W R32-13',away:'W R32-14',venue:'MetLife'},
   {id:'af8',type:'ko',round:'Achtste finale',date:'2026-07-09',time:'22:00',home:'W R32-15',away:'W R32-16',venue:'SoFi'},
   {id:'kf1',type:'ko',round:'Kwartfinale',date:'2026-07-10',time:'22:00',home:'W AF1',away:'W AF2',venue:'MetLife'},
   {id:'kf2',type:'ko',round:'Kwartfinale',date:'2026-07-11',time:'01:00',home:'W AF3',away:'W AF4',venue:'Rose Bowl'},
-  {id:'kf3',type:'ko',round:'Kwartfinale',date:'2026-07-11',time:'22:00',home:'W AF5',away:'W AF6',venue:'AT&T Stadium'},
+  {id:'kf3',type:'ko',round:'Kwartfinale',date:'2026-07-11',time:'22:00',home:'W AF5',away:'W AF6',venue:'AT&T'},
   {id:'kf4',type:'ko',round:'Kwartfinale',date:'2026-07-12',time:'01:00',home:'W AF7',away:'W AF8',venue:'Hard Rock'},
-  {id:'hf1',type:'ko',round:'Halve finale',date:'2026-07-14',time:'22:00',home:'W KF1',away:'W KF2',venue:'MetLife Stadium'},
+  {id:'hf1',type:'ko',round:'Halve finale',date:'2026-07-14',time:'22:00',home:'W KF1',away:'W KF2',venue:'MetLife'},
   {id:'hf2',type:'ko',round:'Halve finale',date:'2026-07-15',time:'22:00',home:'W KF3',away:'W KF4',venue:'Rose Bowl'},
-  {id:'tr',type:'ko',round:'Troostfinale',date:'2026-07-18',time:'22:00',home:'Verliezer HF1',away:'Verliezer HF2',venue:'AT&T Stadium'},
-  {id:'fin',type:'ko',round:'🏆 FINALE',date:'2026-07-19',time:'21:00',home:'W HF1',away:'W HF2',venue:'MetLife Stadium, New York'},
+  {id:'tr',type:'ko',round:'Troostfinale',date:'2026-07-18',time:'22:00',home:'Verliezer HF1',away:'Verliezer HF2',venue:'AT&T'},
+  {id:'fin',type:'ko',round:'FINALE',date:'2026-07-19',time:'21:00',home:'W HF1',away:'W HF2',venue:'MetLife Stadium'},
 ];
 
-// ── STATUS HELPERS ──
+// ── API KEY ──
+let apiKey = localStorage.getItem('wk_api_key') || '';
+
+function onKeyInput(){
+  document.getElementById('keyStatus').style.color='var(--muted)';
+  document.getElementById('keyStatus').textContent='Druk op Opslaan om te bevestigen';
+}
+function saveKey(){
+  const v = document.getElementById('apiKeyInput').value.trim();
+  if(!v.startsWith('sk-')){
+    document.getElementById('keyStatus').style.color='var(--red)';
+    document.getElementById('keyStatus').textContent='Ongeldige key — moet beginnen met sk-ant-';
+    return;
+  }
+  apiKey = v;
+  localStorage.setItem('wk_api_key', v);
+  document.getElementById('keyStatus').style.color='var(--green)';
+  document.getElementById('keyStatus').textContent='✓ Key opgeslagen — klik een wedstrijd aan';
+  if(currentMatch) autoAnalyze(currentMatch);
+}
+
+// ── MATCH STATUS ──
 function matchStatus(m){
   if(m.result) return 'done';
-  const d=m.date, t=m.time||'00:00';
-  // Parse NL time (CET+2 in summer = UTC+2)
-  const [h,min]=t.split(':').map(Number);
-  const startUTC=new Date(d+'T00:00:00Z');
-  startUTC.setUTCHours(h-2, min, 0, 0); // convert NL to UTC
-  const endUTC=new Date(startUTC.getTime()+115*60000);
-  if(NOW>=startUTC && NOW<=endUTC) return 'live';
-  if(d<TODAY) return 'past';
-  if(d===TODAY) return 'today';
+  const [h,min] = (m.time||'00:00').split(':').map(Number);
+  const start = new Date(m.date+'T00:00:00Z');
+  start.setUTCHours(h-2, min, 0, 0);
+  const end = new Date(start.getTime()+115*60000);
+  if(NOW>=start && NOW<=end) return 'live';
+  if(m.date<TODAY) return 'past';
+  if(m.date===TODAY) return 'today';
   return 'upcoming';
 }
 
 // ── STATE ──
 let currentMatch=null, currentFilter='all', predCache={};
 
-// ── FILTER ──
 function setFilter(f,btn){
   currentFilter=f;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
@@ -485,7 +402,6 @@ function setFilter(f,btn){
   renderList();
 }
 
-// ── RENDER LIST ──
 function renderList(){
   const q=(document.getElementById('searchInput').value||'').toLowerCase();
   const el=document.getElementById('matchList');
@@ -494,19 +410,17 @@ function renderList(){
     if(currentFilter==='groep'&&m.type!=='groep') return false;
     if(currentFilter==='ko'&&m.type!=='ko') return false;
     if(currentFilter==='vandaag'&&m.date!==TODAY) return false;
-    if(q&&!(m.home.toLowerCase().includes(q)||m.away.toLowerCase().includes(q)||
-       (m.group&&('groep '+m.group).toLowerCase().includes(q)))) return false;
+    if(q&&!(m.home.toLowerCase().includes(q)||m.away.toLowerCase().includes(q))) return false;
     return true;
   });
-
-  let html='', lastDay='';
+  let html='',lastDay='';
   filtered.forEach(m=>{
     if(m.date!==lastDay){
       const d=new Date(m.date+'T12:00:00');
       const st=matchStatus(m);
-      const lbl=m.date===TODAY?'⚡ Vandaag':
-                 m.date<TODAY?d.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})+' (gespeeld)':
-                 d.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
+      const lbl=m.date===TODAY?'Vandaag':
+        (m.date<TODAY?d.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'})+' (gespeeld)':
+        d.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'}));
       html+=`<div class="day-header">${lbl}</div>`;
       lastDay=m.date;
     }
@@ -515,10 +429,9 @@ function renderList(){
     const badgeCls=m.type==='oef'?'badge-oef':m.type==='ko'?'badge-ko':'';
     const badgeTxt=m.type==='oef'?'Oef':m.type==='ko'?(m.round||'KO'):`Gr.${m.group}`;
     let statusBadge='';
-    if(st==='live') statusBadge='<span class="badge badge-live">🔴 LIVE</span>';
-    else if(st==='done'||m.result) statusBadge=`<span class="badge badge-done">✓ ${m.result}</span>`;
-    const scoreTxt=m.result&&!statusBadge?`<span class="match-score-inline">${m.result}</span>`:'';
-    html+=`<div class="match-item ${isSel?'active':''} ${st==='live'?'live-now':''}" onclick="selectMatch('${m.id}')">
+    if(st==='live') statusBadge=`<span class="badge badge-live">LIVE ${m.liveScore||''}</span>`;
+    else if(m.result) statusBadge=`<span class="badge badge-done">✓ ${m.result}</span>`;
+    html+=`<div class="match-item ${isSel?'active':''} ${st==='live'?'is-live':''}" onclick="selectMatch('${m.id}')">
       <div class="match-teams">
         <span>${F(m.home)} ${m.home}</span>
         <span class="vs">vs</span>
@@ -531,100 +444,58 @@ function renderList(){
       </div>
     </div>`;
   });
-  if(!html) html='<div style="padding:20px 14px;font-size:12px;color:var(--muted)">Geen wedstrijden gevonden.</div>';
+  if(!html) html='<div style="padding:16px 14px;font-size:12px;color:var(--muted)">Geen wedstrijden gevonden.</div>';
   el.innerHTML=html;
 }
 
-// ── SELECT MATCH ──
 function selectMatch(id){
   currentMatch=MATCHES.find(m=>m.id===id);
   renderList();
   const m=currentMatch;
-  document.getElementById('predictBtn').disabled=false;
   document.getElementById('matchHeading').textContent=`${F(m.home)} ${m.home} vs ${m.away} ${F(m.away)}`;
   const d=new Date(m.date+'T12:00:00');
   const lbl=d.toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long'});
   const typeTxt=m.type==='oef'?'Oefenwedstrijd':m.type==='ko'?(m.round||'Knock-out'):`Groep ${m.group}`;
-  const st=matchStatus(m);
-  const stTxt=st==='live'?'🔴 LIVE NU':st==='done'?`Gespeeld — ${m.result}`:'';
-  document.getElementById('matchSubtitle').textContent=`${lbl} • ${m.time} • ${typeTxt} • ${m.venue}${stTxt?' • '+stTxt:''}`;
-  if(predCache[id]) renderPrediction(predCache[id],m);
-  else{
-    const st2=matchStatus(m);
-    document.getElementById('mainContent').innerHTML=`
-    <div class="empty-state">
-      <div class="empty-icon">${st2==='live'?'🔴':st2==='done'?'✅':'🔍'}</div>
-      <h3>${m.home} vs ${m.away}</h3>
-      <p>${m.result?`Uitslag: <strong style="color:var(--green)">${m.result}</strong><br><br>`:''}
-      Klik op ⚡ Voorspel voor een live AI-analyse van deze wedstrijd.</p>
-    </div>`;
-  }
-  // scroll to main on mobile
-  if(window.innerWidth<=700){
-    setTimeout(()=>document.querySelector('.main-header').scrollIntoView({behavior:'smooth',block:'start'}),100);
+  document.getElementById('matchSubtitle').textContent=`${lbl} • ${m.time} • ${typeTxt} • ${m.venue}`;
+  if(window.innerWidth<=700) setTimeout(()=>document.querySelector('.main').scrollIntoView({behavior:'smooth'}),100);
+  if(predCache[id]){
+    renderPrediction(predCache[id],m);
+  } else {
+    autoAnalyze(m);
   }
 }
 
-// ── API KEY MODAL ──
-function onPredictClick(){
-  const stored=sessionStorage.getItem('wk_api_key');
-  if(stored){runPrediction(stored);}
-  else{openModal();}
-}
-function openModal(){
-  const modal=document.getElementById('apiModal');
-  modal.classList.add('show');
-  const stored=sessionStorage.getItem('wk_api_key')||'';
-  document.getElementById('apiKeyInput').value=stored;
-  document.getElementById('keyStored').className='key-stored'+(stored?' show':'');
-  document.getElementById('apiKeyInput').focus();
-}
-function closeModal(){document.getElementById('apiModal').classList.remove('show');}
-function checkKey(){
-  const v=document.getElementById('apiKeyInput').value.trim();
-  document.getElementById('keyStored').className='key-stored';
-}
-function confirmKey(){
-  const v=document.getElementById('apiKeyInput').value.trim();
-  if(!v||!v.startsWith('sk-')){
-    document.getElementById('apiKeyInput').style.borderColor='var(--red)';
+function autoAnalyze(m){
+  if(!apiKey){
+    document.getElementById('mainContent').innerHTML=`
+    <div class="no-key-box">
+      <p>Voer je <strong>Anthropic API key</strong> in het veld linksboven in om automatisch een AI-analyse te krijgen.<br><br>Key aanmaken via <strong>console.anthropic.com</strong> → API Keys → Create Key.</p>
+    </div>`;
     return;
   }
-  sessionStorage.setItem('wk_api_key',v);
-  closeModal();
-  runPrediction(v);
+  runPrediction(m);
 }
-// close on overlay click
-document.getElementById('apiModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
 
-// ── RUN PREDICTION ──
-async function runPrediction(apiKey){
-  if(!currentMatch) return;
-  const btn=document.getElementById('predictBtn');
-  btn.classList.add('loading'); btn.disabled=true;
-  document.getElementById('mainContent').innerHTML=`<div style="padding:12px 0">
-    <div class="skeleton" style="height:100px;border-radius:14px;margin-bottom:10px"></div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
-      ${Array(3).fill('<div class="skeleton" style="height:68px;border-radius:10px"></div>').join('')}
-    </div>
-    <div class="skeleton" style="height:130px;border-radius:10px;margin-bottom:10px"></div>
-    <div class="skeleton" style="height:160px;border-radius:10px"></div>
+async function runPrediction(m){
+  document.getElementById('mainContent').innerHTML=`
+  <div class="analyzing">
+    <div class="analyzing-spinner"></div>
+    <div style="font-size:13px">AI analyseert ${m.home} vs ${m.away}...</div>
+    <div style="font-size:11px;color:var(--muted)">Even geduld</div>
   </div>`;
-  const m=currentMatch;
   const st=matchStatus(m);
   const typeTxt=m.type==='oef'?'oefenwedstrijd':m.type==='ko'?`knock-outwedstrijd (${m.round})`:`WK groepswedstrijd Groep ${m.group}`;
-  const resultLine=m.result?`\nDeze wedstrijd is al gespeeld. Definitieve uitslag: ${m.result}. Analyseer waarom dit resultaat logisch of verrassend is.`:
-    st==='live'?'\nDeze wedstrijd is OP DIT MOMENT LIVE BEZIG. Geef een live-analyse.'
-    :'';
-  const prompt=`Analyseer deze ${typeTxt} voor het WK 2026:\n\n${m.home} vs ${m.away}\nDatum: ${m.date} om ${m.time} NL-tijd\nLocatie: ${m.venue}${resultLine}\n\nGebruik: FIFA-rankings mei 2026, bekende WK-selecties, recente oefenwedstrijden, onderlinge duels, tactische systemen, eventuele blessures van sterspelers.`;
+  const contextLine=m.result?`\nDeze wedstrijd is gespeeld. Eindstand: ${m.result}. Analyseer dit resultaat.`:
+    st==='live'?`\nDeze wedstrijd is NU LIVE bezig! Live stand: ${m.liveScore||'0-0'}. Geef een live-analyse.`:'';
+  const prompt=`Analyseer ${typeTxt} WK 2026:\n${m.home} vs ${m.away}\nDatum: ${m.date} ${m.time} NL\nLocatie: ${m.venue}${contextLine}\n\nGebruik: FIFA-rankings mei 2026, WK-selecties, recente vorm, onderlinge duels, blessures, tactiek.`;
   try{
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',max_tokens:1500,
-        system:`Je bent WK 2026 voetbalanalist. Antwoord UITSLUITEND als raw JSON object (geen markdown, geen uitleg erbuiten):
-{"uitslag_home":<int>,"uitslag_away":<int>,"winnaar":"home|away|gelijkspel","win_pct_home":<int>,"win_pct_draw":<int>,"win_pct_away":<int>,"confidence":<1-5>,"verwacht_goals_home":<float>,"verwacht_goals_away":<float>,"balbezit_home":<int>,"schoten_home":<int>,"schoten_away":<int>,"schoten_doel_home":<int>,"schoten_doel_away":<int>,"corners_home":<int>,"corners_away":<int>,"kaarten_home":<int>,"kaarten_away":<int>,"sleutelspeler_home":"<naam>","sleutelspeler_home_rol":"<rol>","sleutelspeler_home_impact":"<max 10 woorden>","sleutelspeler_away":"<naam>","sleutelspeler_away_rol":"<rol>","sleutelspeler_away_impact":"<max 10 woorden>","gevaar_home":"<naam>","gevaar_away":"<naam>","analyse":"<250 woorden NL analyse, gebruik \\n\\n voor paragrafen>","tactiek_home":"<20 woorden>","tactiek_away":"<20 woorden>","doelpuntenmakers":["<speler (club)>","<speler (club)>"],"verrassing_kans":<int>,"verrassing_uitleg":"<15 woorden>"}`,
+        system:`WK 2026 voetbalanalist. Antwoord ALLEEN als raw JSON object zonder markdown:
+{"uitslag_home":<int>,"uitslag_away":<int>,"winnaar":"home|away|gelijkspel","win_pct_home":<int>,"win_pct_draw":<int>,"win_pct_away":<int>,"confidence":<1-5>,"verwacht_goals_home":<float>,"verwacht_goals_away":<float>,"balbezit_home":<int>,"schoten_home":<int>,"schoten_away":<int>,"schoten_doel_home":<int>,"schoten_doel_away":<int>,"corners_home":<int>,"corners_away":<int>,"kaarten_home":<int>,"kaarten_away":<int>,"sleutelspeler_home":"<naam>","sleutelspeler_home_rol":"<rol>","sleutelspeler_home_impact":"<10 woorden>","sleutelspeler_away":"<naam>","sleutelspeler_away_rol":"<rol>","sleutelspeler_away_impact":"<10 woorden>","gevaar_home":"<naam>","gevaar_away":"<naam>","analyse":"<250 woorden NL, gebruik \\n\\n voor paragrafen>","tactiek_home":"<20 woorden>","tactiek_away":"<20 woorden>","doelpuntenmakers":["<speler>","<speler>"],"verrassing_kans":<int>,"verrassing_uitleg":"<15 woorden>"}`,
         messages:[{role:'user',content:prompt}]
       })
     });
@@ -632,18 +503,18 @@ async function runPrediction(apiKey){
     const data=await resp.json();
     const raw=data.content[0].text.trim();
     let pred;
-    try{pred=JSON.parse(raw);}
-    catch{const m2=raw.match(/\{[\s\S]*\}/);if(m2)pred=JSON.parse(m2[0]);else throw new Error('JSON kon niet worden geparsed.');}
+    try{pred=JSON.parse(raw);}catch{const mx=raw.match(/\{[\s\S]*\}/);if(mx)pred=JSON.parse(mx[0]);else throw new Error('JSON parse fout');}
     predCache[m.id]=pred;
     renderPrediction(pred,m);
-    if(window.innerWidth<=700) setTimeout(()=>document.getElementById('mainContent').scrollIntoView({behavior:'smooth',block:'start'}),150);
   }catch(err){
-    document.getElementById('mainContent').innerHTML=`<div class="error-box"><strong>Fout:</strong> ${err.message}<br><span style="font-size:11px;opacity:.7;margin-top:4px;display:block">Controleer je API key. Gratis keys zijn beschikbaar op console.anthropic.com</span></div>`;
+    document.getElementById('mainContent').innerHTML=`
+    <div class="error-box">
+      <strong>Fout bij analyse:</strong> ${err.message}<br>
+      <span style="font-size:11px;opacity:.7;margin-top:4px;display:block">Controleer je API key bovenin de sidebar.</span>
+    </div>`;
   }
-  btn.classList.remove('loading'); btn.disabled=false;
 }
 
-// ── RENDER PREDICTION ──
 function renderPrediction(pred,m){
   const hf=F(m.home),af=F(m.away);
   const st=matchStatus(m);
@@ -652,12 +523,9 @@ function renderPrediction(pred,m){
   const ba=100-(pred.balbezit_home||50);
   const xG=((pred.verwacht_goals_home||0)+(pred.verwacht_goals_away||0)).toFixed(1);
   const dots=Array(5).fill(0).map((_,i)=>`<div class="conf-dot ${i<pred.confidence?'on':''}"></div>`).join('');
-  const dpm=(pred.doelpuntenmakers||[]).map(p=>`<span style="display:inline-block;background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:2px 9px;font-size:11px;margin:2px">${p}</span>`).join('');
-  const topBox=m.result
-    ?`<div class="past-box">✅ Gespeeld — eindstand: <strong>${m.home} ${m.result} ${m.away}</strong></div>`
-    :st==='live'
-    ?`<div class="live-box"><div class="live-dot"></div><strong>LIVE</strong> — deze wedstrijd is nu bezig!</div>`:'';
-
+  const dpm=(pred.doelpuntenmakers||[]).map(p=>`<span style="display:inline-block;background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:2px 8px;font-size:11px;margin:2px">${p}</span>`).join('');
+  const topBox=m.result?`<div class="past-box">✅ Gespeeld — eindstand: <strong>${m.home} ${m.result} ${m.away}</strong></div>`:
+    st==='live'?`<div class="live-box"><div class="live-dot"></div><strong>LIVE</strong> — wedstrijd bezig! Stand: ${m.liveScore||'0-0'}</div>`:'';
   document.getElementById('mainContent').innerHTML=`
 ${topBox}
 <div class="tab-nav">
@@ -673,12 +541,9 @@ ${topBox}
       ${pred.winnaar==='home'?'<div class="score-winner-tag">Winnaar</div>':''}
     </div>
     <div style="text-align:center">
-      <div class="score-nums">
-        <div class="score-num">${pred.uitslag_home}</div>
-        <div class="score-sep">–</div>
-        <div class="score-num">${pred.uitslag_away}</div>
-      </div>
+      <div class="score-nums"><div class="score-num">${pred.uitslag_home}</div><div class="score-sep">–</div><div class="score-num">${pred.uitslag_away}</div></div>
       <div style="font-size:10px;color:var(--muted);margin-top:3px">Verwacht</div>
+      ${st==='live'?'<div class="live-indicator"><div class="live-dot"></div>LIVE</div>':''}
     </div>
     <div class="score-team">
       <span class="score-flag">${af}</span>
@@ -687,11 +552,7 @@ ${topBox}
     </div>
   </div>
   <div class="prob-wrap">
-    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-      <span style="font-size:12px;font-weight:500">${m.home}</span>
-      <span style="font-size:10px;color:var(--muted)">Winstkansen</span>
-      <span style="font-size:12px;font-weight:500">${m.away}</span>
-    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:500">${m.home}</span><span style="font-size:10px;color:var(--muted)">Winstkansen</span><span style="font-size:12px;font-weight:500">${m.away}</span></div>
     <div class="prob-bar-outer">
       <div class="prob-seg prob-home" style="width:${pred.win_pct_home}%">${pred.win_pct_home}%</div>
       <div class="prob-seg prob-draw" style="width:${pred.win_pct_draw}%">${pred.win_pct_draw>7?pred.win_pct_draw+'%':''}</div>
@@ -703,7 +564,7 @@ ${topBox}
     <div class="pred-card"><div class="card-label">Betrouwbaarheid</div><div class="conf-dots">${dots}</div><div class="card-sub">${pred.confidence}/5</div></div>
     <div class="pred-card hl"><div class="card-label">xG totaal</div><div class="card-value">${xG}</div><div class="card-sub">${(pred.verwacht_goals_home||0).toFixed(1)} – ${(pred.verwacht_goals_away||0).toFixed(1)}</div></div>
     <div class="pred-card win"><div class="card-label">Winnaar</div><div class="card-value">${wF}</div><div class="card-sub" style="font-weight:500;color:var(--text)">${wN}</div></div>
-    <div class="pred-card"><div class="card-label">Verrassingsrisico</div><div class="card-value">${pred.verrassing_kans}%</div><div class="card-sub" style="font-size:10px">${pred.verrassing_uitleg||''}</div></div>
+    <div class="pred-card"><div class="card-label">Verrassing?</div><div class="card-value">${pred.verrassing_kans}%</div><div class="card-sub" style="font-size:10px">${pred.verrassing_uitleg||''}</div></div>
   </div>
   <div class="sec">Sleutelspelers</div>
   <div class="players-grid">
@@ -712,7 +573,7 @@ ${topBox}
     <div class="player-card"><div class="player-role">${hf} Doelgevaar</div><div class="player-name" style="color:var(--gold)">${pred.gevaar_home||'N/A'}</div></div>
     <div class="player-card"><div class="player-role">${af} Doelgevaar</div><div class="player-name" style="color:var(--gold)">${pred.gevaar_away||'N/A'}</div></div>
   </div>
-  ${dpm?`<div class="sec">Verwachte doelpuntenmakers</div><div style="margin-bottom:14px">${dpm}</div>`:''}
+  ${dpm?`<div class="sec">Verwachte doelpuntenmakers</div><div style="margin-bottom:12px">${dpm}</div>`:''}
 </div>
 <div class="tab-panel" id="tp-s">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
@@ -725,13 +586,13 @@ ${topBox}
     ${sr('xG',(pred.verwacht_goals_home||0).toFixed(1),(pred.verwacht_goals_away||0).toFixed(1),'',true)}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    <div class="pred-card"><div class="card-label">${hf} Tactiek</div><div style="font-size:12px;color:var(--text);line-height:1.6;margin-top:5px">${pred.tactiek_home||'N/A'}</div></div>
-    <div class="pred-card"><div class="card-label">${af} Tactiek</div><div style="font-size:12px;color:var(--text);line-height:1.6;margin-top:5px">${pred.tactiek_away||'N/A'}</div></div>
+    <div class="pred-card"><div class="card-label">${hf} Tactiek</div><div style="font-size:12px;color:var(--text);line-height:1.6;margin-top:4px">${pred.tactiek_home||'N/A'}</div></div>
+    <div class="pred-card"><div class="card-label">${af} Tactiek</div><div style="font-size:12px;color:var(--text);line-height:1.6;margin-top:4px">${pred.tactiek_away||'N/A'}</div></div>
   </div>
 </div>
 <div class="tab-panel" id="tp-a">
   <div class="ai-prose">${(pred.analyse||'').replace(/\n/g,'<br>')}</div>
-  <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:-8px">Claude Sonnet — WK 2026 analyse</div>
+  <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:-8px">Claude Sonnet — WK 2026</div>
 </div>`;
 }
 
@@ -755,156 +616,14 @@ function sw(id,btn){
   document.getElementById('tp-'+id).classList.add('active');
 }
 
-// ── LIVE SCORES via openfootball (geen key nodig) + football-data.org (optioneel) ──
-const OF_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
-const FD_BASE = 'https://api.football-data.org/v4';
-const WC_ID = 2000;
-
-function saveFdKey(){
-  const key = document.getElementById('fdKeyInput').value.trim();
-  if(!key){ document.getElementById('fd-status').textContent='Voer een geldige key in.'; return; }
-  localStorage.setItem('wk_fd_key', key);
-  document.getElementById('fd-status').textContent='Opgeslagen! Laden...';
-  document.getElementById('fd-status').style.color='var(--green)';
-  loadLiveScores();
-}
-
-function openFdSettings(){
-  document.getElementById('fd-setup').style.display='block';
-  document.getElementById('fd-banner').style.display='none';
-}
-
-async function loadLiveScores(){
-  let updated = 0;
-  // 1. Probeer openfootball (gratis, geen key)
-  try {
-    const resp = await fetch(OF_URL);
-    if(resp.ok){
-      const data = await resp.json();
-      const matches = data.matches || [];
-      matches.forEach(m => {
-        const home = m.team1 || '';
-        const away = m.team2 || '';
-        const s1 = m.score?.ft ? m.score.ft[0] : null;
-        const s2 = m.score?.ft ? m.score.ft[1] : null;
-        if(s1 !== null && s2 !== null){
-          const local = MATCHES.find(lm =>
-            (fuzzyMatch(lm.home,home) && fuzzyMatch(lm.away,away)) ||
-            (fuzzyMatch(lm.home,away) && fuzzyMatch(lm.away,home))
-          );
-          if(local){
-            const swapped = fuzzyMatch(local.home, away) && fuzzyMatch(local.away, home) && !fuzzyMatch(local.home, home);
-            local.result = swapped ? `${s2}-${s1}` : `${s1}-${s2}`;
-            updated++;
-          }
-        }
-      });
-      showBanner(`✓ ${updated} uitslagen bijgewerkt (openfootball)`);
-    }
-  } catch(e){ console.log('openfootball fout:', e.message); }
-
-  // 2. Als football-data key aanwezig, gebruik die ook (betere live data)
-  const fdKey = localStorage.getItem('wk_fd_key');
-  if(fdKey){
-    try {
-      const resp2 = await fetch(`${FD_BASE}/competitions/${WC_ID}/matches`, {
-        headers: { 'X-Auth-Token': fdKey }
-      });
-      if(resp2.ok){
-        const data2 = await resp2.json();
-        (data2.matches||[]).forEach(apiMatch => {
-          const home = apiMatch.homeTeam?.name||'';
-          const away = apiMatch.awayTeam?.name||'';
-          const status = apiMatch.status;
-          const scoreH = apiMatch.score?.fullTime?.home;
-          const scoreA = apiMatch.score?.fullTime?.away;
-          const local = MATCHES.find(lm =>
-            (fuzzyMatch(lm.home,home) && fuzzyMatch(lm.away,away)) ||
-            (fuzzyMatch(lm.home,away) && fuzzyMatch(lm.away,home))
-          );
-          if(local){
-            if(status==='FINISHED' && scoreH!==null && scoreA!==null){
-              const swapped = fuzzyMatch(local.home,away) && !fuzzyMatch(local.home,home);
-              local.result = swapped ? `${scoreA}-${scoreH}` : `${scoreH}-${scoreA}`;
-              updated++;
-            } else if(status==='IN_PLAY'||status==='PAUSED'){
-              local.apiStatus='LIVE';
-              local.liveScore=`${apiMatch.score?.fullTime?.home??0}-${apiMatch.score?.fullTime?.away??0}`;
-            }
-          }
-        });
-        showBanner(`✓ ${updated} uitslagen bijgewerkt (live)`);
-      } else if(resp2.status===403){
-        document.getElementById('fd-status').textContent='⚠ Key heeft geen toegang tot WK data (betaald plan vereist)';
-        document.getElementById('fd-status').style.color='orange';
-      }
-    } catch(e){ console.log('football-data fout:', e.message); }
-  }
-  renderList();
-  if(currentMatch && predCache[currentMatch.id]) renderPrediction(predCache[currentMatch.id], currentMatch);
-}
-
-function showBanner(msg){
-  const banner = document.getElementById('fd-banner');
-  const setup = document.getElementById('fd-setup');
-  if(banner) { banner.textContent = '📡 '+msg+' — klik om instellingen te wijzigen'; banner.style.display='block'; }
-  if(setup) setup.style.display='none';
-  const st = document.getElementById('fd-status');
-  if(st){ st.textContent=msg; st.style.color='var(--green)'; }
-}
-
-function fuzzyMatch(localName, apiName){
-  if(!localName || !apiName) return false;
-  const norm = s => s.toLowerCase()
-    .replace(/netherlands/i,'nederland').replace(/morocco/i,'marokko')
-    .replace(/france/i,'frankrijk').replace(/germany/i,'duitsland')
-    .replace(/spain/i,'spanje').replace(/england/i,'engeland')
-    .replace(/brazil/i,'brazilië').replace(/argentina/i,'argentinië')
-    .replace(/portugal/i,'portugal').replace(/belgium/i,'belgië')
-    .replace(/croatia/i,'kroatië').replace(/switzerland/i,'zwitserland')
-    .replace(/austria/i,'oostenrijk').replace(/denmark/i,'denemarken')
-    .replace(/norway/i,'noorwegen').replace(/sweden/i,'zweden')
-    .replace(/turkey/i,'turkije').replace(/senegal/i,'senegal')
-    .replace(/mexico/i,'mexico').replace(/united states/i,'vs').replace(/usa/i,'vs')
-    .replace(/japan/i,'japan').replace(/south korea/i,'zuid-korea')
-    .replace(/australia/i,'australië').replace(/ecuador/i,'ecuador')
-    .replace(/colombia/i,'colombia').replace(/uruguay/i,'uruguay')
-    .replace(/ghana/i,'ghana').replace(/iran/i,'iran')
-    .replace(/canada/i,'canada').replace(/qatar/i,'qatar')
-    .replace(/saudi arabia/i,'saoedi-arabië').replace(/ivory coast/i,'ivoorkust')
-    .replace(/cape verde/i,'kaapverdië').replace(/south africa/i,'zuid-afrika')
-    .replace(/new zealand/i,'nieuw-zeeland').replace(/scotland/i,'schotland')
-    .replace(/haiti/i,'haïti').replace(/czechia/i,'tsjechië').replace(/czech republic/i,'tsjechië')
-    .replace(/tunisia/i,'tunesië').replace(/algeria/i,'algerije')
-    .replace(/egypt/i,'egypte').replace(/nigeria/i,'nigeria')
-    .replace(/dr congo/i,'dr congo').replace(/panama/i,'panama')
-    .replace(/paraguay/i,'paraguay').replace(/bolivia/i,'bolivia')
-    .replace(/peru/i,'peru').replace(/chile/i,'chili')
-    .replace(/venezuela/i,'venezuela').replace(/honduras/i,'honduras')
-    .replace(/costa rica/i,'costa rica').replace(/uzbekistan/i,'oezbekistan')
-    .replace(/jordan/i,'jordanië').replace(/iraq/i,'irak')
-    .replace(/iceland/i,'ijsland').replace(/finland/i,'finland')
-    .replace(/greece/i,'griekenland').replace(/ireland/i,'ierland')
-    .replace(/wales/i,'wales').replace(/serbia/i,'servië')
-    .replace(/slovenia/i,'slovenië').replace(/bosnia/i,'bosnië-herzegovina')
-    .replace(/curaçao/i,'curaçao').replace(/curacao/i,'curaçao')
-    .replace(/[-_]/g,' ').trim();
-  const a=norm(localName), b=norm(apiName);
-  return a===b || a.includes(b) || b.includes(a);
-}
-
 // ── INIT ──
+if(apiKey){
+  document.getElementById('apiKeyInput').value=apiKey;
+  document.getElementById('keyStatus').style.color='var(--green)';
+  document.getElementById('keyStatus').textContent='✓ Key geladen — klik een wedstrijd aan';
+}
 renderList();
-// Vul opgeslagen football-data key in als die er is
-const storedFdKey = localStorage.getItem('wk_fd_key');
-if(storedFdKey) document.getElementById('fdKeyInput').value = storedFdKey;
-
-// Laad altijd uitslagen bij opstarten (openfootball werkt zonder key)
-document.getElementById('fd-status').textContent = 'Uitslagen laden...';
-loadLiveScores();
-
-// Auto-refresh elke 60s
-setInterval(()=>{ renderList(); loadLiveScores(); }, 60000);
+setInterval(renderList, 30000);
 </script>
 </body>
 </html>
