@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voetbal Voorspellingen Vandaag</title>
+<style>
+:root{--bg:#0a0e1a;--surface:#111827;--surface2:#1a2235;--border:rgba(255,255,255,0.08);--text:#f0f4ff;--muted:#8892a4;--accent:#f97316;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--gold:#fbbf24}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;min-height:100vh}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:10;backdrop-filter:blur(8px)}
+.header h1{font-size:20px;font-weight:700;color:var(--accent);letter-spacing:.02em}
+.header .date-nav{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.date-btn{padding:5px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.date-btn:hover,.date-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.stats-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;gap:16px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.stats-bar span{display:flex;align-items:center;gap:4px}
+.stats-bar b{color:var(--text)}
+.container{max-width:1100px;margin:0 auto;padding:16px}
+.league-group{margin-bottom:20px}
+.league-header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-radius:8px 8px 0 0;border:1px solid var(--border);border-bottom:none;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.league-flag{font-size:16px}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:0 0 8px 8px;overflow:hidden}
+thead tr{background:var(--surface2)}
+th{padding:8px 10px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;text-align:center;border-bottom:1px solid var(--border)}
+th:nth-child(1){text-align:left;width:80px}
+th:nth-child(2){text-align:left}
+td{padding:9px 10px;border-bottom:0.5px solid var(--border);text-align:center;font-size:13px}
+td:nth-child(1){text-align:left;font-size:11px;color:var(--muted);white-space:nowrap}
+td:nth-child(2){text-align:left}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.teams{display:flex;flex-direction:column;gap:2px}
+.team-name{font-weight:500;color:var(--text);font-size:13px}
+.pct-bar{display:flex;height:18px;border-radius:4px;overflow:hidden;width:100%;min-width:120px}
+.p1{background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;min-width:20px}
+.px{background:#374151;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--muted);min-width:20px}
+.p2{background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;min-width:20px}
+.tip{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:.04em}
+.tip-1{background:rgba(249,115,22,.15);color:var(--accent);border:1px solid rgba(249,115,22,.3)}
+.tip-x{background:rgba(55,65,81,.5);color:#9ca3af;border:1px solid rgba(156,163,175,.2)}
+.tip-2{background:rgba(59,130,246,.15);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+.tip-1x{background:rgba(249,115,22,.1);color:#fb923c;border:1px solid rgba(249,115,22,.2)}
+.tip-x2{background:rgba(59,130,246,.1);color:#60a5fa;border:1px solid rgba(59,130,246,.2)}
+.tip-12{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.2)}
+.score{font-weight:700;color:var(--green);font-size:13px}
+.score.upcoming{color:var(--muted);font-size:11px}
+.odds-cell{font-size:11px;color:var(--muted);line-height:1.6}
+.odds-cell span{display:block}
+.odds-cell .o1{color:var(--accent)}
+.odds-cell .ox{color:var(--muted)}
+.odds-cell .o2{color:var(--blue)}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:40vh;gap:14px;color:var(--muted)}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-box{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:16px;color:#fca5a5;margin:20px}
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.usage{font-size:10px;color:var(--muted);text-align:right;padding:8px 20px}
+@media(max-width:600px){
+  .header{padding:12px 14px}
+  .container{padding:10px}
+  th:nth-child(4),td:nth-child(4){display:none}
+  .pct-bar{min-width:80px}
+  .header h1{font-size:16px}
+}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.on{opacity:1;pointer-events:all}
+.modal{width:100%;max-width:600px;background:var(--surface);border-radius:16px 16px 0 0;border:1px solid var(--border2);max-height:90vh;overflow-y:auto;transform:translateY(30px);transition:transform .2s}
+.modal::-webkit-scrollbar{display:none}
+.modal-overlay.on .modal{transform:translateY(0)}
+.mhandle{width:36px;height:4px;background:var(--border2);border-radius:2px;margin:12px auto 0}
+.mhdr{padding:12px 18px 0;display:flex;align-items:center;justify-content:space-between}
+.mhdr-title{font-size:15px;font-weight:700}
+.mclose{width:28px;height:28px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px}
+.mbody{padding:14px 18px 30px}
+.md-score{background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(59,130,246,.08));border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:12px;text-align:center}
+.md-meta{font-size:11px;color:var(--accent);margin-bottom:10px}
+.md-teams{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.md-team{text-align:center;flex:1}
+.md-flag{font-size:32px;display:block;margin-bottom:3px}
+.md-name{font-size:12px;font-weight:600}
+.md-odds{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}
+.mdo{padding:6px 4px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,0.04);text-align:center}
+.mdo.w{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.4)}
+.mdo .mdol{font-size:9px;color:var(--muted);display:block;margin-bottom:2px}
+.mdo .mdov{font-size:14px;font-weight:700;color:var(--text)}
+.mdo.w .mdov{color:var(--green)}
+.bb-card{background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(249,115,22,.08));border:1px solid rgba(251,191,36,.25);border-radius:12px;padding:14px;margin-bottom:12px}
+.bb-lbl{font-size:10px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.bb-tip{font-size:14px;font-weight:700;margin-bottom:4px}
+.bb-why{font-size:12px;color:var(--muted);line-height:1.6}
+.ps-hdr{display:flex;align-items:center;gap:8px;margin:14px 0 8px}
+.ps-flag{font-size:16px}
+.ps-team-name{font-size:13px;font-weight:700;flex:1}
+.ps-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.p-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px;margin-bottom:5px;display:flex;align-items:center;gap:10px}
+.p-medal{font-size:18px;min-width:24px;text-align:center}
+.p-info{flex:1;min-width:0}
+.p-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-meta{font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
+.p-right{text-align:right;flex-shrink:0}
+.p-shots{font-size:18px;font-weight:700;color:#fb923c}
+.p-sl{font-size:9px;color:var(--muted);text-transform:uppercase}
+.p-sot{font-size:10px;color:var(--blue);margin-top:1px}
+.p-xg{font-size:10px;color:#a78bfa}
+.p-basis{font-size:10px;padding:2px 6px;border-radius:7px;margin-top:3px;display:inline-block}
+.pb-y{background:rgba(34,197,94,.1);color:var(--green)}
+.pb-n{background:rgba(255,255,255,.06);color:var(--muted)}
+.load-mini{display:flex;align-items:center;gap:8px;padding:14px;color:var(--muted);font-size:12px}
+.spin-sm{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;flex-shrink:0}
+tr.clickable{cursor:pointer}
+
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⚽ Voetbal Voorspellingen</h1>
+  <div class="date-nav" id="dateNav"></div>
+</div>
+<div class="stats-bar" id="statsBar">
+  <span>Laden...</span>
+</div>
+<div class="container" id="app">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>Wedstrijden ophalen...</div>
+  </div>
+</div>
+<div class="usage" id="usage"></div>
+
+<script>
+const API_KEY = '7ff792f8f666cf1a4fcee93169f2638e';
+const BASE = 'https://api.the-odds-api.com/v4';
+
+// Alle voetbal sport keys van The Odds API
+const SOCCER_SPORTS = [
+  'soccer_fifa_world_cup',
+  'soccer_epl',
+  'soccer_spain_la_liga',
+  'soccer_germany_bundesliga',
+  'soccer_italy_serie_a',
+  'soccer_france_ligue_one',
+  'soccer_netherlands_eredivisie',
+  'soccer_portugal_primeira_liga',
+  'soccer_turkey_super_liga',
+  'soccer_brazil_campeonato',
+  'soccer_argentina_primera_division',
+  'soccer_conmebol_copa_libertadores',
+  'soccer_uefa_champs_league',
+  'soccer_uefa_europa_league',
+  'soccer_mls',
+  'soccer_mexico_ligamx',
+  'soccer_belgium_first_div',
+  'soccer_scotland_premiership',
+];
+
+const LEAGUE_NAMES = {
+  'soccer_fifa_world_cup': {name:'WK 2026', flag:'🌍'},
+  'soccer_epl': {name:'Premier League', flag:'🏴'},
+  'soccer_spain_la_liga': {name:'La Liga', flag:'🇪🇸'},
+  'soccer_germany_bundesliga': {name:'Bundesliga', flag:'🇩🇪'},
+  'soccer_italy_serie_a': {name:'Serie A', flag:'🇮🇹'},
+  'soccer_france_ligue_one': {name:'Ligue 1', flag:'🇫🇷'},
+  'soccer_netherlands_eredivisie': {name:'Eredivisie', flag:'🇳🇱'},
+  'soccer_portugal_primeira_liga': {name:'Primeira Liga', flag:'🇵🇹'},
+  'soccer_turkey_super_liga': {name:'Süper Lig', flag:'🇹🇷'},
+  'soccer_brazil_campeonato': {name:'Brasileirão', flag:'🇧🇷'},
+  'soccer_argentina_primera_division': {name:'Liga Argentina', flag:'🇦🇷'},
+  'soccer_conmebol_copa_libertadores': {name:'Copa Libertadores', flag:'🏆'},
+  'soccer_uefa_champs_league': {name:'Champions League', flag:'⭐'},
+  'soccer_uefa_europa_league': {name:'Europa League', flag:'🟠'},
+  'soccer_mls': {name:'MLS', flag:'🇺🇸'},
+  'soccer_mexico_ligamx': {name:'Liga MX', flag:'🇲🇽'},
+  'soccer_belgium_first_div': {name:'Jupiler Pro League', flag:'🇧🇪'},
+  'soccer_scotland_premiership': {name:'Scottish Premiership', flag:'🏴'},
+};
+
+let allMatches = [];
+let selectedDate = getTodayStr();
+let requestsLeft = '?';
+
+function getTodayStr(){
+  return new Date().toISOString().split('T')[0];
+}
+
+function getDateStr(offset){
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().split('T')[0];
+}
+
+function formatDateLabel(str){
+  const d = new Date(str+'T12:00:00');
+  const today = getTodayStr();
+  const tomorrow = getDateStr(1);
+  const yesterday = getDateStr(-1);
+  if(str===today) return 'Vandaag';
+  if(str===tomorrow) return 'Morgen';
+  if(str===yesterday) return 'Gisteren';
+  return d.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
+}
+
+function oddsToProb(o){ return o ? Math.round(100/o) : 0; }
+
+function calcProbs(h,d,a){
+  const raw1=oddsToProb(h), rawX=oddsToProb(d), raw2=oddsToProb(a);
+  const total=raw1+rawX+raw2||100;
+  const p1=Math.round(raw1/total*100);
+  const px=Math.round(rawX/total*100);
+  const p2=100-p1-px;
+  return {p1,px,p2};
+}
+
+function getTip(p1,px,p2){
+  const max=Math.max(p1,px,p2);
+  const threshold=5;
+  if(max===p1){
+    if(px>p1-threshold) return {tip:'1X',cls:'tip-1x'};
+    return {tip:'1',cls:'tip-1'};
+  }
+  if(max===p2){
+    if(px>p2-threshold) return {tip:'X2',cls:'tip-x2'};
+    return {tip:'2',cls:'tip-2'};
+  }
+  if(p1>p2) return {tip:'1X',cls:'tip-1x'};
+  return {tip:'X2',cls:'tip-x2'};
+}
+
+function matchDate(commence_time){
+  return new Date(commence_time).toISOString().split('T')[0];
+}
+
+function matchTime(commence_time){
+  const d = new Date(commence_time);
+  return d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'});
+}
+
+async function fetchSport(sport){
+  try{
+    const url=`${BASE}/sports/${sport}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h&oddsFormat=decimal&dateFormat=iso`;
+    const r = await fetch(url);
+    if(!r.ok) return [];
+    const remaining = r.headers.get('x-requests-remaining');
+    if(remaining) requestsLeft = remaining;
+    const data = await r.json();
+    return (data||[]).map(m=>({...m, sport}));
+  }catch(e){ return []; }
+}
+
+async function loadAll(){
+  document.getElementById('app').innerHTML=`<div class="loading"><div class="spinner"></div><div>Wedstrijden ophalen van alle competities...</div></div>`;
+  
+  // First get available sports
+  try{
+    const sportsUrl=`${BASE}/sports/?apiKey=${API_KEY}`;
+    const sr = await fetch(sportsUrl);
+    if(sr.ok){
+      const sports = await sr.json();
+      const soccerSports = sports.filter(s=>s.group==='Soccer'&&s.active).map(s=>s.key);
+      // fetch all soccer sports in parallel (max 15 at a time to save requests)
+      const toFetch = soccerSports.slice(0,15);
+      const results = await Promise.all(toFetch.map(fetchSport));
+      allMatches = results.flat();
+    }
+  }catch(e){
+    // fallback to predefined list
+    const results = await Promise.all(SOCCER_SPORTS.map(fetchSport));
+    allMatches = results.flat();
+  }
+
+  buildDateNav();
+  renderDate(selectedDate);
+  document.getElementById('usage').textContent=`API requests resterend: ${requestsLeft}`;
+}
+
+function buildDateNav(){
+  const dates = new Set();
+  allMatches.forEach(m=>dates.add(matchDate(m.commence_time)));
+  const sorted=[...dates].sort();
+  
+  // Always show yesterday, today, tomorrow + any dates with matches
+  const navDates = new Set([getDateStr(-1), getTodayStr(), getDateStr(1)]);
+  sorted.forEach(d=>navDates.add(d));
+  const navSorted=[...navDates].sort().slice(0,7);
+  
+  const nav = document.getElementById('dateNav');
+  nav.innerHTML = navSorted.map(d=>`
+    <button class="date-btn ${d===selectedDate?'active':''}" onclick="selectDate('${d}')">
+      ${formatDateLabel(d)}
+    </button>`).join('');
+}
+
+function selectDate(d){
+  selectedDate=d;
+  buildDateNav();
+  renderDate(d);
+}
+
+function renderDate(date){
+  const app = document.getElementById('app');
+  const filtered = allMatches.filter(m=>matchDate(m.commence_time)===date);
+  
+  if(filtered.length===0){
+    app.innerHTML=`<div class="empty">Geen wedstrijden gevonden voor ${formatDateLabel(date)}.</div>`;
+    updateStats([]);
+    return;
+  }
+
+  // Group by sport/league
+  const groups = {};
+  filtered.forEach(m=>{
+    const key = m.sport;
+    if(!groups[key]) groups[key]=[];
+    groups[key].push(m);
+  });
+
+  // Sort groups: WK first, then alphabetical
+  const sortedKeys = Object.keys(groups).sort((a,b)=>{
+    if(a.includes('world_cup')) return -1;
+    if(b.includes('world_cup')) return 1;
+    return (LEAGUE_NAMES[a]?.name||a).localeCompare(LEAGUE_NAMES[b]?.name||b);
+  });
+
+  let html = '';
+  let totalMatches=0, totalTips={1:0,X:0,2:0,'1X':0,'X2':0,'12':0};
+
+  sortedKeys.forEach(sport=>{
+    const matches = groups[sport].sort((a,b)=>new Date(a.commence_time)-new Date(b.commence_time));
+    const info = LEAGUE_NAMES[sport] || {name:sport.replace(/soccer_/,'').replace(/_/g,' ').toUpperCase(), flag:'⚽'};
+    
+    html+=`<div class="league-group">
+      <div class="league-header">
+        <span class="league-flag">${info.flag}</span>
+        <span>${info.name}</span>
+        <span style="margin-left:auto;font-size:10px">${matches.length} wedstrijd${matches.length!==1?'en':''}</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Tijd</th>
+          <th>Wedstrijd</th>
+          <th>Kansen</th>
+          <th>Tip</th>
+          <th>Odds</th>
+        </tr></thead>
+        <tbody>`;
+
+    matches.forEach(m=>{
+      totalMatches++;
+      const h2h = m.bookmakers?.[0]?.markets?.find(mk=>mk.key==='h2h');
+      const outcomes = h2h?.outcomes||[];
+      const homeO = outcomes.find(o=>o.name===m.home_team)?.price;
+      const awayO = outcomes.find(o=>o.name===m.away_team)?.price;
+      const drawO = outcomes.find(o=>o.name==='Draw')?.price;
+
+      if(!homeO||!awayO){
+        html+=`<tr class='clickable' onclick="openMatchModal('${m.home_team}','${m.away_team}','${info?.name||sport}','${hO||''}','${dO||''}','${aO||''}',${p1},${px},${p2})">
+          <td>${matchTime(m.commence_time)}</td>
+          <td><div class="teams"><span class="team-name">${m.home_team}</span><span class="team-name" style="color:var(--muted)">${m.away_team}</span></div></td>
+          <td colspan="3" style="color:var(--muted);font-size:11px">Geen odds beschikbaar</td>
+        </tr>`;
+        return;
+      }
+
+      const {p1,px,p2} = calcProbs(homeO, drawO, awayO);
+      const {tip,cls} = getTip(p1,px,p2);
+      totalTips[tip]=(totalTips[tip]||0)+1;
+
+      const now = new Date();
+      const start = new Date(m.commence_time);
+      const isLive = now>start && now<new Date(start.getTime()+115*60000);
+      const isDone = now>new Date(start.getTime()+115*60000);
+
+      html+=`<tr>
+        <td>${matchTime(m.commence_time)}${isLive?'<br><span style="color:var(--green);font-size:9px;font-weight:700">LIVE</span>':''}</td>
+        <td><div class="teams">
+          <span class="team-name">${m.home_team}</span>
+          <span class="team-name" style="color:var(--muted);font-size:12px">${m.away_team}</span>
+        </div></td>
+        <td>
+          <div class="pct-bar">
+            <div class="p1" style="width:${p1}%">${p1>12?p1+'%':''}</div>
+            <div class="px" style="width:${px}%">${px>12?px+'%':''}</div>
+            <div class="p2" style="width:${p2}%">${p2>12?p2+'%':''}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:2px">
+            <span>${p1}%</span><span>${px}%</span><span>${p2}%</span>
+          </div>
+        </td>
+        <td><span class="${cls} tip">${tip}</span></td>
+        <td class="odds-cell">
+          <span class="o1">1: ${homeO?.toFixed(2)||'-'}</span>
+          ${drawO?`<span class="ox">X: ${drawO?.toFixed(2)}</span>`:''}
+          <span class="o2">2: ${awayO?.toFixed(2)||'-'}</span>
+        </td>
+      </tr>`;
+    });
+
+    html+=`</tbody></table></div>`;
+  });
+
+  app.innerHTML=html;
+  updateStats(filtered, totalMatches, totalTips);
+}
+
+function updateStats(matches, total=0, tips={}){
+  const bar = document.getElementById('statsBar');
+  if(!total){bar.innerHTML=`<span>Geen wedstrijden</span>`;return;}
+  const tip1=tips['1']||0, tipX=tips['X']||0, tip2=tips['2']||0;
+  const tip1x=tips['1X']||0, tipx2=tips['X2']||0, tip12=tips['12']||0;
+  bar.innerHTML=`
+    <span>📅 <b>${formatDateLabel(selectedDate)}</b></span>
+    <span>⚽ <b>${total}</b> wedstrijden</span>
+    <span style="color:var(--accent)">1: <b>${tip1+tip1x}</b></span>
+    <span style="color:var(--muted)">X: <b>${tipX}</b></span>
+    <span style="color:var(--blue)">2: <b>${tip2+tipx2}</b></span>
+  `;
+}
+
+// Auto refresh every 5 minutes
+loadAll();
+setInterval(loadAll, 5*60*1000);
+
+
+// ── SHOOTERS DATA ──
+const SHOOTERS = {
+  'Netherlands':[{name:'Cody Gakpo',spg:2.4,sot:1.1,xg:0.32,goals:12,games:28,basis:true,club:'Liverpool'},{name:'Memphis Depay',spg:2.1,sot:0.9,xg:0.28,goals:8,games:22,basis:true,club:'Corinthians'},{name:'Donyell Malen',spg:1.6,sot:0.7,xg:0.21,goals:6,games:24,basis:false,club:'Aston Villa'}],
+  'France':[{name:'Kylian Mbappé',spg:3.8,sot:1.8,xg:0.58,goals:26,games:30,basis:true,club:'Real Madrid'},{name:'Marcus Thuram',spg:2.2,sot:1.0,xg:0.31,goals:14,games:28,basis:true,club:'Inter Milan'},{name:'Ousmane Dembélé',spg:1.9,sot:0.8,xg:0.22,goals:9,games:26,basis:true,club:'PSG'}],
+  'Spain':[{name:'Lamine Yamal',spg:2.8,sot:1.2,xg:0.29,goals:18,games:32,basis:true,club:'Barcelona'},{name:'Álvaro Morata',spg:2.0,sot:0.9,xg:0.27,goals:11,games:25,basis:true,club:'AC Milan'},{name:'Pedri',spg:1.4,sot:0.6,xg:0.15,goals:7,games:28,basis:true,club:'Barcelona'}],
+  'Germany':[{name:'Florian Wirtz',spg:2.5,sot:1.1,xg:0.31,goals:15,games:29,basis:true,club:'Leverkusen'},{name:'Kai Havertz',spg:2.1,sot:0.9,xg:0.28,goals:12,games:27,basis:true,club:'Arsenal'},{name:'Jamal Musiala',spg:2.0,sot:0.9,xg:0.26,goals:11,games:26,basis:true,club:'Bayern'}],
+  'England':[{name:'Harry Kane',spg:3.2,sot:1.6,xg:0.52,goals:28,games:32,basis:true,club:'Bayern'},{name:'Jude Bellingham',spg:2.4,sot:1.1,xg:0.35,goals:19,games:30,basis:true,club:'Real Madrid'},{name:'Bukayo Saka',spg:2.1,sot:0.9,xg:0.26,goals:14,games:29,basis:true,club:'Arsenal'}],
+  'Brazil':[{name:'Vinícius Jr.',spg:3.1,sot:1.4,xg:0.44,goals:22,games:30,basis:true,club:'Real Madrid'},{name:'Rodrygo',spg:2.2,sot:1.0,xg:0.29,goals:15,games:28,basis:true,club:'Real Madrid'},{name:'Raphinha',spg:2.0,sot:0.9,xg:0.27,goals:27,games:34,basis:true,club:'Barcelona'}],
+  'Argentina':[{name:'Lautaro Martínez',spg:3.0,sot:1.4,xg:0.45,goals:24,games:30,basis:true,club:'Inter Milan'},{name:'Julián Álvarez',spg:2.2,sot:1.0,xg:0.31,goals:16,games:28,basis:true,club:'Atlético Madrid'},{name:'Nico González',spg:1.8,sot:0.8,xg:0.22,goals:9,games:24,basis:false,club:'Juventus'}],
+  'Portugal':[{name:'Cristiano Ronaldo',spg:3.5,sot:1.6,xg:0.48,goals:35,games:32,basis:true,club:'Al-Nassr'},{name:'João Félix',spg:2.3,sot:1.0,xg:0.29,goals:13,games:26,basis:true,club:'Chelsea'},{name:'Rafael Leão',spg:2.1,sot:0.9,xg:0.26,goals:12,games:28,basis:true,club:'AC Milan'}],
+  'Morocco':[{name:'Youssef En-Nesyri',spg:2.6,sot:1.2,xg:0.36,goals:18,games:28,basis:true,club:'Fenerbahçe'},{name:'Hakim Ziyech',spg:2.0,sot:0.9,xg:0.24,goals:9,games:22,basis:true,club:'Galatasaray'},{name:'Brahim Díaz',spg:1.9,sot:0.8,xg:0.22,goals:11,games:26,basis:true,club:'Real Madrid'}],
+  'Belgium':[{name:'Romelu Lukaku',spg:2.8,sot:1.3,xg:0.42,goals:16,games:24,basis:true,club:'Napoli'},{name:'Jeremy Doku',spg:2.2,sot:0.9,xg:0.24,goals:8,games:26,basis:true,club:'Man City'},{name:'Kevin De Bruyne',spg:1.8,sot:0.7,xg:0.19,goals:6,games:20,basis:true,club:'Man City'}],
+  'Japan':[{name:'Kaoru Mitoma',spg:2.5,sot:1.1,xg:0.30,goals:11,games:26,basis:true,club:'Brighton'},{name:'Ayase Ueda',spg:2.1,sot:0.9,xg:0.28,goals:14,games:28,basis:true,club:'Feyenoord'},{name:'Takefusa Kubo',spg:1.8,sot:0.8,xg:0.21,goals:8,games:24,basis:true,club:'Real Sociedad'}],
+  'Norway':[{name:'Erling Haaland',spg:4.2,sot:2.1,xg:0.72,goals:32,games:30,basis:true,club:'Man City'},{name:'Alexander Sørloth',spg:2.4,sot:1.1,xg:0.33,goals:16,games:28,basis:true,club:'Atlético Madrid'},{name:'Martin Ødegaard',spg:1.9,sot:0.8,xg:0.22,goals:10,games:22,basis:true,club:'Arsenal'}],
+  'Mexico':[{name:'Hirving Lozano',spg:2.1,sot:0.9,xg:0.25,goals:8,games:22,basis:true,club:'PSV'},{name:'Henry Martín',spg:1.9,sot:0.8,xg:0.28,goals:11,games:24,basis:true,club:'Club América'},{name:'Alexis Vega',spg:1.5,sot:0.7,xg:0.20,goals:7,games:22,basis:false,club:'Chivas'}],
+  'South Africa':[{name:'Percy Tau',spg:1.8,sot:0.8,xg:0.20,goals:6,games:20,basis:true,club:'Al Ahly'},{name:'Evidence Makgopa',spg:1.6,sot:0.7,xg:0.22,goals:8,games:22,basis:true,club:'Orlando Pirates'},{name:'Lyle Foster',spg:1.4,sot:0.6,xg:0.18,goals:5,games:18,basis:true,club:'Burnley'}],
+  'United States':[{name:'Christian Pulisic',spg:2.3,sot:1.0,xg:0.28,goals:12,games:26,basis:true,club:'AC Milan'},{name:'Ricardo Pepi',spg:2.0,sot:0.9,xg:0.30,goals:13,games:24,basis:true,club:'PSV'},{name:'Gio Reyna',spg:1.6,sot:0.7,xg:0.19,goals:7,games:20,basis:false,club:'Dortmund'}],
+  'Colombia':[{name:'Luis Díaz',spg:2.8,sot:1.2,xg:0.33,goals:13,games:28,basis:true,club:'Liverpool'},{name:'Jhon Durán',spg:2.2,sot:1.0,xg:0.35,goals:18,games:28,basis:true,club:'Aston Villa'},{name:'James Rodríguez',spg:1.8,sot:0.7,xg:0.19,goals:8,games:20,basis:true,club:'Rayo Vallecano'}],
+  'Italy':[{name:'Giacomo Raspadori',spg:2.0,sot:0.9,xg:0.28,goals:10,games:24,basis:true,club:'Napoli'},{name:'Federico Chiesa',spg:2.3,sot:1.0,xg:0.26,goals:8,games:20,basis:true,club:'Liverpool'},{name:'Lorenzo Pellegrini',spg:1.6,sot:0.7,xg:0.18,goals:7,games:26,basis:true,club:'Roma'}],
+  'Denmark':[{name:'Rasmus Højlund',spg:2.8,sot:1.3,xg:0.40,goals:16,games:26,basis:true,club:'Man United'},{name:'Christian Eriksen',spg:1.6,sot:0.6,xg:0.14,goals:5,games:22,basis:true,club:'Man United'},{name:'Andreas Skov Olsen',spg:1.8,sot:0.8,xg:0.20,goals:9,games:24,basis:true,club:'Club Brugge'}],
+  'Switzerland':[{name:'Breel Embolo',spg:2.0,sot:0.9,xg:0.27,goals:9,games:22,basis:true,club:'Monaco'},{name:'Xherdan Shaqiri',spg:1.7,sot:0.7,xg:0.18,goals:6,games:20,basis:false,club:'Chicago Fire'},{name:'Granit Xhaka',spg:1.4,sot:0.5,xg:0.12,goals:5,games:28,basis:true,club:'Leverkusen'}],
+  'Croatia':[{name:'Andrej Kramarić',spg:2.4,sot:1.1,xg:0.32,goals:15,games:26,basis:true,club:'Hoffenheim'},{name:'Ivan Perišić',spg:1.8,sot:0.8,xg:0.20,goals:8,games:22,basis:true,club:'PSV'},{name:'Luka Modrić',spg:1.2,sot:0.5,xg:0.11,goals:4,games:24,basis:true,club:'Real Madrid'}],
+  'Senegal':[{name:'Sadio Mané',spg:2.5,sot:1.1,xg:0.30,goals:12,games:24,basis:true,club:'Al-Nassr'},{name:'Ismaïla Sarr',spg:2.0,sot:0.9,xg:0.24,goals:9,games:22,basis:true,club:'Crystal Palace'},{name:'Nicolas Jackson',spg:2.2,sot:1.0,xg:0.31,goals:14,games:26,basis:true,club:'Chelsea'}],
+};
+
+const NAME_MAP = {
+  'Netherlands':'Netherlands','France':'France','Spain':'Spain','Germany':'Germany',
+  'England':'England','Brazil':'Brazil','Argentina':'Argentina','Portugal':'Portugal',
+  'Morocco':'Morocco','Belgium':'Belgium','Japan':'Japan','Norway':'Norway',
+  'Mexico':'Mexico','South Africa':'South Africa','United States':'United States',
+  'Colombia':'Colombia','Italy':'Italy','Denmark':'Denmark','Switzerland':'Switzerland',
+  'Croatia':'Croatia','Senegal':'Senegal',
+};
+
+function getShooters(name){ return SHOOTERS[NAME_MAP[name]] || null; }
+
+const FLAGS_MAP = {'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳','France':'🇫🇷','Senegal':'🇸🇳','Norway':'🇳🇴','Algeria':'🇩🇿','Spain':'🇪🇸','Uruguay':'🇺🇾','Saudi Arabia':'🇸🇦','Cape Verde':'🇨🇻','Argentina':'🇦🇷','Austria':'🇦🇹','Jordan':'🇯🇴','Cuba':'🇨🇺','Brazil':'🇧🇷','Morocco':'🇲🇦','Scotland':'🏴','Haiti':'🇭🇹','United States':'🇺🇸','Turkey':'🇹🇷','Australia':'🇦🇺','Paraguay':'🇵🇾','Germany':'🇩🇪','Ecuador':'🇪🇨','Ivory Coast':'🇨🇮',"Côte d'Ivoire":'🇨🇮',"Cote d'Ivoire":'🇨🇮','Curacao':'🇨🇼','Portugal':'🇵🇹','Colombia':'🇨🇴','Uzbekistan':'🇺🇿','DR Congo':'🇨🇩','England':'🏴','Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦','Belgium':'🇧🇪','Iran':'🇮🇷','Egypt':'🇪🇬','New Zealand':'🇳🇿','Mexico':'🇲🇽','South Korea':'🇰🇷','Czech Republic':'🇨🇿','South Africa':'🇿🇦','Canada':'🇨🇦','Qatar':'🇶🇦','Bosnia and Herzegovina':'🇧🇦','Switzerland':'🇨🇭','Finland':'🇫🇮','Ireland':'🇮🇪','Iceland':'🇮🇸','Chile':'🇨🇱','Nigeria':'🇳🇬','Costa Rica':'🇨🇷','Peru':'🇵🇪','Bolivia':'🇧🇴','Greece':'🇬🇷','Iraq':'🇮🇶','Wales':'🏴','Venezuela':'🇻🇪','Denmark':'🇩🇰','Serbia':'🇷🇸','Italy':'🇮🇹','Ukraine':'🇺🇦','Lithuania':'🇱🇹','Gabon':'🇬🇦','Kenya':'🇰🇪','Tanzania':'🇹🇿','Uganda':'🇺🇬','Zambia':'🇿🇲'};
+const FG = n => FLAGS_MAP[n] || '⚽';
+
+// ── MODAL FUNCTIONS ──
+function openMatchModal(home, away, league, hOdds, dOdds, aOdds, p1, px, p2){
+  document.getElementById('modal-title').textContent = FG(home)+' '+home+' vs '+away+' '+FG(away);
+  document.getElementById('modal-body').innerHTML = '<div class="load-mini"><div class="spin-sm"></div>Spelersdata laden...</div>';
+  document.getElementById('modal').classList.add('on');
+  document.body.style.overflow = 'hidden';
+  
+  setTimeout(() => renderModalContent(home, away, league, hOdds, dOdds, aOdds, p1, px, p2), 100);
+}
+
+function renderModalContent(home, away, league, hOdds, dOdds, aOdds, p1, px, p2){
+  const hf = FG(home), af = FG(away);
+  const winner = p1>p2&&p1>px?'home':p2>p1&&p2>px?'away':'draw';
+  
+  const oddsHtml = hOdds ? `<div class="md-odds">
+    <div class="mdo ${winner==='home'?'w':''}"><span class="mdol">1 — ${p1}%</span><span class="mdov">${parseFloat(hOdds).toFixed(2)}</span></div>
+    <div class="mdo ${winner==='draw'?'w':''}"><span class="mdol">X — ${px}%</span><span class="mdov">${dOdds?parseFloat(dOdds).toFixed(2):'-'}</span></div>
+    <div class="mdo ${winner==='away'?'w':''}"><span class="mdol">2 — ${p2}%</span><span class="mdov">${parseFloat(aOdds).toFixed(2)}</span></div>
+  </div>` : '';
+
+  const hs = getShooters(home), as = getShooters(away);
+  const all = [...(hs||[]).map(p=>({...p,team:home,flag:hf})), ...(as||[]).map(p=>({...p,team:away,flag:af}))].sort((a,b)=>b.spg-a.spg);
+  const best = all[0];
+
+  const bbHtml = best ? `<div class="bb-card">
+    <div class="bb-lbl">⭐ Beste Bet — Schoten op Doel</div>
+    <div class="bb-tip">${best.flag} ${best.name} — meer dan 1.5 schoten op doel</div>
+    <div class="bb-why">
+      Gem. <strong>${best.spg}</strong> schoten/wed · <strong>${best.sot}</strong> op doel · xG <strong>${best.xg}</strong><br>
+      ${best.games} wedstrijden dit seizoen · ${best.goals} goals · ${best.club}<br>
+      ${best.basis ? '✅ Speelt vermoedelijk basis' : '⚠️ Reservestatus — check lineup'}<br>
+      <span style="color:var(--gold)">→ Check quote op Bet365 onder "Speler schoten op doel"</span>
+    </div>
+  </div>` : '';
+
+  const pCards = (players, flag, team) => {
+    if(!players||!players.length) return `<div style="font-size:12px;color:var(--muted);padding:8px 0">Geen data beschikbaar voor ${team}</div>`;
+    return players.map((p,i) => `<div class="p-card">
+      <div class="p-medal">${['🥇','🥈','🥉'][i]}</div>
+      <div class="p-info">
+        <div class="p-name">${p.name}</div>
+        <div class="p-meta"><span>⚽ ${p.goals} goals</span><span>🎮 ${p.games} wed.</span><span style="color:var(--muted2)">${p.club}</span></div>
+      </div>
+      <div class="p-right">
+        <div class="p-shots">${p.spg}</div>
+        <div class="p-sl">sch/wed</div>
+        <div class="p-sot">${p.sot} op doel</div>
+        <div class="p-xg">xG ${p.xg}</div>
+        <div class="p-basis ${p.basis?'pb-y':'pb-n'}">${p.basis?'Basis ✓':'Reserve'}</div>
+      </div>
+    </div>`).join('');
+  };
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="md-score">
+      <div class="md-meta">${league}</div>
+      <div class="md-teams">
+        <div class="md-team"><span class="md-flag">${hf}</span><div class="md-name">${home}</div></div>
+        <div style="font-size:13px;color:var(--muted)">vs</div>
+        <div class="md-team"><span class="md-flag">${af}</span><div class="md-name">${away}</div></div>
+      </div>
+      ${oddsHtml}
+    </div>
+    ${bbHtml}
+    <div class="ps-hdr"><span class="ps-flag">${hf}</span><span class="ps-team-name">${home}</span><span class="ps-lbl">Top 3 schutters</span></div>
+    ${pCards(hs, hf, home)}
+    <div class="ps-hdr"><span class="ps-flag">${af}</span><span class="ps-team-name">${away}</span><span class="ps-lbl">Top 3 schutters</span></div>
+    ${pCards(as, af, away)}
+    <div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:12px;line-height:1.6">
+      Stats gebaseerd op huidig seizoen · Controleer altijd de actuele quote op Bet365
+    </div>`;
+}
+
+function closeModal(e){ if(e.target===document.getElementById('modal')) closeModalDirect(); }
+function closeModalDirect(){ document.getElementById('modal').classList.remove('on'); document.body.style.overflow=''; }
+
+</script>
+
+<!-- MATCH DETAIL MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="mhdr">
+      <div class="mhdr-title" id="modal-title">Details</div>
+      <div class="mclose" onclick="closeModalDirect()">✕</div>
+    </div>
+    <div class="mbody" id="modal-body"></div>
+  </div>
+</div>
+
+</body>
+</html>
