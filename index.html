@@ -686,8 +686,10 @@ function openModal(id){
   }
   const topBox=m.result?`<div class="rbox">✅ Eindstand: <strong>${m.h} ${m.result} ${m.a}</strong></div>`:
     live?`<div class="lbox"><div class="ldot"></div><strong>LIVE</strong> — wedstrijd is nu bezig!</div>`:'';
-  const bb=buildBestBet(m, null, odds);
-  const bbHtml=bb?`<div class="bb">
+  // Beste Bet alleen tonen als er geen AI analyse komt (gespeelde wedstrijd)
+  const bb = buildBestBet(m, null, odds);
+  const showStaticBet = !!m.result;
+  const bbHtml=bb&&showStaticBet?`<div class="bb">
     <div class="bbl">${bb.label}</div>
     <div class="bbt">${bb.title}</div>
     <div class="bbw">${bb.body}</div>
