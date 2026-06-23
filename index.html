@@ -800,14 +800,10 @@ Antwoord ALLEEN in dit JSON formaat (geen uitleg erbuiten):
 {"type":"<bet type>","tip":"<concrete tip>","quote_range":"<verwachte quote range bv 2.00-2.50>","onderbouwing":"<2-3 zinnen waarom>","risico":"laag|middel"}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(WORKER_URL + '/ai-bet', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      body: JSON.stringify({ prompt })
     });
     const data = await res.json();
     const text = data.content?.[0]?.text || '';
