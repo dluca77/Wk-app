@@ -770,34 +770,47 @@ async function generateAiBet(m, odds, hLinup, aLinup){
   const aGF = aRow?.played ? (aRow.gf/aRow.played).toFixed(1) : '?';
   const aGA = aRow?.played ? (aRow.ga/aRow.played).toFixed(1) : '?';
 
-  const playerSummary = (players, team) => {
-    if(!players?.length) return `${team}: geen spelersdata`;
-    return players.slice(0,5).map(p =>
-      `${p.n} (rat:${p.avg_rating??'-'}, xG/wed:${nf(p.avg_xg??0)}, SoT/wed:${nf(p.avg_sot??0,1)}, goals:${p.goals}, wed:${p.matches||1})`
-    ).join('; ');
+  const playerDetail = (players, team) => {
+    if(!players?.length) return `${team}: geen spelersdata beschikbaar`;
+    return players.slice(0,5).map(p => [
+      p.n,
+      `rating:${p.avg_rating??'-'}`,
+      `xG/wed:${nf(p.avg_xg??0)}`,
+      `SoT/wed:${nf(p.avg_sot??0,1)}`,
+      `sch/wed:${nf(p.avg_shots??0,1)}`,
+      `goals:${p.goals}`,
+      p.keyPasses_total>0?`kansen:${p.keyPasses_total}`:'',
+      `wed:${p.matches||1}`
+    ].filter(Boolean).join(', ')).join('\n  ');
   };
 
   const oddsStr = odds
     ? `1=${odds.h.toFixed(2)} X=${odds.d.toFixed(2)} 2=${odds.a.toFixed(2)}`
     : 'geen odds beschikbaar';
 
-  const prompt = `Je bent een sportsbetting analist. Analyseer deze WK 2026 wedstrijd en geef één concrete bet tip.
+  const prompt = `Je bent een sportsbetting analist voor WK 2026. Analyseer deze wedstrijd grondig.
 
 WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g)}, ${m.date} ${m.time} NL)
-ODDS 1X2: ${oddsStr}
+MARKTODDS 1X2: ${oddsStr}
 
 GROEPSSTAND:
 - ${m.h}: ${hRow?.played??0} gespeeld, ${hRow?.pts??0} pts, gem ${hGF} voor / ${hGA} tegen per wed
 - ${m.a}: ${aRow?.played??0} gespeeld, ${aRow?.pts??0} pts, gem ${aGF} voor / ${aGA} tegen per wed
 
-SPELERSVORM (gemiddelden dit WK):
-${playerSummary(hLinup, m.h)}
-${playerSummary(aLinup, m.a)}
+SPELERSDATA ${m.h} (gemiddelden over alle WK-wedstrijden):
+  ${playerDetail(hLinup, m.h)}
 
-OPDRACHT: Geef één bet tip met MINIMAAL RISICO. Quote moet tussen 2.00 en 10.00 zijn, liever dichter bij 2.00. Kies uit: matchwinnaar, beide teams scoren ja/nee, over/onder doelpunten, of een speler om te scoren. Kies wat het meest zeker aanvoelt op basis van de data.
+SPELERSDATA ${m.a} (gemiddelden over alle WK-wedstrijden):
+  ${playerDetail(aLinup, m.a)}
 
-Antwoord ALLEEN in dit JSON formaat (geen uitleg erbuiten):
-{"type":"<bet type>","tip":"<concrete tip>","quote_range":"<verwachte quote range bv 2.00-2.50>","onderbouwing":"<2-3 zinnen waarom>","risico":"laag|middel"}`;
+OPDRACHT:
+Geef het meest kansrijke bet advies. Quote moet tussen 2.00 en 10.00, liever zo laag mogelijk.
+Je MAG een combinatiebet geven als data dit rechtvaardigt (bijv. "Portugal wint + Ronaldo schiet op doel").
+Kijk specifiek naar: SoT/wed (schoten op doel), xG/wed, goals gescoord, en groepsvorm.
+De marktodds zijn echte odds — gebruik die om in te schatten of een bet value heeft.
+
+Antwoord ALLEEN in dit JSON formaat:
+{"type":"<Matchwinnaar/Speler SoT/BTTS/Combinatie/etc>","tip":"<concrete tip>","quote_range":"<bv. 2.00-2.50>","onderbouwing":"<2-3 zinnen met concrete data>","risico":"laag|middel","data_basis":"<welke cijfers zijn doorslaggevend>"}`;
 
   try {
     const res = await fetch(WORKER_URL + '/ai-bet', {
@@ -829,7 +842,8 @@ Antwoord ALLEEN in dit JSON formaat (geen uitleg erbuiten):
           &nbsp;·&nbsp;Quote: <strong>${bet.quote_range}</strong>
           &nbsp;·&nbsp;<span style="color:${riskColor}">Risico: ${bet.risico}</span>
         </div>
-        <div style="color:var(--muted);font-size:11px;line-height:1.6">${bet.onderbouwing}</div>
+        <div style="line-height:1.6">${bet.onderbouwing}</div>
+        ${bet.data_basis?`<div style="margin-top:6px;font-size:10px;color:var(--muted2)">📊 ${bet.data_basis}</div>`:''}
         <div style="margin-top:8px;font-size:11px;color:var(--gold)">→ Check quote bij je boekmaker</div>
       </div>`;
   } catch(e) {
