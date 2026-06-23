@@ -604,12 +604,15 @@ function render(){
     if(selFilter==='up') return !live&&!done;
     return true;
   }).sort((a,b)=>{
-    // Live wedstrijden altijd bovenaan
+    // Gewoon op tijd — gespeeld bovenaan (vroegste tijd), live ertussen, aankomend onderaan
     const aLive=isLive(a), bLive=isLive(b);
-    if(aLive&&!bLive) return -1;
-    if(!aLive&&bLive) return 1;
-    // Dan op tijd (NL-tijd HH:MM)
-    return a.time.localeCompare(b.time);
+    const timeCmp = a.time.localeCompare(b.time);
+    // Bij gelijke tijd: live eerst
+    if(timeCmp===0){
+      if(aLive&&!bLive) return -1;
+      if(!aLive&&bLive) return 1;
+    }
+    return timeCmp;
   });
   if(!ms.length){document.getElementById('mc').innerHTML=`<div class="empty">Geen wedstrijden${selFilter!=='all'?' in deze categorie':''} voor ${selDate===TODAY?'vandaag':'deze dag'}.</div>`;return;}
   document.getElementById('mc').innerHTML=ms.map(m=>{
