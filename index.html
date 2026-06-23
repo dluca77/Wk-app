@@ -806,13 +806,11 @@ SPELERSDATA ${m.a} (gemiddelden over alle WK-wedstrijden):
   ${playerDetail(aLinup, m.a)}
 
 OPDRACHT:
-Geef het meest kansrijke bet advies. Quote moet tussen 2.00 en 10.00, liever zo laag mogelijk.
-Je MAG een combinatiebet geven als data dit rechtvaardigt (bijv. "Portugal wint + Ronaldo schiet op doel").
-Kijk specifiek naar: SoT/wed (schoten op doel), xG/wed, goals gescoord, en groepsvorm.
-De marktodds zijn echte odds — gebruik die om in te schatten of een bet value heeft.
+Geef het meest kansrijke bet advies met zo min mogelijk risico.
+De enige echte quotes die je kent zijn de 1X2 marktodds hierboven. Voor alle andere markten (speler SoT, BTTS, over/onder, etc.) ken je de exacte quote NIET — verzin die dus NOOIT. Zeg alleen wat de beste bet is en waarom, de gebruiker checkt zelf de quote bij de boekmaker.
 
 Antwoord ALLEEN in dit JSON formaat:
-{"type":"<Matchwinnaar/Speler SoT/BTTS/Combinatie/etc>","tip":"<concrete tip>","quote_range":"<bv. 2.00-2.50>","onderbouwing":"<2-3 zinnen met concrete data>","risico":"laag|middel","data_basis":"<welke cijfers zijn doorslaggevend>"}`;
+{"type":"<Matchwinnaar/Speler SoT/BTTS/Combinatie/etc>","tip":"<concrete tip>","onderbouwing":"<2-3 zinnen met concrete data>","risico":"laag|middel","data_basis":"<welke cijfers zijn doorslaggevend>"}`;
 
   try {
     const res = await fetch(WORKER_URL + '/ai-bet', {
@@ -841,7 +839,6 @@ Antwoord ALLEEN in dit JSON formaat:
       <div class="bbw">
         <div style="margin-bottom:6px">
           <span style="color:var(--gold);font-weight:700">${bet.type}</span>
-          &nbsp;·&nbsp;Quote: <strong>${bet.quote_range}</strong>
           &nbsp;·&nbsp;<span style="color:${riskColor}">Risico: ${bet.risico}</span>
         </div>
         <div style="line-height:1.6">${bet.onderbouwing}</div>
