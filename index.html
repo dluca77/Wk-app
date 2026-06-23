@@ -128,6 +128,9 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
 .stable tr.q{background:rgba(126,232,195,.05)}
 .snote{font-size:10px;color:var(--muted2);margin-top:4px}
 .supdated{font-size:10px;color:var(--muted2);text-align:right;margin-bottom:10px}
+.ai-loading{color:var(--muted);font-size:13px}
+.dots{display:inline-block;animation:dotpulse 1.2s infinite}
+@keyframes dotpulse{0%,100%{opacity:1}50%{opacity:.3}}
 </style>
 </head>
 <body>
@@ -735,6 +738,12 @@ function openModal(id){
       </div>
       ${oddsHtml}
     </div>
+    <div id="ai-bet-box" class="bb" style="min-height:80px">
+      <div class="bbl">🤖 AI BET ANALYSE</div>
+      <div id="ai-bet-content" style="color:var(--muted);font-size:13px;padding:8px 0">
+        <span class="ai-loading">Analyse bezig<span class="dots">...</span></span>
+      </div>
+    </div>
     ${bbHtml}
     ${shdrH}
     ${pc(hs, hLinup, m.h)}
@@ -743,6 +752,89 @@ function openModal(id){
     <div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:12px;line-height:1.6">Check de actuele quote bij je eigen boekmaker voor je inzet</div>`;
   document.getElementById('overlay').classList.add('on');
   document.body.style.overflow='hidden';
+
+  // AI bet genereren — alleen voor aankomende wedstrijden (niet voor al gespeelde)
+  if(!m.result) generateAiBet(m, odds, hLinup, aLinup);
+  else document.getElementById('ai-bet-box').style.display='none';
+}
+
+async function generateAiBet(m, odds, hLinup, aLinup){
+  const el = document.getElementById('ai-bet-content');
+  if(!el) return;
+
+  // Bouw context op voor Claude
+  const hRow = teamStanding(m.h);
+  const aRow = teamStanding(m.a);
+  const hGF = hRow?.played ? (hRow.gf/hRow.played).toFixed(1) : '?';
+  const hGA = hRow?.played ? (hRow.ga/hRow.played).toFixed(1) : '?';
+  const aGF = aRow?.played ? (aRow.gf/aRow.played).toFixed(1) : '?';
+  const aGA = aRow?.played ? (aRow.ga/aRow.played).toFixed(1) : '?';
+
+  const playerSummary = (players, team) => {
+    if(!players?.length) return `${team}: geen spelersdata`;
+    return players.slice(0,5).map(p =>
+      `${p.n} (rat:${p.avg_rating??'-'}, xG/wed:${nf(p.avg_xg??0)}, SoT/wed:${nf(p.avg_sot??0,1)}, goals:${p.goals}, wed:${p.matches||1})`
+    ).join('; ');
+  };
+
+  const oddsStr = odds
+    ? `1=${odds.h.toFixed(2)} X=${odds.d.toFixed(2)} 2=${odds.a.toFixed(2)}`
+    : 'geen odds beschikbaar';
+
+  const prompt = `Je bent een sportsbetting analist. Analyseer deze WK 2026 wedstrijd en geef één concrete bet tip.
+
+WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g)}, ${m.date} ${m.time} NL)
+ODDS 1X2: ${oddsStr}
+
+GROEPSSTAND:
+- ${m.h}: ${hRow?.played??0} gespeeld, ${hRow?.pts??0} pts, gem ${hGF} voor / ${hGA} tegen per wed
+- ${m.a}: ${aRow?.played??0} gespeeld, ${aRow?.pts??0} pts, gem ${aGF} voor / ${aGA} tegen per wed
+
+SPELERSVORM (gemiddelden dit WK):
+${playerSummary(hLinup, m.h)}
+${playerSummary(aLinup, m.a)}
+
+OPDRACHT: Geef één bet tip met MINIMAAL RISICO. Quote moet tussen 2.00 en 10.00 zijn, liever dichter bij 2.00. Kies uit: matchwinnaar, beide teams scoren ja/nee, over/onder doelpunten, of een speler om te scoren. Kies wat het meest zeker aanvoelt op basis van de data.
+
+Antwoord ALLEEN in dit JSON formaat (geen uitleg erbuiten):
+{"type":"<bet type>","tip":"<concrete tip>","quote_range":"<verwachte quote range bv 2.00-2.50>","onderbouwing":"<2-3 zinnen waarom>","risico":"laag|middel"}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+    let bet;
+    try {
+      const clean = text.replace(/```json|```/g,'').trim();
+      bet = JSON.parse(clean);
+    } catch(e) {
+      // Als JSON parsen mislukt, toon raw tekst
+      el.innerHTML = `<div style="font-size:12px;line-height:1.6">${text.slice(0,300)}</div>`;
+      return;
+    }
+    const riskColor = bet.risico==='laag'?'var(--mint)':'var(--gold)';
+    el.innerHTML = `
+      <div class="bbt" style="margin-bottom:8px">🎯 ${bet.tip}</div>
+      <div class="bbw">
+        <div style="margin-bottom:6px">
+          <span style="color:var(--gold);font-weight:700">${bet.type}</span>
+          &nbsp;·&nbsp;Quote: <strong>${bet.quote_range}</strong>
+          &nbsp;·&nbsp;<span style="color:${riskColor}">Risico: ${bet.risico}</span>
+        </div>
+        <div style="color:var(--muted);font-size:11px;line-height:1.6">${bet.onderbouwing}</div>
+        <div style="margin-top:8px;font-size:11px;color:var(--gold)">→ Check quote bij je boekmaker</div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--muted2);font-size:12px">AI analyse tijdelijk niet beschikbaar</span>`;
+  }
 }
 function closeOv(e){if(e.target===document.getElementById('overlay'))closeModal();}
 function closeModal(){document.getElementById('overlay').classList.remove('on');document.body.style.overflow='';}
