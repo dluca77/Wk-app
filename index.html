@@ -806,11 +806,21 @@ SPELERSDATA ${m.a} (gemiddelden over alle WK-wedstrijden):
   ${playerDetail(aLinup, m.a)}
 
 OPDRACHT:
-Geef het meest kansrijke bet advies met zo min mogelijk risico.
-De enige echte quotes die je kent zijn de 1X2 marktodds hierboven. Voor alle andere markten (speler SoT, BTTS, over/onder, etc.) ken je de exacte quote NIET — verzin die dus NOOIT. Zeg alleen wat de beste bet is en waarom, de gebruiker checkt zelf de quote bij de boekmaker.
+Bouw altijd een combinatiebet van 2 of 3 onderdelen die samen logisch zijn.
+Doel: gecombineerde kans tussen 50-75% (niet te riskant, niet te makkelijk).
+Combineer bijv: "Team X wint + Speler Y schiet op doel", "BTTS nee + Team X wint", "Speler A scoort + Speler B SoT", etc.
+
+Schat voor elk onderdeel een realistisch slagingspercentage:
+- Matchwinnaar: gebruik impliciete kans uit odds (1/odds x 100, afronden)
+- Speler 1+ SoT: 2+ SoT/wed gemiddeld = ~85%, 1-2 SoT/wed = ~65%, <1 = ~40%
+- Speler scoort: baseer op xG/wed (0.5+ = ~40%, 0.3 = ~25%, 0.1 = ~10%)
+- BTTS nee: als een team gem <0.5 goals/wed toelaat = ~60%, <1.0 = ~50%
+- Gecombineerde kans = vermenigvuldig de losse kansen (80% x 75% = 60%)
+
+De enige echte quotes die je kent zijn de 1X2 odds. Verzin NOOIT quotes voor andere markten.
 
 Antwoord ALLEEN in dit JSON formaat:
-{"type":"<Matchwinnaar/Speler SoT/BTTS/Combinatie/etc>","tip":"<concrete tip>","onderbouwing":"<2-3 zinnen met concrete data>","risico":"laag|middel","data_basis":"<welke cijfers zijn doorslaggevend>"}`;
+{"type":"Combinatie","tip":"<concrete tip>","onderdelen":[{"bet":"<onderdeel 1>","kans":<0-100>},{"bet":"<onderdeel 2>","kans":<0-100>},{"bet":"<optioneel onderdeel 3>","kans":<0-100>}],"gecombineerde_kans":<0-100>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
 
   try {
     const res = await fetch(WORKER_URL + '/ai-bet', {
@@ -834,16 +844,29 @@ Antwoord ALLEEN in dit JSON formaat:
       return;
     }
     const riskColor = bet.risico==='laag'?'var(--mint)':'var(--gold)';
+    const onderdelen = Array.isArray(bet.onderdelen) ? bet.onderdelen : [];
+    const onderdelenHtml = onderdelen.filter(o=>o&&o.bet).map(o => {
+      const k = o.kans ?? 0;
+      const kleur = k >= 70 ? 'var(--mint)' : k >= 50 ? 'var(--gold)' : 'var(--peach)';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:12px">✓ ${o.bet}</span>
+        <span style="font-size:12px;font-weight:700;color:${kleur};white-space:nowrap;margin-left:8px">${k}%</span>
+      </div>`;
+    }).join('');
+    const combKans = bet.gecombineerde_kans ?? null;
+    const combKleur = combKans >= 60 ? 'var(--mint)' : combKans >= 45 ? 'var(--gold)' : 'var(--peach)';
     el.innerHTML = `
       <div class="bbt" style="margin-bottom:8px">🎯 ${bet.tip}</div>
-      <div class="bbw">
-        <div style="margin-bottom:6px">
-          <span style="color:var(--gold);font-weight:700">${bet.type}</span>
-          &nbsp;·&nbsp;<span style="color:${riskColor}">Risico: ${bet.risico}</span>
-        </div>
-        <div style="line-height:1.6">${bet.onderbouwing}</div>
+      ${onderdelenHtml ? `<div style="margin:10px 0">${onderdelenHtml}</div>` : ''}
+      ${combKans ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-weight:700">
+        <span>Gecombineerde slagingskans</span>
+        <span style="color:${combKleur};font-size:16px">${combKans}%</span>
+      </div>` : ''}
+      <div class="bbw" style="margin-top:8px">
+        <div style="margin-bottom:4px"><span style="color:var(--gold);font-weight:700">${bet.type}</span>&nbsp;·&nbsp;<span style="color:${riskColor}">Risico: ${bet.risico}</span></div>
+        <div style="line-height:1.6;font-size:12px">${bet.onderbouwing}</div>
         ${bet.data_basis?`<div style="margin-top:6px;font-size:10px;color:var(--muted2)">📊 ${bet.data_basis}</div>`:''}
-        <div style="margin-top:8px;font-size:11px;color:var(--gold)">→ Check quote bij je boekmaker</div>
+        <div style="margin-top:8px;font-size:11px;color:var(--gold)">→ Check quotes bij je boekmaker en combineer in Bet Builder</div>
       </div>`;
   } catch(e) {
     el.innerHTML = `<span style="color:var(--muted2);font-size:12px">Fout: ${e.message}</span>`;
