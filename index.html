@@ -836,11 +836,16 @@ Antwoord ALLEEN in dit JSON formaat:
     }
     let bet;
     try {
-      const clean = text.replace(/```json|```/g,'').trim();
+      // Strip markdown code blocks in alle varianten
+      let clean = text.trim();
+      clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+      // Zoek de eerste { en laatste } voor het geval er tekst omheen staat
+      const first = clean.indexOf('{');
+      const last = clean.lastIndexOf('}');
+      if(first !== -1 && last !== -1) clean = clean.slice(first, last + 1);
       bet = JSON.parse(clean);
     } catch(e) {
-      // JSON parsen mislukt — toon ruwe tekst
-      el.innerHTML = `<div style="font-size:12px;line-height:1.6;color:var(--text)">${text.slice(0,400)}</div>`;
+      el.innerHTML = `<div style="font-size:12px;line-height:1.6;color:var(--text)">${text.replace(/</g,'&lt;').slice(0,400)}</div>`;
       return;
     }
     const riskColor = bet.risico==='laag'?'var(--mint)':'var(--gold)';
