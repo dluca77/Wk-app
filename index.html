@@ -126,6 +126,14 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
 .stable .spts{font-weight:700;color:var(--mint)}
 .stable tr.q td.steam{color:var(--mint)}
 .stable tr.q{background:rgba(126,232,195,.05)}
+.overall-bet-btn{width:100%;padding:14px;border-radius:14px;border:1px solid rgba(251,191,36,.4);background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(249,115,22,.08));color:var(--gold);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s}
+.overall-bet-btn:active{opacity:.8}
+.overall-bet-panel{background:var(--surface);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:16px;margin-bottom:14px}
+.overall-bet-panel .ob-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--gold)}
+.ob-leg{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.ob-leg:last-of-type{border-bottom:none}
+.ob-leg-match{color:var(--muted2);font-size:10px;margin-top:2px}
+.ob-combined{display:flex;justify-content:space-between;align-items:center;padding:10px 0 6px;font-weight:700;font-size:14px}
 .snote{font-size:10px;color:var(--muted2);margin-top:4px}
 .supdated{font-size:10px;color:var(--muted2);text-align:right;margin-bottom:10px}
 .ai-loading{color:var(--muted);font-size:13px}
@@ -155,6 +163,7 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
       <button class="ftab" onclick="setF('done',this)">Gespeeld</button>
     </div>
     <div id="mc"></div>
+    <div id="overall-bet-container"></div>
   </div>
   <div id="standingsView" style="display:none"></div>
   <div id="topscorersView" style="display:none"></div>
@@ -617,7 +626,21 @@ function render(){
     }
     return timeCmp;
   });
-  if(!ms.length){document.getElementById('mc').innerHTML=`<div class="empty">Geen wedstrijden${selFilter!=='all'?' in deze categorie':''} voor ${selDate===TODAY?'vandaag':'deze dag'}.</div>`;return;}
+  if(!ms.length){document.getElementById('mc').innerHTML=`<div class="empty">Geen wedstrijden${selFilter!=='all'?' in deze categorie':''} voor ${selDate===TODAY?'vandaag':'deze dag'}.</div>`;
+    document.getElementById('overall-bet-container').innerHTML='';
+    return;
+  }
+  // Overall bet knop — alleen bij 2+ aankomende wedstrijden
+  const upcoming = ms.filter(m => !isDone(m) && !isLive(m));
+  const tomorrow2 = new Date(new Date(selDate).getTime() + 24*60*60*1000).toISOString().split('T')[0];
+  const upcomingTomorrow = MATCHES.filter(m => m.date === tomorrow2 && !isDone(m) && !isLive(m));
+  const totalUpcoming = upcoming.length + upcomingTomorrow.length;
+  const obContainer = document.getElementById('overall-bet-container');
+  if(totalUpcoming >= 2){
+    obContainer.innerHTML = `<button class="overall-bet-btn" onclick="generateOverallBet()">🎯 Beste Dagtip — ${totalUpcoming} wedstrijden (vandaag + morgen)</button><div id="overall-bet-result"></div>`;
+  } else {
+    obContainer.innerHTML = '';
+  }
   document.getElementById('mc').innerHTML=ms.map(m=>{
     const hf=F(m.h),af=F(m.a);
     const live=isLive(m),done=isDone(m)||m.result;
@@ -935,6 +958,122 @@ async function fetchLiveData(){
     if(playerRes) { const {_processed,...stats}=playerRes; PLAYER_STATS=stats; }
   }catch(e){
     console.warn('Live data ophalen mislukt, val terug op lokale data:', e);
+  }
+}
+
+// ── OVERALL BET (beste combinatie over alle wedstrijden van de dag) ──
+async function generateOverallBet(){
+  if(!WORKER_URL) return;
+  const btn = document.querySelector('.overall-bet-btn');
+  const resultEl = document.getElementById('overall-bet-result');
+  if(!resultEl) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Analyseren...';
+  resultEl.innerHTML = '';
+
+  // Verzamel aankomende wedstrijden van vandaag én morgen
+  const tomorrow = new Date(new Date(selDate).getTime() + 24*60*60*1000).toISOString().split('T')[0];
+  const ms = MATCHES.filter(m =>
+    (m.date === selDate || m.date === tomorrow) && !isDone(m) && !isLive(m)
+  ).sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+
+  // Bouw matchdata op per wedstrijd
+  const matchData = ms.map(m => {
+    const odds = getOdds(m.h, m.a);
+    const hRow = teamStanding(m.h);
+    const aRow = teamStanding(m.a);
+    const hPlayers = (PLAYER_STATS[m.h] || []).slice(0,3);
+    const aPlayers = (PLAYER_STATS[m.a] || []).slice(0,3);
+
+    const fmt = players => players.map(p =>
+      `${p.n}(rat:${p.avg_rating??'-'},xG:${nf(p.avg_xg??0)},SoT:${nf(p.avg_sot??0,1)},sch:${nf(p.avg_shots??0,1)},goals:${p.goals})`
+    ).join('; ');
+
+    return `
+WEDSTRIJD: ${m.h} vs ${m.a} (${m.time} NL, ${RL(m.g)})
+Odds: 1=${odds?.h?.toFixed(2)??'?'} X=${odds?.d?.toFixed(2)??'?'} 2=${odds?.a?.toFixed(2)??'?'}
+${m.h}: ${hRow?.played??0} wed, ${hRow?.pts??0}pts, gem ${hRow?.played?(hRow.gf/hRow.played).toFixed(1):'?'} voor/${hRow?.played?(hRow.ga/hRow.played).toFixed(1):'?'} tegen
+${m.a}: ${aRow?.played??0} wed, ${aRow?.pts??0}pts, gem ${aRow?.played?(aRow.gf/aRow.played).toFixed(1):'?'} voor/${aRow?.played?(aRow.ga/aRow.played).toFixed(1):'?'} tegen
+${m.h} spelers: ${fmt(hPlayers)||'geen data'}
+${m.a} spelers: ${fmt(aPlayers)||'geen data'}`;
+  }).join('\n---\n');
+
+  const prompt = `Je bent een sportsbetting analist voor WK 2026. Analyseer ALLE onderstaande wedstrijden van vandaag en maak de beste dagelijkse combinatiebet.
+
+DOEL: Minimaal 60% gecombineerde slagingskans. Kies 2-4 onderdelen uit VERSCHILLENDE wedstrijden die samen sterk zijn.
+Denk in: matchwinnaar, speler SoT, BTTS ja/nee, sterke favoriet wint, etc.
+De enige echte quotes zijn de 1X2 odds. Verzin NOOIT andere quotes.
+
+WEDSTRIJDEN VAN VANDAAG:
+${matchData}
+
+SCHAT per onderdeel een realistisch slagingspercentage:
+- Matchwinnaar: gebruik 1/odds x 100
+- Speler 1+ SoT: 2+ SoT/wed = ~85%, 1-2 = ~65%, <1 = ~40%
+- Speler scoort: xG 0.5+ = ~40%, 0.3 = ~25%
+- BTTS nee: team laat <0.5 goals/wed toe = ~60%
+- Gecombineerd = vermenigvuldig alle kansen
+
+Antwoord ALLEEN in dit JSON formaat:
+{"tip":"<korte samenvatting>","onderdelen":[{"wedstrijd":"<thuis vs uit>","bet":"<concrete bet>","kans":<0-100>},{"wedstrijd":"...","bet":"...","kans":<0-100>}],"gecombineerde_kans":<0-100>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
+
+  try {
+    const res = await fetch(WORKER_URL + '/ai-bet', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+    if(!text){ resultEl.innerHTML = `<div class="overall-bet-panel"><div style="color:var(--muted2)">Geen response ontvangen</div></div>`; return; }
+
+    let bet;
+    try {
+      let clean = text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/i,'').trim();
+      const f=clean.indexOf('{'), l=clean.lastIndexOf('}');
+      if(f!==-1&&l!==-1) clean=clean.slice(f,l+1);
+      bet = JSON.parse(clean);
+    } catch(e) {
+      resultEl.innerHTML = `<div class="overall-bet-panel"><div style="font-size:12px">${text.replace(/</g,'&lt;').slice(0,500)}</div></div>`;
+      return;
+    }
+
+    const onderdelen = Array.isArray(bet.onderdelen) ? bet.onderdelen : [];
+    const combKans = bet.gecombineerde_kans ?? 0;
+    const combKleur = combKans >= 65 ? 'var(--mint)' : combKans >= 50 ? 'var(--gold)' : 'var(--peach)';
+    const riskColor = bet.risico==='laag'?'var(--mint)':'var(--gold)';
+
+    const legsHtml = onderdelen.map(o => {
+      const k = o.kans ?? 0;
+      const kl = k>=70?'var(--mint)':k>=50?'var(--gold)':'var(--peach)';
+      return `<div class="ob-leg">
+        <div>
+          <div style="font-weight:600">✓ ${o.bet}</div>
+          <div class="ob-leg-match">${o.wedstrijd||''}</div>
+        </div>
+        <div style="color:${kl};font-weight:700;white-space:nowrap;margin-left:12px">${k}%</div>
+      </div>`;
+    }).join('');
+
+    resultEl.innerHTML = `<div class="overall-bet-panel">
+      <div class="ob-title">🎯 ${bet.tip}</div>
+      ${legsHtml}
+      <div class="ob-combined">
+        <span>Gecombineerde slagingskans</span>
+        <span style="color:${combKleur};font-size:18px">${combKans}%</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:6px">${bet.onderbouwing}</div>
+      ${bet.data_basis?`<div style="font-size:10px;color:var(--muted2);margin-top:6px">📊 ${bet.data_basis}</div>`:''}
+      <div style="margin-top:10px;font-size:12px;color:${riskColor};font-weight:600">Risico: ${bet.risico} · Check quotes bij je boekmaker</div>
+    </div>`;
+
+    btn.innerHTML = '🔄 Opnieuw analyseren';
+    btn.disabled = false;
+  } catch(e) {
+    resultEl.innerHTML = `<div class="overall-bet-panel"><div style="color:var(--muted2);font-size:12px">Fout: ${e.message}</div></div>`;
+    btn.innerHTML = '🎯 Beste Dagtip';
+    btn.disabled = false;
   }
 }
 
