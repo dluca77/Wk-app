@@ -233,7 +233,10 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 <div class="header">
   <div class="header-top">
     <div class="logo">⚽ WK 2026</div>
-    <div class="live-pill"><div class="ldot"></div>Live</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="live-pill"><div class="ldot"></div>Live</div>
+      <button onclick="openAdminLogin()" style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:6px 9px;color:var(--muted);font-size:13px;cursor:pointer;transition:all .15s;line-height:1">⚙️</button>
+    </div>
   </div>
   <div class="date-nav" id="dateNav"></div>
 </div>
@@ -256,9 +259,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   <div id="standingsView" style="display:none"></div>
   <div id="topscorersView" style="display:none"></div>
 </div>
-<button class="admin-btn" onclick="openAdminLogin()">⚙️</button>
-
-<div class="overlay" id="admin-overlay" onclick="if(event.target===this)closeAdmin()" style="display:none">
+<div class="overlay" id="admin-overlay" onclick="if(event.target===this)closeAdmin()">
   <div class="modal" style="display:flex">
     <div class="mhandle"></div>
     <div class="mhdr"><div class="mtitle" id="admin-title">🔐 Admin</div><div class="mclose" onclick="closeAdmin()">✕</div></div>
@@ -285,7 +286,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
           <button class="pin-btn" onclick="adminPinPress(0)">0</button>
           <button class="pin-btn del" onclick="adminPinDel()">⌫</button>
         </div>
-        <div class="pin-err" id="admin-pin-err" style="text-align:center;margin-top:12px"></div>
+        <div class="pin-err" id="admin-pin-err"></div>
       </div>
       <div id="admin-stats-view" style="display:none"></div>
     </div>
@@ -1409,7 +1410,7 @@ function openAdminLogin(){
   document.getElementById('admin-title').textContent = '🔐 Admin';
   document.getElementById('admin-pin-err').textContent = '';
   for(let i=0;i<4;i++) document.getElementById('ad'+i).className='pin-dot';
-  document.getElementById('admin-overlay').style.display = 'flex';
+  document.getElementById('admin-overlay').classList.add('on');
   document.body.style.overflow = 'hidden';
 }
 function adminPinPress(n){
@@ -1464,7 +1465,7 @@ async function loadAdminStats(){
   }
 }
 function closeAdmin(){
-  document.getElementById('admin-overlay').style.display = 'none';
+  document.getElementById('admin-overlay').classList.remove('on');
   document.body.style.overflow = '';
 }
 
