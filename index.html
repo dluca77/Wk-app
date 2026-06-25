@@ -127,7 +127,6 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
 .stable tr.q td.steam{color:var(--mint)}
 .stable tr.q{background:rgba(126,232,195,.05)}
 .overall-bet-btn{width:100%;padding:14px;border-radius:14px;border:1px solid rgba(251,191,36,.4);background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(249,115,22,.08));color:var(--gold);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s}
-.pin-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
 .pin-logo{font-size:48px;margin-bottom:8px}
 .pin-title{font-size:22px;font-weight:700;margin-bottom:4px}
 .pin-sub{font-size:13px;color:var(--muted);margin-bottom:32px}
@@ -180,47 +179,47 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
       <button class="ftab" onclick="setF('done',this)">Gespeeld</button>
     </div>
     <div id="mc"></div>
-    <div id="overall-bet-container"></div>
   </div>
   <div id="standingsView" style="display:none"></div>
   <div id="topscorersView" style="display:none"></div>
 </div>
-<div id="pin-screen" class="pin-screen">
-  <div class="pin-logo">⚽</div>
-  <div class="pin-title">WK 2026</div>
-  <div class="pin-sub">Voer de 4-cijferige pincode in</div>
-  <div class="pin-dots" id="pin-dots">
-    <div class="pin-dot" id="d0"></div>
-    <div class="pin-dot" id="d1"></div>
-    <div class="pin-dot" id="d2"></div>
-    <div class="pin-dot" id="d3"></div>
-  </div>
-  <div class="pin-grid">
-    <button class="pin-btn" onclick="pinPress(1)">1<span class="sub"></span></button>
-    <button class="pin-btn" onclick="pinPress(2)">2<span class="sub">ABC</span></button>
-    <button class="pin-btn" onclick="pinPress(3)">3<span class="sub">DEF</span></button>
-    <button class="pin-btn" onclick="pinPress(4)">4<span class="sub">GHI</span></button>
-    <button class="pin-btn" onclick="pinPress(5)">5<span class="sub">JKL</span></button>
-    <button class="pin-btn" onclick="pinPress(6)">6<span class="sub">MNO</span></button>
-    <button class="pin-btn" onclick="pinPress(7)">7<span class="sub">PQRS</span></button>
-    <button class="pin-btn" onclick="pinPress(8)">8<span class="sub">TUV</span></button>
-    <button class="pin-btn" onclick="pinPress(9)">9<span class="sub">WXYZ</span></button>
-    <button class="pin-btn" style="opacity:0" disabled></button>
-    <button class="pin-btn" onclick="pinPress(0)">0</button>
-    <button class="pin-btn del" onclick="pinDel()">⌫</button>
-  </div>
-  <div class="pin-err" id="pin-err"></div>
-</div>
-
-<button class="admin-btn" id="admin-btn" style="display:none" onclick="openAdmin()">👥 Bezoekers</button>
+<button class="admin-btn" onclick="openAdminLogin()">⚙️</button>
 
 <div class="overlay" id="admin-overlay" onclick="if(event.target===this)closeAdmin()" style="display:none">
   <div class="modal" style="display:flex">
     <div class="mhandle"></div>
-    <div class="mhdr"><div class="mtitle">👥 Bezoekers</div><div class="mclose" onclick="closeAdmin()">✕</div></div>
-    <div class="mbody" id="admin-body"><div style="text-align:center;padding:32px;color:var(--muted)">Laden...</div></div>
+    <div class="mhdr"><div class="mtitle" id="admin-title">🔐 Admin</div><div class="mclose" onclick="closeAdmin()">✕</div></div>
+    <div class="mbody" id="admin-body">
+      <div id="admin-pin-view">
+        <div style="text-align:center;margin-bottom:20px;color:var(--muted);font-size:13px">Voer admin code in</div>
+        <div class="pin-dots" id="admin-dots" style="justify-content:center;margin-bottom:20px">
+          <div class="pin-dot" id="ad0"></div>
+          <div class="pin-dot" id="ad1"></div>
+          <div class="pin-dot" id="ad2"></div>
+          <div class="pin-dot" id="ad3"></div>
+        </div>
+        <div class="pin-grid" style="margin:0 auto">
+          <button class="pin-btn" onclick="adminPinPress(1)">1</button>
+          <button class="pin-btn" onclick="adminPinPress(2)">2</button>
+          <button class="pin-btn" onclick="adminPinPress(3)">3</button>
+          <button class="pin-btn" onclick="adminPinPress(4)">4</button>
+          <button class="pin-btn" onclick="adminPinPress(5)">5</button>
+          <button class="pin-btn" onclick="adminPinPress(6)">6</button>
+          <button class="pin-btn" onclick="adminPinPress(7)">7</button>
+          <button class="pin-btn" onclick="adminPinPress(8)">8</button>
+          <button class="pin-btn" onclick="adminPinPress(9)">9</button>
+          <button class="pin-btn" style="opacity:0" disabled></button>
+          <button class="pin-btn" onclick="adminPinPress(0)">0</button>
+          <button class="pin-btn del" onclick="adminPinDel()">⌫</button>
+        </div>
+        <div class="pin-err" id="admin-pin-err" style="text-align:center;margin-top:12px"></div>
+      </div>
+      <div id="admin-stats-view" style="display:none"></div>
+    </div>
   </div>
 </div>
+
+<div class="overlay" id="overlay" onclick="closeOv(event)">
   <div class="modal" id="match-modal">
     <div class="mhandle"></div>
     <div class="mhdr"><div class="mtitle" id="mtitle"></div><div class="mclose" onclick="closeModal()">✕</div></div>
@@ -1327,89 +1326,68 @@ function closeObModal(){
   const btn = document.querySelector(".overall-bet-btn");
   if(btn && btn.disabled) { btn.innerHTML = "🎯 Beste Dagtip"; btn.disabled = false; }
 }
-// ── PIN VERGRENDELING ──
-let pinEntry = '';
-const DEVICE_ID = localStorage.getItem('wk_device') || (()=>{const id='d_'+Math.random().toString(36).slice(2);localStorage.setItem('wk_device',id);return id;})();
+// ── ADMIN BEZOEKERS (alleen voor admin) ──
+let adminPinEntry = '';
 
-function pinPress(n){
-  if(pinEntry.length >= 4) return;
-  pinEntry += String(n);
-  updateDots();
-  if(pinEntry.length === 4) setTimeout(checkPin, 100);
+function openAdminLogin(){
+  adminPinEntry = '';
+  document.getElementById('admin-pin-view').style.display = '';
+  document.getElementById('admin-stats-view').style.display = 'none';
+  document.getElementById('admin-title').textContent = '🔐 Admin';
+  document.getElementById('admin-pin-err').textContent = '';
+  for(let i=0;i<4;i++) document.getElementById('ad'+i).className='pin-dot';
+  document.getElementById('admin-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
 }
-function pinDel(){
-  pinEntry = pinEntry.slice(0,-1);
-  document.getElementById('pin-err').textContent = '';
-  updateDots(false);
+function adminPinPress(n){
+  if(adminPinEntry.length >= 4) return;
+  adminPinEntry += String(n);
+  for(let i=0;i<4;i++) document.getElementById('ad'+i).className='pin-dot'+(i<adminPinEntry.length?' filled':'');
+  if(adminPinEntry.length === 4) setTimeout(checkAdminPin, 100);
 }
-function updateDots(error=false){
-  for(let i=0;i<4;i++){
-    const d = document.getElementById('d'+i);
-    d.className = 'pin-dot' + (i < pinEntry.length ? (error?' error':' filled') : '');
-  }
+function adminPinDel(){
+  adminPinEntry = adminPinEntry.slice(0,-1);
+  document.getElementById('admin-pin-err').textContent = '';
+  for(let i=0;i<4;i++) document.getElementById('ad'+i).className='pin-dot'+(i<adminPinEntry.length?' filled':'');
 }
-async function checkPin(){
+async function checkAdminPin(){
   try {
     const res = await fetch(WORKER_URL+'/check-pin',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({pin: pinEntry, deviceId: DEVICE_ID})
+      body: JSON.stringify({pin: adminPinEntry, deviceId: DEVICE_ID})
     });
     const data = await res.json();
-    if(data.ok){
-      localStorage.setItem('wk_pin_ok', Date.now());
-      if(data.isAdmin) localStorage.setItem('wk_is_admin', '1');
-      else localStorage.removeItem('wk_is_admin');
-      document.getElementById('pin-screen').style.display = 'none';
-      if(data.isAdmin) document.getElementById('admin-btn').style.display = '';
+    if(data.ok && data.isAdmin){
+      document.getElementById('admin-pin-view').style.display = 'none';
+      document.getElementById('admin-title').textContent = '👥 Bezoekers';
+      loadAdminStats();
     } else {
-      updateDots(true);
-      document.getElementById('pin-err').textContent = 'Verkeerde pincode — probeer opnieuw';
-      setTimeout(()=>{ pinEntry=''; updateDots(); document.getElementById('pin-err').textContent=''; }, 1200);
+      for(let i=0;i<4;i++) document.getElementById('ad'+i).className='pin-dot error';
+      document.getElementById('admin-pin-err').textContent = 'Verkeerde code';
+      setTimeout(()=>{ adminPinEntry=''; for(let i=0;i<4;i++) document.getElementById('ad'+i).className='pin-dot'; document.getElementById('admin-pin-err').textContent=''; }, 1200);
     }
   } catch(e) {
-    document.getElementById('pin-err').textContent = 'Verbindingsfout — probeer opnieuw';
-    setTimeout(()=>{ pinEntry=''; updateDots(); }, 1500);
+    document.getElementById('admin-pin-err').textContent = 'Verbindingsfout';
+    setTimeout(()=>{ adminPinEntry=''; }, 1500);
   }
 }
-function checkSession(){
-  const saved = localStorage.getItem('wk_pin_ok');
-  if(!saved) return false;
-  const age = Date.now() - parseInt(saved);
-  return age < 24*60*60*1000; // 24 uur geldig
-}
-
-// ── ADMIN BEZOEKERS ──
-async function openAdmin(){
-  document.getElementById('admin-overlay').style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-  const el = document.getElementById('admin-body');
-  el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)"><div class="ai-spinner"></div></div>';
+async function loadAdminStats(){
+  const el = document.getElementById('admin-stats-view');
+  el.style.display = '';
+  el.innerHTML = '<div style="text-align:center;padding:32px"><div class="ai-spinner"></div></div>';
   try {
     const res = await fetch(WORKER_URL+'/visitors?key=wk26-refresh-x7k2');
     const data = await res.json();
     const rows = (data.visitors||[]).map((v,i) => {
       const last = new Date(v.lastSeen);
       const ago = Math.round((Date.now()-last)/60000);
-      const agoStr = ago < 60 ? `${ago}min geleden` : ago < 1440 ? `${Math.round(ago/60)}u geleden` : `${Math.round(ago/1440)}d geleden`;
-      const isMe = v.id === DEVICE_ID;
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <div>
-          <span style="color:${isMe?'var(--mint)':'var(--text)'}">${isMe?'👤 Jij':'👥 Gebruiker '+(i+1)}</span>
-          <div style="font-size:10px;color:var(--muted2)">${v.id.slice(0,12)}...</div>
-        </div>
-        <div style="text-align:right">
-          <div style="color:var(--muted)">${agoStr}</div>
-          <div style="font-size:10px;color:var(--muted2)">${v.count}× ingelogd</div>
-        </div>
-      </div>`;
+      const agoStr = ago < 60 ? ago+'min geleden' : ago < 1440 ? Math.round(ago/60)+'u geleden' : Math.round(ago/1440)+'d geleden';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px"><div><div>👤 Device '+(i+1)+'</div><div style="font-size:10px;color:var(--muted2)">'+v.id.slice(0,16)+'</div></div><div style="text-align:right"><div style="color:var(--muted)">'+agoStr+'</div><div style="font-size:10px;color:var(--muted2)">'+v.count+'× ingelogd</div></div></div>';
     }).join('');
-    el.innerHTML = `<div style="text-align:center;margin-bottom:16px">
-      <div style="font-size:32px;font-weight:700;color:var(--mint)">${data.total}</div>
-      <div style="color:var(--muted);font-size:13px">unieke gebruiker${data.total!==1?'s':''}</div>
-    </div>${rows}`;
+    el.innerHTML = '<div style="text-align:center;margin-bottom:16px"><div style="font-size:32px;font-weight:700;color:var(--mint)">'+data.total+'</div><div style="color:var(--muted);font-size:13px">unieke device'+(data.total!==1?'s':'')+'</div></div>'+rows;
   } catch(e) {
-    el.innerHTML = `<div style="color:var(--muted2);text-align:center;padding:20px">Fout: ${e.message}</div>`;
+    el.innerHTML = '<div style="color:var(--muted2);text-align:center;padding:20px">Fout: '+e.message+'</div>';
   }
 }
 function closeAdmin(){
@@ -1417,11 +1395,9 @@ function closeAdmin(){
   document.body.style.overflow = '';
 }
 
+const DEVICE_ID = localStorage.getItem('wk_device') || (()=>{const id='d_'+Math.random().toString(36).slice(2);localStorage.setItem('wk_device',id);return id;})();
+
 // ── INIT ──
-if(checkSession()){
-  document.getElementById("pin-screen").style.display = "none";
-  if(localStorage.getItem('wk_is_admin')) document.getElementById("admin-btn").style.display = "";
-}
 buildNav();
 render();
 fetchLiveData().then(render);
