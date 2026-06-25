@@ -381,6 +381,7 @@ let groupsUpdatedAt = null;
 let oddsUpdatedAt = null;
 let topscorersUpdatedAt = null;
 let PLAYER_STATS = {}; // spelersdata per team van hun meest recente gespeelde wedstrijd
+let ODDS_API_DATA = {}; // The Odds API: echte marktodds (BTTS, O/U, 1X2)
 
 // ── HELPERS ──
 const RL = g => g==='FIN'?'🏆 Finale':g==='SF'?'Halve Finale':g==='QF'?'Kwartfinale':g==='R16'?'Achtste Finale':g==='R32'?'Ronde van 32':g==='3PL'?'3e Plaatswedstrijd':`Groep ${g}`;
@@ -821,10 +822,24 @@ async function generateAiBet(m, odds, hLinup, aLinup){
   const topBets = allBets.filter(b => b.kans >= 40 && b.kans <= 93).slice(0, 30);
   const betsStr = topBets.map(b => `${b.type} | ${b.bet} | ${b.kans}%${b.detail ? " (" + b.detail + ")" : ""}`).join("\n");
 
+  // Haal echte marktodds op uit The Odds API cache
+  const oddsApiMatch = getOddsApiMatch(m.h, m.a);
+  const realOdds = oddsApiMatch?.odds || null;
+
+  const realOddsStr = realOdds ? Object.entries(realOdds).map(([k,v]) => {
+    if(k === '1X2') return `1X2: thuis=${v.h} gelijk=${v.d} uit=${v.a} (${v.bm||''})`;
+    if(k === 'BTTS') return `Beide teams scoren: Ja=${v.yes} Nee=${v.no} (${v.bm||''})`;
+    if(k.startsWith('O/U_')) return `Over/Under ${k.split('_')[1]}: Over=${v.over} Under=${v.under} (${v.bm||''})`;
+    return `${k}: ${JSON.stringify(v)}`;
+  }).join('\n') : null;
+
   const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
 WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g)}, ${m.date} ${m.time} NL)
 
+${realOddsStr ? `ECHTE MARKTODDS (gebruik deze voor waardebepaling en gecombineerde quote schatting):
+${realOddsStr}
+` : ''}
 PRE-BEREKENDE KANSEN (gebruik deze exact, verzin niets):
 ${betsStr || "Onvoldoende data"}
 
@@ -938,13 +953,14 @@ function mergeGroups(groupsRes){
 async function fetchLiveData(){
   if(!WORKER_URL) return; // nog niet geconfigureerd — gewoon lokale data tonen
   try{
-    const [liveRes, oddsRes, topRes, groupsRes, globalRes, playerRes] = await Promise.all([
+    const [liveRes, oddsRes, topRes, groupsRes, globalRes, playerRes, oddsApiRes] = await Promise.all([
       fetch(WORKER_URL+'/live').then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/odds').then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/topscorers').then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/groups').then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/topscorers/global').then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/player-stats').then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(WORKER_URL+'/odds-api').then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     if(liveRes?.matches) mergeLive(liveRes.matches);
     if(oddsRes) mergeOdds(oddsRes);
@@ -952,6 +968,7 @@ async function fetchLiveData(){
     if(groupsRes) mergeGroups(groupsRes);
     if(globalRes?.list){ globalTopscorers=globalRes.list; globalTopscorersUpdatedAt=globalRes.updatedAt; if(selView==='topscorers') renderTopscorers(); }
     if(playerRes) { const {_processed,...stats}=playerRes; PLAYER_STATS=stats; }
+    if(oddsApiRes) ODDS_API_DATA = oddsApiRes?.matches || {};
   }catch(e){
     console.warn('Live data ophalen mislukt, val terug op lokale data:', e);
   }
@@ -974,6 +991,19 @@ function poissonAtMost(lambda, k) {
   let cumulative = 0;
   for(let i = 0; i <= k; i++) cumulative += poisson(lambda, i);
   return Math.round(cumulative * 100);
+}
+
+function getOddsApiMatch(h, a) {
+  // Zoek in ODDS_API_DATA (key = "Home_Away") naar de odds voor deze wedstrijd
+  const keys = Object.keys(ODDS_API_DATA);
+  for(const key of keys) {
+    const d = ODDS_API_DATA[key];
+    if(!d?.h) continue;
+    const hMatch = d.h.toLowerCase().includes(h.toLowerCase().slice(0,5)) || h.toLowerCase().includes(d.h.toLowerCase().slice(0,5));
+    const aMatch = d.a.toLowerCase().includes(a.toLowerCase().slice(0,5)) || a.toLowerCase().includes(d.a.toLowerCase().slice(0,5));
+    if(hMatch && aMatch) return d;
+  }
+  return null;
 }
 
 function calculateBetProbs(m, odds, hLinup, aLinup) {
@@ -1082,10 +1112,12 @@ async function generateOverallBet(){
     const mA = (PLAYER_STATS[m.a] || []);
     const bets = calculateBetProbs(m, mOdds, mH, mA);
     const topBets = bets.filter(b => b.kans >= 45 && b.kans <= 93).slice(0, 15);
-    return `WEDSTRIJD: ${m.h} vs ${m.a} (${m.time} NL${m.date !== selDate ? " morgen" : ""})\n` +
+    const oddsApiM = getOddsApiMatch(m.h, m.a);
+    const realO = oddsApiM?.odds;
+    const realOStr = realO ? ` [echte odds:${realO["BTTS"] ? ` BTTS Ja=${realO["BTTS"].yes} Nee=${realO["BTTS"].no}` : ""}${realO["O/U_2.5"] ? ` O2.5=${realO["O/U_2.5"].over} U2.5=${realO["O/U_2.5"].under}` : ""}${realO["1X2"] ? ` 1X2 h=${realO["1X2"].h} d=${realO["1X2"].d} a=${realO["1X2"].a}` : ""}]` : "";
+    return `WEDSTRIJD: ${m.h} vs ${m.a} (${m.time} NL${m.date !== selDate ? " morgen" : ""})${realOStr}\n` +
       topBets.map(b => `  ${b.type} | ${b.bet} | ${b.kans}%${b.detail?" ("+b.detail+")":""}`).join("\n");
   }).join("\n---\n");
-
   const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
 DOEL: Kies het optimale aantal onderdelen (1 tot 10) uit VERSCHILLENDE wedstrijden.
