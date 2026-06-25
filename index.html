@@ -169,10 +169,15 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
   <div id="topscorersView" style="display:none"></div>
 </div>
 <div class="overlay" id="overlay" onclick="closeOv(event)">
-  <div class="modal">
+  <div class="modal" id="match-modal">
     <div class="mhandle"></div>
     <div class="mhdr"><div class="mtitle" id="mtitle"></div><div class="mclose" onclick="closeModal()">✕</div></div>
     <div class="mbody" id="mbody"></div>
+  </div>
+  <div class="modal" id="ob-modal" style="display:none">
+    <div class="mhandle"></div>
+    <div class="mhdr"><div class="mtitle">🎯 Beste Dagtip</div><div class="mclose" onclick="closeObModal()">✕</div></div>
+    <div class="mbody" id="ob-modal-body"><div style="text-align:center;padding:40px;color:var(--muted)">⏳ Analyseren...</div></div>
   </div>
 </div>
 <script>
@@ -795,9 +800,25 @@ async function generateAiBet(m, odds, hLinup, aLinup){
   const aGF = aRow?.played ? (aRow.gf/aRow.played).toFixed(1) : '?';
   const aGA = aRow?.played ? (aRow.ga/aRow.played).toFixed(1) : '?';
 
+  // Bereken betrouwbaarheidsindicator
+  const hGames = hLinup.length ? (hLinup[0]?.matches || 0) : 0;
+  const aGames = aLinup.length ? (aLinup[0]?.matches || 0) : 0;
+  const hStanding = teamStanding(m.h);
+  const aStanding = teamStanding(m.a);
+  const minGames = Math.min(hGames || hStanding?.played || 0, aGames || aStanding?.played || 0);
+  const reliability = minGames === 0 ? {label:'Geen spelersdata', color:'var(--muted2)', icon:'⚪'}
+    : minGames === 1 ? {label:'Beperkt (1 wedstrijd)', color:'var(--peach)', icon:'🟡'}
+    : minGames === 2 ? {label:'Redelijk (2 wedstrijden)', color:'var(--gold)', icon:'🟠'}
+    : {label:`Goed (${minGames} wedstrijden)`, color:'var(--mint)', icon:'🟢'};
+  const reliabilityHtml = `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:10px;font-size:11px">
+    <span>${reliability.icon}</span>
+    <span style="color:var(--muted2)">Databasis: <strong style="color:${reliability.color}">${reliability.label}</strong></span>
+    <span style="color:var(--muted2);margin-left:auto">${minGames > 0 ? 'Poisson-model' : 'Alleen odds'}</span>
+  </div>`;
+
   // Pre-bereken alle bet kansen met Poisson model
   const allBets = calculateBetProbs(m, odds, hLinup, aLinup);
-  const topBets = allBets.filter(b => b.kans >= 40).slice(0, 30);
+  const topBets = allBets.filter(b => b.kans >= 40 && b.kans <= 93).slice(0, 30);
   const betsStr = topBets.map(b => `${b.type} | ${b.bet} | ${b.kans}%${b.detail ? " (" + b.detail + ")" : ""}`).join("\n");
 
   const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
@@ -858,6 +879,7 @@ Antwoord ALLEEN in dit JSON formaat:
     const combKans = bet.gecombineerde_kans ?? null;
     const combKleur = combKans >= 60 ? 'var(--mint)' : combKans >= 45 ? 'var(--gold)' : 'var(--peach)';
     el.innerHTML = `
+      ${reliabilityHtml}
       <div class="bbt" style="margin-bottom:8px">🎯 ${bet.tip}</div>
       ${onderdelenHtml ? `<div style="margin:10px 0">${onderdelenHtml}</div>` : ''}
       ${combKans ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-weight:700">
@@ -874,7 +896,7 @@ Antwoord ALLEEN in dit JSON formaat:
     el.innerHTML = `<span style="color:var(--muted2);font-size:12px">Fout: ${e.message}</span>`;
   }
 }
-function closeOv(e){if(e.target===document.getElementById('overlay'))closeModal();}
+function closeOv(e){if(e.target===document.getElementById('overlay')){closeModal();closeObModal();}}
 function closeModal(){document.getElementById('overlay').classList.remove('on');document.body.style.overflow='';}
 
 // ── LIVE DATA (SportsAPIPro via eigen Cloudflare Worker proxy) ──
@@ -987,7 +1009,6 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
     bets.push({type:'BTTS', bet:'Beide teams scoren: NEE', kans:100-pBTTS, match:`${m.h} vs ${m.a}`});
 
     // Over/Under
-    bets.push({type:'O/U', bet:'Over 0.5 doelpunten', kans:poissonAtLeast(totalExp,1), match:`${m.h} vs ${m.a}`});
     bets.push({type:'O/U', bet:'Over 1.5 doelpunten', kans:poissonAtLeast(totalExp,2), match:`${m.h} vs ${m.a}`});
     bets.push({type:'O/U', bet:'Over 2.5 doelpunten', kans:poissonAtLeast(totalExp,3), match:`${m.h} vs ${m.a}`});
     bets.push({type:'O/U', bet:'Under 2.5 doelpunten', kans:poissonAtMost(totalExp,2), match:`${m.h} vs ${m.a}`});
@@ -1035,11 +1056,16 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
 async function generateOverallBet(){
   if(!WORKER_URL) return;
   const btn = document.querySelector('.overall-bet-btn');
-  const resultEl = document.getElementById('overall-bet-result');
-  if(!resultEl) return;
+  if(btn) { btn.disabled = true; btn.innerHTML = '⏳ Analyseren...'; }
 
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Analyseren...';
+  // Open modal meteen met loading state
+  document.getElementById('match-modal').style.display = 'none';
+  document.getElementById('ob-modal').style.display = '';
+  document.getElementById('ob-modal-body').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Alle wedstrijden analyseren...<br><span style="font-size:11px;color:var(--muted2)">Even geduld</span></div>';
+  document.getElementById('overlay').classList.add('on');
+  document.body.style.overflow = 'hidden';
+
+  const resultEl = document.getElementById('ob-modal-body');
   resultEl.innerHTML = '';
 
   // Verzamel aankomende wedstrijden van vandaag én morgen
@@ -1055,7 +1081,7 @@ async function generateOverallBet(){
     const mH = (PLAYER_STATS[m.h] || []);
     const mA = (PLAYER_STATS[m.a] || []);
     const bets = calculateBetProbs(m, mOdds, mH, mA);
-    const topBets = bets.filter(b => b.kans >= 45).slice(0, 15);
+    const topBets = bets.filter(b => b.kans >= 45 && b.kans <= 93).slice(0, 15);
     return `WEDSTRIJD: ${m.h} vs ${m.a} (${m.time} NL${m.date !== selDate ? " morgen" : ""})\n` +
       topBets.map(b => `  ${b.type} | ${b.bet} | ${b.kans}%${b.detail?" ("+b.detail+")":""}`).join("\n");
   }).join("\n---\n");
@@ -1115,28 +1141,50 @@ Antwoord ALLEEN in dit JSON formaat:
       </div>`;
     }).join('');
 
-    resultEl.innerHTML = `<div class="overall-bet-panel">
-      <div class="ob-title">🎯 ${bet.tip}</div>
-      ${legsHtml}
-      <div class="ob-combined">
-        <span>Gecombineerde slagingskans</span>
-        <span style="color:${combKleur};font-size:18px">${combKans}%</span>
-      </div>
-      ${combKans < 60 ? `<div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:8px 10px;margin-top:6px;font-size:12px;color:var(--peach)">⚠️ Slagingskans onder 60% — overweeg minder onderdelen te combineren of wacht op een betere dag</div>` : ''}
-      <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:6px">${bet.onderbouwing}</div>
-      ${bet.data_basis?`<div style="font-size:10px;color:var(--muted2);margin-top:6px">📊 ${bet.data_basis}</div>`:''}
-      <div style="margin-top:10px;font-size:12px;color:${riskColor};font-weight:600">Risico: ${bet.risico} · Check quotes bij je boekmaker</div>
-    </div>`;
+    // Betrouwbaarheidsindicator voor alle wedstrijden
+    const gamesCounts = ms.map(m => {
+      const h = (PLAYER_STATS[m.h]||[])[0]?.matches || 0;
+      const a = (PLAYER_STATS[m.a]||[])[0]?.matches || 0;
+      return Math.min(h, a);
+    });
+    const avgGames = gamesCounts.length ? Math.round(gamesCounts.reduce((a,b)=>a+b,0)/gamesCounts.length*10)/10 : 0;
+    const obReliability = avgGames === 0 ? {label:'Geen spelersdata', color:'var(--muted2)', icon:'⚪'}
+      : avgGames < 1.5 ? {label:'Beperkt (~1 wed/team)', color:'var(--peach)', icon:'🟡'}
+      : avgGames < 2.5 ? {label:'Redelijk (~2 wed/team)', color:'var(--gold)', icon:'🟠'}
+      : {label:`Goed (~${avgGames} wed/team)`, color:'var(--mint)', icon:'🟢'};
 
-    btn.innerHTML = '🔄 Opnieuw analyseren';
-    btn.disabled = false;
+    resultEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:12px;font-size:11px">
+        <span>${obReliability.icon}</span>
+        <span style="color:var(--muted2)">Databasis: <strong style="color:${obReliability.color}">${obReliability.label}</strong></span>
+        <span style="color:var(--muted2);margin-left:auto">Poisson-model</span>
+      </div>
+      <div style="margin-bottom:16px;font-size:15px;font-weight:700;color:var(--gold)">🎯 ${bet.tip}</div>
+      ${legsHtml}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-weight:700;font-size:14px">
+        <span>Gecombineerde slagingskans</span>
+        <span style="color:${combKleur};font-size:20px">${combKans}%</span>
+      </div>
+      ${combKans < 60 ? '<div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--peach)">⚠️ Onder 60% — overweeg minder onderdelen</div>' : ''}
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px">${bet.onderbouwing}</div>
+      ${bet.data_basis ? '<div style="font-size:10px;color:var(--muted2);margin-top:6px">📊 ' + bet.data_basis + '</div>' : ''}
+      <div style="margin-top:12px;font-size:12px;color:${riskColor};font-weight:600">Risico: ${bet.risico} · Check quotes bij je boekmaker</div>
+    `;
+    if(btn) { btn.innerHTML = "🔄 Opnieuw analyseren"; btn.disabled = false; }
   } catch(e) {
-    resultEl.innerHTML = `<div class="overall-bet-panel"><div style="color:var(--muted2);font-size:12px">Fout: ${e.message}</div></div>`;
-    btn.innerHTML = '🎯 Beste Dagtip';
-    btn.disabled = false;
+    resultEl.innerHTML = `<div style="padding:20px;color:var(--muted2);font-size:12px">Fout: ${e.message}</div>`;
+    if(btn) { btn.innerHTML = "🎯 Beste Dagtip"; btn.disabled = false; }
   }
 }
 
+function closeObModal(){
+  document.getElementById("ob-modal").style.display = "none";
+  document.getElementById("match-modal").style.display = "";
+  document.getElementById("overlay").classList.remove("on");
+  document.body.style.overflow = "";
+  const btn = document.querySelector(".overall-bet-btn");
+  if(btn && btn.disabled) { btn.innerHTML = "🎯 Beste Dagtip"; btn.disabled = false; }
+}
 // ── INIT ──
 buildNav();
 render();
