@@ -1135,12 +1135,10 @@ async function generateOverallBet(){
   // Open modal meteen met loading state
   document.getElementById('match-modal').style.display = 'none';
   document.getElementById('ob-modal').style.display = '';
-  document.getElementById('ob-modal-body').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ Alle wedstrijden analyseren...<br><span style="font-size:11px;color:var(--muted2)">Even geduld</span></div>';
+  const resultEl = document.getElementById('ob-modal-body');
+  resultEl.innerHTML = '<div style="text-align:center;padding:40px"><div class="ai-spinner" style="margin:0 auto 16px"></div><div style="color:var(--muted)">Alle wedstrijden analyseren...</div><div style="font-size:11px;color:var(--muted2);margin-top:6px">Kansen berekenen · Odds ophalen · Combinatie samenstellen</div></div>';
   document.getElementById('overlay').classList.add('on');
   document.body.style.overflow = 'hidden';
-
-  const resultEl = document.getElementById('ob-modal-body');
-  resultEl.innerHTML = '';
 
   // Verzamel aankomende wedstrijden van vandaag én morgen
   const tomorrow = new Date(new Date(selDate).getTime() + 24*60*60*1000).toISOString().split('T')[0];
@@ -1211,11 +1209,25 @@ Antwoord ALLEEN in dit JSON formaat:
     const legsHtml = onderdelen.map(o => {
       const k = o.kans ?? 0;
       const kl = k>=70?'var(--mint)':k>=50?'var(--gold)':'var(--peach)';
-      const parts = (o.wedstrijd||'').split(' vs ');
-      const realOdd = parts.length >= 2 ? getRealOddForBet(o.bet, parts[0].trim(), parts[1].trim()) : null;
+      // Probeer odds te vinden: eerst via wedstrijd-veld, dan via bet-tekst zelf
+      let realOdd = null;
+      const wedstr = o.wedstrijd || '';
+      const parts = wedstr.split(' vs ');
+      if(parts.length >= 2) {
+        realOdd = getRealOddForBet(o.bet, parts[0].trim(), parts[1].trim());
+      }
+      // Fallback: zoek in alle ODDS_API_DATA wedstrijden of de bet-tekst matcht
+      if(!realOdd) {
+        for(const key in ODDS_API_DATA) {
+          const d = ODDS_API_DATA[key];
+          if(!d?.h) continue;
+          const odd = getRealOddForBet(o.bet, d.h, d.a);
+          if(odd) { realOdd = odd; break; }
+        }
+      }
       if(realOdd) totalOdd *= realOdd; else allHaveOdds = false;
       const oddTxt = realOdd ? ' <span style="background:rgba(251,191,36,.15);color:var(--gold);font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px">' + realOdd.toFixed(2) + '</span>' : '';
-      return '<div class="ob-leg"><div style="flex:1"><div style="font-weight:600">✓ ' + o.bet + oddTxt + '</div><div class="ob-leg-match">' + (o.wedstrijd||'') + '</div></div><div style="color:' + kl + ';font-weight:700;white-space:nowrap;margin-left:12px">' + k + '%</div></div>';
+      return '<div class="ob-leg"><div style="flex:1"><div style="font-weight:600">✓ ' + o.bet + oddTxt + '</div><div class="ob-leg-match">' + wedstr + '</div></div><div style="color:' + kl + ';font-weight:700;white-space:nowrap;margin-left:12px">' + k + '%</div></div>';
     }).join('');
     const totalOddHtml = allHaveOdds && onderdelen.length > 0 ?
       '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);margin-top:4px"><span style="color:var(--muted2)">Gecombineerde quote</span><span style="font-size:18px;font-weight:700;color:var(--gold)">' + totalOdd.toFixed(2) + '</span></div>' : '';
