@@ -795,55 +795,23 @@ async function generateAiBet(m, odds, hLinup, aLinup){
   const aGF = aRow?.played ? (aRow.gf/aRow.played).toFixed(1) : '?';
   const aGA = aRow?.played ? (aRow.ga/aRow.played).toFixed(1) : '?';
 
-  const playerDetail = (players, team) => {
-    if(!players?.length) return `${team}: geen spelersdata beschikbaar`;
-    return players.slice(0,5).map(p => [
-      p.n,
-      `rating:${p.avg_rating??'-'}`,
-      `xG/wed:${nf(p.avg_xg??0)}`,
-      `SoT/wed:${nf(p.avg_sot??0,1)}`,
-      `sch/wed:${nf(p.avg_shots??0,1)}`,
-      `goals:${p.goals}`,
-      p.keyPasses_total>0?`kansen:${p.keyPasses_total}`:'',
-      `wed:${p.matches||1}`
-    ].filter(Boolean).join(', ')).join('\n  ');
-  };
+  // Pre-bereken alle bet kansen met Poisson model
+  const allBets = calculateBetProbs(m, odds, hLinup, aLinup);
+  const topBets = allBets.filter(b => b.kans >= 40).slice(0, 30);
+  const betsStr = topBets.map(b => `${b.type} | ${b.bet} | ${b.kans}%${b.detail ? " (" + b.detail + ")" : ""}`).join("\n");
 
-  const oddsStr = odds
-    ? `1=${odds.h.toFixed(2)} X=${odds.d.toFixed(2)} 2=${odds.a.toFixed(2)}`
-    : 'geen odds beschikbaar';
-
-  const prompt = `Je bent een sportsbetting analist voor WK 2026. Analyseer deze wedstrijd grondig.
+  const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
 WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g)}, ${m.date} ${m.time} NL)
-MARKTODDS 1X2: ${oddsStr}
 
-GROEPSSTAND:
-- ${m.h}: ${hRow?.played??0} gespeeld, ${hRow?.pts??0} pts, gem ${hGF} voor / ${hGA} tegen per wed
-- ${m.a}: ${aRow?.played??0} gespeeld, ${aRow?.pts??0} pts, gem ${aGF} voor / ${aGA} tegen per wed
+PRE-BEREKENDE KANSEN (gebruik deze exact, verzin niets):
+${betsStr || "Onvoldoende data"}
 
-SPELERSDATA ${m.h} (gemiddelden over alle WK-wedstrijden):
-  ${playerDetail(hLinup, m.h)}
-
-SPELERSDATA ${m.a} (gemiddelden over alle WK-wedstrijden):
-  ${playerDetail(aLinup, m.a)}
-
-OPDRACHT:
-Bouw altijd een combinatiebet van 2 of 3 onderdelen die samen logisch zijn.
-Doel: gecombineerde kans tussen 50-75% (niet te riskant, niet te makkelijk).
-Combineer bijv: "Team X wint + Speler Y schiet op doel", "BTTS nee + Team X wint", "Speler A scoort + Speler B SoT", etc.
-
-Schat voor elk onderdeel een realistisch slagingspercentage:
-- Matchwinnaar: gebruik impliciete kans uit odds (1/odds x 100, afronden)
-- Speler 1+ SoT: 2+ SoT/wed gemiddeld = ~85%, 1-2 SoT/wed = ~65%, <1 = ~40%
-- Speler scoort: baseer op xG/wed (0.5+ = ~40%, 0.3 = ~25%, 0.1 = ~10%)
-- BTTS nee: als een team gem <0.5 goals/wed toelaat = ~60%, <1.0 = ~50%
-- Gecombineerde kans = vermenigvuldig de losse kansen (80% x 75% = 60%)
-
-De enige echte quotes die je kent zijn de 1X2 odds. Verzin NOOIT quotes voor andere markten.
+OPDRACHT: Kies 2-3 onderdelen die samen 60%+ gecombineerde kans hebben en logisch bij elkaar passen.
+Gecombineerde kans = kans1/100 x kans2/100 x 100. Neem exact de kansen uit de lijst.
 
 Antwoord ALLEEN in dit JSON formaat:
-{"type":"Combinatie","tip":"<concrete tip>","onderdelen":[{"bet":"<onderdeel 1>","kans":<0-100>},{"bet":"<onderdeel 2>","kans":<0-100>},{"bet":"<optioneel onderdeel 3>","kans":<0-100>}],"gecombineerde_kans":<0-100>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
+{"type":"Combinatie","tip":"<tip>","onderdelen":[{"bet":"<bet uit lijst>","kans":<getal>},{"bet":"<bet>","kans":<getal>}],"gecombineerde_kans":<product>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
 
   try {
     const res = await fetch(WORKER_URL + '/ai-bet', {
@@ -961,7 +929,103 @@ async function fetchLiveData(){
   }
 }
 
-// ── OVERALL BET (beste combinatie over alle wedstrijden van de dag) ──
+// ── BET KANSBEREKENING (Poisson model) ──
+// Poisson kans: P(X=k) = e^(-λ) * λ^k / k!
+function poisson(lambda, k) {
+  if(lambda <= 0) return k === 0 ? 1 : 0;
+  let p = Math.exp(-lambda);
+  for(let i = 0; i < k; i++) p *= lambda / (i + 1);
+  return p;
+}
+function poissonAtLeast(lambda, k) {
+  let cumulative = 0;
+  for(let i = 0; i < k; i++) cumulative += poisson(lambda, i);
+  return Math.round((1 - cumulative) * 100);
+}
+function poissonAtMost(lambda, k) {
+  let cumulative = 0;
+  for(let i = 0; i <= k; i++) cumulative += poisson(lambda, i);
+  return Math.round(cumulative * 100);
+}
+
+function calculateBetProbs(m, odds, hLinup, aLinup) {
+  const hRow = teamStanding(m.h);
+  const aRow = teamStanding(m.a);
+  const bets = [];
+
+  // ── 1X2 uit odds ──
+  if(odds) {
+    const r1=1/odds.h, rx=1/odds.d, r2=1/odds.a, tot=r1+rx+r2;
+    const p1=Math.round(r1/tot*100), px=Math.round(rx/tot*100), p2=Math.round(r2/tot*100);
+    bets.push({type:'1X2', bet:`${m.h} wint`, kans:p1, match:`${m.h} vs ${m.a}`});
+    bets.push({type:'1X2', bet:`Gelijkspel`, kans:px, match:`${m.h} vs ${m.a}`});
+    bets.push({type:'1X2', bet:`${m.a} wint`, kans:p2, match:`${m.h} vs ${m.a}`});
+  }
+
+  // ── BTTS & Over/Under via Poisson ──
+  if(hRow?.played && aRow?.played) {
+    const hGF = hRow.gf / hRow.played;
+    const hGA = hRow.ga / hRow.played;
+    const aGF = aRow.gf / aRow.played;
+    const aGA = aRow.ga / aRow.played;
+    // Verwachte goals = gemiddelde van aanval vs verdediging tegenstander
+    const hExpected = (hGF + aGA) / 2;
+    const aExpected = (aGF + hGA) / 2;
+    const totalExp = hExpected + aExpected;
+
+    // BTTS
+    const pHScores = poissonAtLeast(hExpected, 1);
+    const pAScores = poissonAtLeast(aExpected, 1);
+    const pBTTS = Math.round(pHScores/100 * pAScores/100 * 100);
+    bets.push({type:'BTTS', bet:'Beide teams scoren: JA', kans:pBTTS, match:`${m.h} vs ${m.a}`, detail:`h exp ${nf(hExpected)} / a exp ${nf(aExpected)}`});
+    bets.push({type:'BTTS', bet:'Beide teams scoren: NEE', kans:100-pBTTS, match:`${m.h} vs ${m.a}`});
+
+    // Over/Under
+    bets.push({type:'O/U', bet:'Over 0.5 doelpunten', kans:poissonAtLeast(totalExp,1), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'O/U', bet:'Over 1.5 doelpunten', kans:poissonAtLeast(totalExp,2), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'O/U', bet:'Over 2.5 doelpunten', kans:poissonAtLeast(totalExp,3), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'O/U', bet:'Under 2.5 doelpunten', kans:poissonAtMost(totalExp,2), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'O/U', bet:'Under 1.5 doelpunten', kans:poissonAtMost(totalExp,1), match:`${m.h} vs ${m.a}`});
+
+    // Clean sheet
+    bets.push({type:'CS', bet:`${m.h} clean sheet`, kans:poissonAtMost(aExpected,0), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'CS', bet:`${m.a} clean sheet`, kans:poissonAtMost(hExpected,0), match:`${m.h} vs ${m.a}`});
+
+    // Team scoort 2+
+    bets.push({type:'Team goals', bet:`${m.h} scoort 2+`, kans:poissonAtLeast(hExpected,2), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'Team goals', bet:`${m.a} scoort 2+`, kans:poissonAtLeast(aExpected,2), match:`${m.h} vs ${m.a}`});
+  }
+
+  // ── Speler bets via Poisson ──
+  const allPlayers = [
+    ...(hLinup||[]).slice(0,5).map(p=>({...p,side:'h'})),
+    ...(aLinup||[]).slice(0,5).map(p=>({...p,side:'a'}))
+  ];
+  for(const p of allPlayers) {
+    const xg = p.avg_xg ?? p.xg ?? 0;
+    const sot = p.avg_sot ?? p.sot ?? 0;
+    const shots = p.avg_shots ?? p.shots ?? 0;
+
+    if(xg > 0) {
+      const pScores = Math.round((1 - Math.exp(-xg)) * 100);
+      bets.push({type:'Speler scoort', bet:`${p.n} scoort`, kans:pScores, match:`${m.h} vs ${m.a}`, detail:`xG/wed: ${nf(xg)}`});
+    }
+    if(sot > 0) {
+      bets.push({type:'Speler SoT', bet:`${p.n} 1+ schot op doel`, kans:poissonAtLeast(sot,1), match:`${m.h} vs ${m.a}`, detail:`SoT/wed: ${nf(sot,1)}`});
+      if(sot >= 1.5) bets.push({type:'Speler SoT', bet:`${p.n} 2+ schoten op doel`, kans:poissonAtLeast(sot,2), match:`${m.h} vs ${m.a}`});
+    }
+    if(shots > 0) {
+      bets.push({type:'Speler sch', bet:`${p.n} 1+ schot`, kans:poissonAtLeast(shots,1), match:`${m.h} vs ${m.a}`, detail:`sch/wed: ${nf(shots,1)}`});
+    }
+    if(xg > 0 || sot > 0) {
+      const pShotOrGoal = Math.min(99, Math.round((1 - Math.exp(-(xg + sot*0.3))) * 100));
+      bets.push({type:'Speler betrokken', bet:`${p.n} scoort of assist`, kans:Math.round((1-Math.exp(-(xg+(p.assists/Math.max(p.matches||1,1)*0.5))))*100), match:`${m.h} vs ${m.a}`});
+    }
+  }
+
+  // Sorteer op kans (hoogste eerst)
+  return bets.sort((a,b) => b.kans - a.kans);
+}
 async function generateOverallBet(){
   if(!WORKER_URL) return;
   const btn = document.querySelector('.overall-bet-btn');
@@ -979,44 +1043,27 @@ async function generateOverallBet(){
   ).sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
 
   // Bouw matchdata op per wedstrijd
-  const matchData = ms.map(m => {
-    const odds = getOdds(m.h, m.a);
-    const hRow = teamStanding(m.h);
-    const aRow = teamStanding(m.a);
-    const hPlayers = (PLAYER_STATS[m.h] || []).slice(0,3);
-    const aPlayers = (PLAYER_STATS[m.a] || []).slice(0,3);
+  // Pre-bereken kansen voor alle wedstrijden
+  const allMatchBets = ms.map(m => {
+    const mOdds = getOdds(m.h, m.a);
+    const mH = (PLAYER_STATS[m.h] || []);
+    const mA = (PLAYER_STATS[m.a] || []);
+    const bets = calculateBetProbs(m, mOdds, mH, mA);
+    const topBets = bets.filter(b => b.kans >= 45).slice(0, 15);
+    return `WEDSTRIJD: ${m.h} vs ${m.a} (${m.time} NL${m.date !== selDate ? " morgen" : ""})\n` +
+      topBets.map(b => `  ${b.type} | ${b.bet} | ${b.kans}%${b.detail?" ("+b.detail+")":""}`).join("\n");
+  }).join("\n---\n");
 
-    const fmt = players => players.map(p =>
-      `${p.n}(rat:${p.avg_rating??'-'},xG:${nf(p.avg_xg??0)},SoT:${nf(p.avg_sot??0,1)},sch:${nf(p.avg_shots??0,1)},goals:${p.goals})`
-    ).join('; ');
+  const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
-    return `
-WEDSTRIJD: ${m.h} vs ${m.a} (${m.time} NL, ${RL(m.g)})
-Odds: 1=${odds?.h?.toFixed(2)??'?'} X=${odds?.d?.toFixed(2)??'?'} 2=${odds?.a?.toFixed(2)??'?'}
-${m.h}: ${hRow?.played??0} wed, ${hRow?.pts??0}pts, gem ${hRow?.played?(hRow.gf/hRow.played).toFixed(1):'?'} voor/${hRow?.played?(hRow.ga/hRow.played).toFixed(1):'?'} tegen
-${m.a}: ${aRow?.played??0} wed, ${aRow?.pts??0}pts, gem ${aRow?.played?(aRow.gf/aRow.played).toFixed(1):'?'} voor/${aRow?.played?(aRow.ga/aRow.played).toFixed(1):'?'} tegen
-${m.h} spelers: ${fmt(hPlayers)||'geen data'}
-${m.a} spelers: ${fmt(aPlayers)||'geen data'}`;
-  }).join('\n---\n');
+DOEL: Kies 2-4 onderdelen uit VERSCHILLENDE wedstrijden met samen 60%+ gecombineerde kans.
+Gecombineerde kans = kans1/100 x kans2/100 x ... x 100. Gebruik exact de kansen uit de lijst.
 
-  const prompt = `Je bent een sportsbetting analist voor WK 2026. Analyseer ALLE onderstaande wedstrijden van vandaag en maak de beste dagelijkse combinatiebet.
-
-DOEL: Minimaal 60% gecombineerde slagingskans. Kies 2-4 onderdelen uit VERSCHILLENDE wedstrijden die samen sterk zijn.
-Denk in: matchwinnaar, speler SoT, BTTS ja/nee, sterke favoriet wint, etc.
-De enige echte quotes zijn de 1X2 odds. Verzin NOOIT andere quotes.
-
-WEDSTRIJDEN VAN VANDAAG:
-${matchData}
-
-SCHAT per onderdeel een realistisch slagingspercentage:
-- Matchwinnaar: gebruik 1/odds x 100
-- Speler 1+ SoT: 2+ SoT/wed = ~85%, 1-2 = ~65%, <1 = ~40%
-- Speler scoort: xG 0.5+ = ~40%, 0.3 = ~25%
-- BTTS nee: team laat <0.5 goals/wed toe = ~60%
-- Gecombineerd = vermenigvuldig alle kansen
+PRE-BEREKENDE KANSEN PER WEDSTRIJD:
+${allMatchBets || "Onvoldoende data"}
 
 Antwoord ALLEEN in dit JSON formaat:
-{"tip":"<korte samenvatting>","onderdelen":[{"wedstrijd":"<thuis vs uit>","bet":"<concrete bet>","kans":<0-100>},{"wedstrijd":"...","bet":"...","kans":<0-100>}],"gecombineerde_kans":<0-100>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
+{"tip":"<samenvatting>","onderdelen":[{"wedstrijd":"<thuis vs uit>","bet":"<bet uit lijst>","kans":<getal>},{"wedstrijd":"...","bet":"...","kans":<getal>}],"gecombineerde_kans":<product>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
 
   try {
     const res = await fetch(WORKER_URL + '/ai-bet', {
