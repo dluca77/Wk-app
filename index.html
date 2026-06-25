@@ -127,6 +127,21 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
 .stable tr.q td.steam{color:var(--mint)}
 .stable tr.q{background:rgba(126,232,195,.05)}
 .overall-bet-btn{width:100%;padding:14px;border-radius:14px;border:1px solid rgba(251,191,36,.4);background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(249,115,22,.08));color:var(--gold);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s}
+.pin-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
+.pin-logo{font-size:48px;margin-bottom:8px}
+.pin-title{font-size:22px;font-weight:700;margin-bottom:4px}
+.pin-sub{font-size:13px;color:var(--muted);margin-bottom:32px}
+.pin-dots{display:flex;gap:14px;margin-bottom:32px}
+.pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--border2);transition:all .15s}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent)}
+.pin-dot.error{background:var(--peach);border-color:var(--peach)}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:240px}
+.pin-btn{height:72px;border-radius:16px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:22px;font-weight:600;cursor:pointer;transition:all .1s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.pin-btn:active{background:var(--surface2);transform:scale(.95)}
+.pin-btn .sub{font-size:9px;color:var(--muted2);letter-spacing:.05em;font-weight:400}
+.pin-btn.del{font-size:18px}
+.pin-err{color:var(--peach);font-size:13px;margin-top:12px;min-height:20px}
+.admin-btn{position:fixed;top:14px;right:14px;background:rgba(255,255,255,.08);border:none;border-radius:8px;padding:6px 10px;color:var(--muted);font-size:11px;cursor:pointer;z-index:100}
 .overall-bet-btn:active{opacity:.8}
 .overall-bet-panel{background:var(--surface);border:1px solid rgba(251,191,36,.3);border-radius:14px;padding:16px;margin-bottom:14px}
 .overall-bet-panel .ob-title{font-size:15px;font-weight:700;margin-bottom:12px;color:var(--gold)}
@@ -170,7 +185,42 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
   <div id="standingsView" style="display:none"></div>
   <div id="topscorersView" style="display:none"></div>
 </div>
-<div class="overlay" id="overlay" onclick="closeOv(event)">
+<div id="pin-screen" class="pin-screen">
+  <div class="pin-logo">⚽</div>
+  <div class="pin-title">WK 2026</div>
+  <div class="pin-sub">Voer de 4-cijferige pincode in</div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+  <div class="pin-grid">
+    <button class="pin-btn" onclick="pinPress(1)">1<span class="sub"></span></button>
+    <button class="pin-btn" onclick="pinPress(2)">2<span class="sub">ABC</span></button>
+    <button class="pin-btn" onclick="pinPress(3)">3<span class="sub">DEF</span></button>
+    <button class="pin-btn" onclick="pinPress(4)">4<span class="sub">GHI</span></button>
+    <button class="pin-btn" onclick="pinPress(5)">5<span class="sub">JKL</span></button>
+    <button class="pin-btn" onclick="pinPress(6)">6<span class="sub">MNO</span></button>
+    <button class="pin-btn" onclick="pinPress(7)">7<span class="sub">PQRS</span></button>
+    <button class="pin-btn" onclick="pinPress(8)">8<span class="sub">TUV</span></button>
+    <button class="pin-btn" onclick="pinPress(9)">9<span class="sub">WXYZ</span></button>
+    <button class="pin-btn" style="opacity:0" disabled></button>
+    <button class="pin-btn" onclick="pinPress(0)">0</button>
+    <button class="pin-btn del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-err" id="pin-err"></div>
+</div>
+
+<button class="admin-btn" id="admin-btn" style="display:none" onclick="openAdmin()">👥 Bezoekers</button>
+
+<div class="overlay" id="admin-overlay" onclick="if(event.target===this)closeAdmin()" style="display:none">
+  <div class="modal" style="display:flex">
+    <div class="mhandle"></div>
+    <div class="mhdr"><div class="mtitle">👥 Bezoekers</div><div class="mclose" onclick="closeAdmin()">✕</div></div>
+    <div class="mbody" id="admin-body"><div style="text-align:center;padding:32px;color:var(--muted)">Laden...</div></div>
+  </div>
+</div>
   <div class="modal" id="match-modal">
     <div class="mhandle"></div>
     <div class="mhdr"><div class="mtitle" id="mtitle"></div><div class="mclose" onclick="closeModal()">✕</div></div>
@@ -1277,15 +1327,109 @@ function closeObModal(){
   const btn = document.querySelector(".overall-bet-btn");
   if(btn && btn.disabled) { btn.innerHTML = "🎯 Beste Dagtip"; btn.disabled = false; }
 }
+// ── PIN VERGRENDELING ──
+let pinEntry = '';
+const DEVICE_ID = localStorage.getItem('wk_device') || (()=>{const id='d_'+Math.random().toString(36).slice(2);localStorage.setItem('wk_device',id);return id;})();
+
+function pinPress(n){
+  if(pinEntry.length >= 4) return;
+  pinEntry += String(n);
+  updateDots();
+  if(pinEntry.length === 4) setTimeout(checkPin, 100);
+}
+function pinDel(){
+  pinEntry = pinEntry.slice(0,-1);
+  document.getElementById('pin-err').textContent = '';
+  updateDots(false);
+}
+function updateDots(error=false){
+  for(let i=0;i<4;i++){
+    const d = document.getElementById('d'+i);
+    d.className = 'pin-dot' + (i < pinEntry.length ? (error?' error':' filled') : '');
+  }
+}
+async function checkPin(){
+  try {
+    const res = await fetch(WORKER_URL+'/check-pin',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pin: pinEntry, deviceId: DEVICE_ID})
+    });
+    const data = await res.json();
+    if(data.ok){
+      localStorage.setItem('wk_pin_ok', Date.now());
+      if(data.isAdmin) localStorage.setItem('wk_is_admin', '1');
+      else localStorage.removeItem('wk_is_admin');
+      document.getElementById('pin-screen').style.display = 'none';
+      if(data.isAdmin) document.getElementById('admin-btn').style.display = '';
+    } else {
+      updateDots(true);
+      document.getElementById('pin-err').textContent = 'Verkeerde pincode — probeer opnieuw';
+      setTimeout(()=>{ pinEntry=''; updateDots(); document.getElementById('pin-err').textContent=''; }, 1200);
+    }
+  } catch(e) {
+    document.getElementById('pin-err').textContent = 'Verbindingsfout — probeer opnieuw';
+    setTimeout(()=>{ pinEntry=''; updateDots(); }, 1500);
+  }
+}
+function checkSession(){
+  const saved = localStorage.getItem('wk_pin_ok');
+  if(!saved) return false;
+  const age = Date.now() - parseInt(saved);
+  return age < 24*60*60*1000; // 24 uur geldig
+}
+
+// ── ADMIN BEZOEKERS ──
+async function openAdmin(){
+  document.getElementById('admin-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  const el = document.getElementById('admin-body');
+  el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)"><div class="ai-spinner"></div></div>';
+  try {
+    const res = await fetch(WORKER_URL+'/visitors?key=wk26-refresh-x7k2');
+    const data = await res.json();
+    const rows = (data.visitors||[]).map((v,i) => {
+      const last = new Date(v.lastSeen);
+      const ago = Math.round((Date.now()-last)/60000);
+      const agoStr = ago < 60 ? `${ago}min geleden` : ago < 1440 ? `${Math.round(ago/60)}u geleden` : `${Math.round(ago/1440)}d geleden`;
+      const isMe = v.id === DEVICE_ID;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <div>
+          <span style="color:${isMe?'var(--mint)':'var(--text)'}">${isMe?'👤 Jij':'👥 Gebruiker '+(i+1)}</span>
+          <div style="font-size:10px;color:var(--muted2)">${v.id.slice(0,12)}...</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:var(--muted)">${agoStr}</div>
+          <div style="font-size:10px;color:var(--muted2)">${v.count}× ingelogd</div>
+        </div>
+      </div>`;
+    }).join('');
+    el.innerHTML = `<div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:32px;font-weight:700;color:var(--mint)">${data.total}</div>
+      <div style="color:var(--muted);font-size:13px">unieke gebruiker${data.total!==1?'s':''}</div>
+    </div>${rows}`;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--muted2);text-align:center;padding:20px">Fout: ${e.message}</div>`;
+  }
+}
+function closeAdmin(){
+  document.getElementById('admin-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
 // ── INIT ──
+if(checkSession()){
+  document.getElementById("pin-screen").style.display = "none";
+  if(localStorage.getItem('wk_is_admin')) document.getElementById("admin-btn").style.display = "";
+}
 buildNav();
 render();
-fetchLiveData().then(render); // verrijk zodra de eerste live-data binnen is
+fetchLiveData().then(render);
 setInterval(()=>{
   fetchLiveData().then(()=>{
-    if(selView==='matches' && selDate===TODAY) render();
-    if(selView==='standings') renderStandings();
-    if(selView==='topscorers') renderTopscorers();
+    if(selView==="matches" && selDate===TODAY) render();
+    if(selView==="standings") renderStandings();
+    if(selView==="topscorers") renderTopscorers();
   });
 },45000);
 </script>
