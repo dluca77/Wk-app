@@ -807,8 +807,14 @@ WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g)}, ${m.date} ${m.time} NL)
 PRE-BEREKENDE KANSEN (gebruik deze exact, verzin niets):
 ${betsStr || "Onvoldoende data"}
 
-OPDRACHT: Kies 2-3 onderdelen die samen 60%+ gecombineerde kans hebben en logisch bij elkaar passen.
-Gecombineerde kans = kans1/100 x kans2/100 x 100. Neem exact de kansen uit de lijst.
+OPDRACHT: Kies het optimale aantal onderdelen (1 tot 10) uit de lijst.
+Regels:
+- 1 bet: alleen als die 85%+ heeft
+- 2-3 bets: gecombineerd 60%+
+- 4-6 bets: gecombineerd 40%+, maar elke losse bet 70%+
+- Meer bets = hogere quote, minder bets = hogere zekerheid
+- Kies wat het beste risico/beloning geeft op basis van de data
+Gecombineerde kans = kans1/100 x kans2/100 x ... x 100. Gebruik exact de kansen uit de lijst.
 
 Antwoord ALLEEN in dit JSON formaat:
 {"type":"Combinatie","tip":"<tip>","onderdelen":[{"bet":"<bet uit lijst>","kans":<getal>},{"bet":"<bet>","kans":<getal>}],"gecombineerde_kans":<product>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
@@ -1056,7 +1062,13 @@ async function generateOverallBet(){
 
   const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
-DOEL: Kies 2-4 onderdelen uit VERSCHILLENDE wedstrijden met samen 60%+ gecombineerde kans.
+DOEL: Kies het optimale aantal onderdelen (1 tot 10) uit VERSCHILLENDE wedstrijden.
+Regels:
+- 1 bet: alleen als die 85%+ heeft
+- 2-3 bets: gecombineerd 60%+
+- 4-6 bets: gecombineerd 40%+, maar elke losse bet 70%+
+- 7-10 bets: alleen als elke losse bet 80%+ heeft
+- Meer bets = hogere quote maar lager zekerheid — kies het beste evenwicht
 Gecombineerde kans = kans1/100 x kans2/100 x ... x 100. Gebruik exact de kansen uit de lijst.
 
 PRE-BEREKENDE KANSEN PER WEDSTRIJD:
