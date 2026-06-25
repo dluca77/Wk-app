@@ -265,7 +265,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   <div class="modal" style="border-radius:24px;margin:20px;max-height:85vh">
     <div class="mhandle"></div>
     <div class="mhdr"><div class="mtitle" id="admin-title">🔐 Admin</div><div class="mclose" onclick="closeAdmin()">✕</div></div>
-    <div class="mbody" style="display:flex;flex-direction:column;align-items:center;padding:16px 16px 40px" id="admin-body">
+    <div class="mbody" style="display:flex;flex-direction:column;align-items:center;padding:8px 20px 36px" id="admin-body">
       <div id="admin-pin-view" style="display:flex;flex-direction:column;align-items:center;width:100%">
         <div style="margin-bottom:24px;color:var(--muted);font-size:13px">Voer admin code in</div>
         <div class="pin-dots" style="justify-content:center;margin-bottom:28px">
@@ -1431,7 +1431,7 @@ async function checkAdminPin(){
     const res = await fetch(WORKER_URL+'/check-pin',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({pin: adminPinEntry, deviceId: DEVICE_ID})
+      body: JSON.stringify({pin: adminPinEntry, deviceId: DEVICE_ID, ua: navigator.userAgent})
     });
     const data = await res.json();
     if(data.ok && data.isAdmin){
@@ -1455,15 +1455,20 @@ async function loadAdminStats(){
   try {
     const res = await fetch(WORKER_URL+'/visitors?key=wk26-refresh-x7k2');
     const data = await res.json();
-    const rows = (data.visitors||[]).map((v,i) => {
-      const last = new Date(v.lastSeen);
-      const ago = Math.round((Date.now()-last)/60000);
+    const rows = (data.visitors||[]).map(v => {
+      const ago = Math.round((Date.now()-new Date(v.lastSeen))/60000);
       const agoStr = ago < 60 ? ago+'min geleden' : ago < 1440 ? Math.round(ago/60)+'u geleden' : Math.round(ago/1440)+'d geleden';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px"><div><div>👤 Device '+(i+1)+'</div><div style="font-size:10px;color:var(--muted2)">'+v.id.slice(0,16)+'</div></div><div style="text-align:right"><div style="color:var(--muted)">'+agoStr+'</div><div style="font-size:10px;color:var(--muted2)">'+v.count+'× ingelogd</div></div></div>';
+      const icon = (v.device||'').match(/iPhone|iPad|Android|Samsung|Pixel/) ? '📱' : (v.device||'').match(/Mac|Windows|Linux/) ? '💻' : '📟';
+      return '<div style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="font-size:26px">'+icon+'</div>'
+        + '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">'+( v.device||'Onbekend')+(v.browser?' · '+v.browser:'' )+'</div>'
+        + '<div style="font-size:11px;color:var(--muted);margin-top:3px">📍 '+(v.location||'Onbekend')+'</div></div>'
+        + '<div style="text-align:right;flex-shrink:0"><div style="font-size:12px;color:var(--muted)">'+ agoStr +'</div><div style="font-size:10px;color:var(--muted2);margin-top:2px">'+v.count+'× ingelogd</div></div></div>';
     }).join('');
-    el.innerHTML = '<div style="text-align:center;margin-bottom:16px"><div style="font-size:32px;font-weight:700;color:var(--mint)">'+data.total+'</div><div style="color:var(--muted);font-size:13px">unieke device'+(data.total!==1?'s':'')+'</div></div>'+rows;
+    el.innerHTML = '<div style="text-align:center;padding:16px 0 20px"><div style="font-size:52px;font-weight:800;color:var(--mint);line-height:1">'+data.total+'</div>'
+      + '<div style="color:var(--muted);font-size:13px;margin-top:4px">unieke device'+(data.total!==1?'s':'')+'</div></div>'+rows;
   } catch(e) {
-    el.innerHTML = '<div style="color:var(--muted2);text-align:center;padding:20px">Fout: '+e.message+'</div>';
+    el.innerHTML = '<div style="color:var(--peach);text-align:center;padding:20px">Fout: '+e.message+'</div>';
   }
 }
 function closeAdmin(){
