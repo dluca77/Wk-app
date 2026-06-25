@@ -137,6 +137,8 @@ html,body{background:var(--bg);color:var(--text);font-family:-apple-system,Blink
 .snote{font-size:10px;color:var(--muted2);margin-top:4px}
 .supdated{font-size:10px;color:var(--muted2);text-align:right;margin-bottom:10px}
 .ai-loading{color:var(--muted);font-size:13px}
+.ai-spinner{width:28px;height:28px;border:3px solid rgba(251,191,36,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
 .dots{display:inline-block;animation:dotpulse 1.2s infinite}
 @keyframes dotpulse{0%,100%{opacity:1}50%{opacity:.3}}
 </style>
@@ -769,10 +771,12 @@ function openModal(id){
       </div>
       ${oddsHtml}
     </div>
-    <div id="ai-bet-box" class="bb" style="min-height:80px">
+    <div id="ai-bet-box" class="bb" style="min-height:90px">
       <div class="bbl">🤖 AI BET ANALYSE</div>
-      <div id="ai-bet-content" style="color:var(--muted);font-size:13px;padding:8px 0">
-        <span class="ai-loading">Analyse bezig<span class="dots">...</span></span>
+      <div id="ai-bet-content" style="text-align:center;padding:12px 0">
+        <div class="ai-spinner"></div>
+        <div style="color:var(--muted);font-size:12px">Wedstrijd analyseren<span class="dots">...</span></div>
+        <div style="color:var(--muted2);font-size:10px;margin-top:4px">Kansen berekenen · Data ophalen · Combinatie samenstellen</div>
       </div>
     </div>
     ${bbHtml}
@@ -883,22 +887,39 @@ Antwoord ALLEEN in dit JSON formaat:
     }
     const riskColor = bet.risico==='laag'?'var(--mint)':'var(--gold)';
     const onderdelen = Array.isArray(bet.onderdelen) ? bet.onderdelen : [];
+    // Zoek echte odds per onderdeel + bereken gecombineerde odd
+    let combOdd = 1;
+    let allHaveOdds = true;
     const onderdelenHtml = onderdelen.filter(o=>o&&o.bet).map(o => {
       const k = o.kans ?? 0;
       const kleur = k >= 70 ? 'var(--mint)' : k >= 50 ? 'var(--gold)' : 'var(--peach)';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:12px">✓ ${o.bet}</span>
+      // Probeer echte odd op te zoeken
+      const matchRef = o.wedstrijd || `${m.h} vs ${m.a}`;
+      const parts = matchRef.split(' vs ');
+      const realOdd = getRealOddForBet(o.bet, parts[0]||m.h, parts[1]||m.a);
+      if(realOdd) combOdd *= realOdd; else allHaveOdds = false;
+      const oddStr = realOdd ? `<span style="background:rgba(251,191,36,.15);color:var(--gold);font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:6px">${realOdd.toFixed(2)}</span>` : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <span style="font-size:12px">✓ ${o.bet}</span>${oddStr}
+          ${o.wedstrijd ? `<div style="font-size:10px;color:var(--muted2)">${o.wedstrijd}</div>` : ''}
+        </div>
         <span style="font-size:12px;font-weight:700;color:${kleur};white-space:nowrap;margin-left:8px">${k}%</span>
       </div>`;
     }).join('');
     const combKans = bet.gecombineerde_kans ?? null;
     const combKleur = combKans >= 60 ? 'var(--mint)' : combKans >= 45 ? 'var(--gold)' : 'var(--peach)';
+    const totalOddHtml = allHaveOdds && onderdelen.length > 0 ?
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border);margin-top:4px">
+        <span style="font-size:12px;color:var(--muted2)">Gecombineerde quote</span>
+        <span style="font-size:16px;font-weight:700;color:var(--gold)">${combOdd.toFixed(2)}</span>
+      </div>` : '';
     el.innerHTML = `
       ${reliabilityHtml}
       <div class="bbt" style="margin-bottom:8px">🎯 ${bet.tip}</div>
-      ${onderdelenHtml ? `<div style="margin:10px 0">${onderdelenHtml}</div>` : ''}
+      ${onderdelenHtml ? `<div style="margin:10px 0">${onderdelenHtml}${totalOddHtml}</div>` : ''}
       ${combKans ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-weight:700">
-        <span>Gecombineerde slagingskans</span>
+        <span>Slagingskans</span>
         <span style="color:${combKleur};font-size:16px">${combKans}%</span>
       </div>${combKans < 60 ? `<div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:7px 10px;margin-bottom:4px;font-size:11px;color:var(--peach)">⚠️ Onder 60% — overweeg minder onderdelen</div>` : ''}` : ''}
       <div class="bbw" style="margin-top:8px">
@@ -1003,6 +1024,29 @@ function getOddsApiMatch(h, a) {
     const aMatch = d.a.toLowerCase().includes(a.toLowerCase().slice(0,5)) || a.toLowerCase().includes(d.a.toLowerCase().slice(0,5));
     if(hMatch && aMatch) return d;
   }
+  return null;
+}
+
+function getRealOddForBet(bet, matchH, matchA) {
+  const d = getOddsApiMatch(matchH, matchA);
+  if(!d?.odds) return null;
+  const b = bet.toLowerCase();
+  // 1X2
+  if((b.includes(matchH.toLowerCase().slice(0,4)) || b.includes('thuis')) && (b.includes('wint') || b.includes('win'))) return d.odds['1X2']?.h;
+  if((b.includes(matchA.toLowerCase().slice(0,4)) || b.includes('uit')) && (b.includes('wint') || b.includes('win'))) return d.odds['1X2']?.a;
+  if(b.includes('gelijkspel') || b === 'x' || b.includes('draw')) return d.odds['1X2']?.d;
+  // BTTS
+  if(b.includes('beide teams') || b.includes('btts') || b.includes('both teams')) {
+    if(b.includes('ja') || b.includes('yes')) return d.odds['BTTS']?.yes;
+    if(b.includes('nee') || b.includes('no')) return d.odds['BTTS']?.no;
+  }
+  // Over/Under
+  if(b.includes('over 2.5') || b.includes('over2.5')) return d.odds['O/U_2.5']?.over;
+  if(b.includes('under 2.5') || b.includes('onder 2.5')) return d.odds['O/U_2.5']?.under;
+  if(b.includes('over 1.5') || b.includes('over1.5')) return d.odds['O/U_1.5']?.over;
+  if(b.includes('under 1.5') || b.includes('onder 1.5')) return d.odds['O/U_1.5']?.under;
+  if(b.includes('over 3.5') || b.includes('over3.5')) return d.odds['O/U_3.5']?.over;
+  if(b.includes('under 3.5') || b.includes('onder 3.5')) return d.odds['O/U_3.5']?.under;
   return null;
 }
 
@@ -1161,17 +1205,20 @@ Antwoord ALLEEN in dit JSON formaat:
     const combKleur = combKans >= 65 ? 'var(--mint)' : combKans >= 50 ? 'var(--gold)' : 'var(--peach)';
     const riskColor = bet.risico==='laag'?'var(--mint)':'var(--gold)';
 
+    // Bereken gecombineerde quote op basis van echte odds
+    let totalOdd = 1;
+    let allHaveOdds = true;
     const legsHtml = onderdelen.map(o => {
       const k = o.kans ?? 0;
       const kl = k>=70?'var(--mint)':k>=50?'var(--gold)':'var(--peach)';
-      return `<div class="ob-leg">
-        <div>
-          <div style="font-weight:600">✓ ${o.bet}</div>
-          <div class="ob-leg-match">${o.wedstrijd||''}</div>
-        </div>
-        <div style="color:${kl};font-weight:700;white-space:nowrap;margin-left:12px">${k}%</div>
-      </div>`;
+      const parts = (o.wedstrijd||'').split(' vs ');
+      const realOdd = parts.length >= 2 ? getRealOddForBet(o.bet, parts[0].trim(), parts[1].trim()) : null;
+      if(realOdd) totalOdd *= realOdd; else allHaveOdds = false;
+      const oddTxt = realOdd ? ' <span style="background:rgba(251,191,36,.15);color:var(--gold);font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px">' + realOdd.toFixed(2) + '</span>' : '';
+      return '<div class="ob-leg"><div style="flex:1"><div style="font-weight:600">✓ ' + o.bet + oddTxt + '</div><div class="ob-leg-match">' + (o.wedstrijd||'') + '</div></div><div style="color:' + kl + ';font-weight:700;white-space:nowrap;margin-left:12px">' + k + '%</div></div>';
     }).join('');
+    const totalOddHtml = allHaveOdds && onderdelen.length > 0 ?
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);margin-top:4px"><span style="color:var(--muted2)">Gecombineerde quote</span><span style="font-size:18px;font-weight:700;color:var(--gold)">' + totalOdd.toFixed(2) + '</span></div>' : '';
 
     // Betrouwbaarheidsindicator voor alle wedstrijden
     const gamesCounts = ms.map(m => {
@@ -1193,8 +1240,9 @@ Antwoord ALLEEN in dit JSON formaat:
       </div>
       <div style="margin-bottom:16px;font-size:15px;font-weight:700;color:var(--gold)">🎯 ${bet.tip}</div>
       ${legsHtml}
+      ${totalOddHtml}
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-weight:700;font-size:14px">
-        <span>Gecombineerde slagingskans</span>
+        <span>Slagingskans</span>
         <span style="color:${combKleur};font-size:20px">${combKans}%</span>
       </div>
       ${combKans < 60 ? '<div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--peach)">⚠️ Onder 60% — overweeg minder onderdelen</div>' : ''}
