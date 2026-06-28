@@ -979,6 +979,18 @@ Regels:
 - 4-6 bets: gecombineerd 40%+, maar elke losse bet 70%+
 - Meer bets = hogere quote, minder bets = hogere zekerheid
 - Kies wat het beste risico/beloning geeft op basis van de data
+
+Beschikbare bettypen (kies wat het sterkst is onderbouwd):
+• Draw No Bet — veiliger dan 1X2, geld terug bij gelijkspel
+• Double Chance (1X/X2/12) — twee uitkomsten tegelijk
+• 1X2 & BTTS combinaties — team wint EN beide scoren of niet
+• 1X2 & Over/Under combinaties — team wint EN goals boven/onder grens
+• 1e Helft Over/Under — ruststand totaal goals
+• Clean Sheet — een team houdt nul
+• Handicap (-1) — favoriet wint met 2+ goals verschil
+• HT/FT (rust/eindstand) — leidt bij rust én wint ook
+• DC & Over/Under — dubbele kans gecombineerd met goals
+
 Gecombineerde kans = kans1/100 x kans2/100 x ... x 100. Gebruik exact de kansen uit de lijst.
 
 Antwoord ALLEEN in dit JSON formaat:
@@ -1156,22 +1168,32 @@ function getRealOddForBet(bet, matchH, matchA) {
   const d = getOddsApiMatch(matchH, matchA);
   if(!d?.odds) return null;
   const b = bet.toLowerCase();
+  const h = matchH.toLowerCase(), a = matchA.toLowerCase();
+
   // 1X2
-  if((b.includes(matchH.toLowerCase().slice(0,4)) || b.includes('thuis')) && (b.includes('wint') || b.includes('win'))) return d.odds['1X2']?.h;
-  if((b.includes(matchA.toLowerCase().slice(0,4)) || b.includes('uit')) && (b.includes('wint') || b.includes('win'))) return d.odds['1X2']?.a;
-  if(b.includes('gelijkspel') || b === 'x' || b.includes('draw')) return d.odds['1X2']?.d;
+  if((b.includes(h.slice(0,4)) || b.includes('thuis')) && (b.includes('wint') || b.includes('win'))) return d.odds['1X2']?.h;
+  if((b.includes(a.slice(0,4)) || b.includes('uit')) && (b.includes('wint') || b.includes('win'))) return d.odds['1X2']?.a;
+  if(b.includes('gelijkspel') && !b.includes('no bet') && !b.includes('draw no') && !b.includes('1x') && !b.includes('x2') && !b.includes('12')) return d.odds['1X2']?.d;
+
   // BTTS
   if(b.includes('beide teams') || b.includes('btts') || b.includes('both teams')) {
     if(b.includes('ja') || b.includes('yes')) return d.odds['BTTS']?.yes;
     if(b.includes('nee') || b.includes('no')) return d.odds['BTTS']?.no;
   }
+
   // Over/Under
-  if(b.includes('over 2.5') || b.includes('over2.5')) return d.odds['O/U_2.5']?.over;
+  if(b.includes('over 2.5')) return d.odds['O/U_2.5']?.over;
   if(b.includes('under 2.5') || b.includes('onder 2.5')) return d.odds['O/U_2.5']?.under;
-  if(b.includes('over 1.5') || b.includes('over1.5')) return d.odds['O/U_1.5']?.over;
+  if(b.includes('over 1.5')) return d.odds['O/U_1.5']?.over;
   if(b.includes('under 1.5') || b.includes('onder 1.5')) return d.odds['O/U_1.5']?.under;
-  if(b.includes('over 3.5') || b.includes('over3.5')) return d.odds['O/U_3.5']?.over;
+  if(b.includes('over 3.5')) return d.odds['O/U_3.5']?.over;
   if(b.includes('under 3.5') || b.includes('onder 3.5')) return d.odds['O/U_3.5']?.under;
+
+  // Double Chance
+  if(b.includes('of gelijkspel') || b.includes('(1x)') || b === '1x') return d.odds['DC_1X'];
+  if(b.includes('(x2)') || b === 'x2') return d.odds['DC_X2'];
+  if(b.includes('(12)') || b === '12') return d.odds['DC_12'];
+
   return null;
 }
 
@@ -1195,10 +1217,11 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
     const hGA = hRow.ga / hRow.played;
     const aGF = aRow.gf / aRow.played;
     const aGA = aRow.ga / aRow.played;
-    // Verwachte goals = gemiddelde van aanval vs verdediging tegenstander
     const hExpected = (hGF + aGA) / 2;
     const aExpected = (aGF + hGA) / 2;
     const totalExp = hExpected + aExpected;
+    const hExpHalf = hExpected / 2;
+    const aExpHalf = aExpected / 2;
 
     // BTTS
     const pHScores = poissonAtLeast(hExpected, 1);
@@ -1210,16 +1233,79 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
     // Over/Under
     bets.push({type:'O/U', bet:'Over 1.5 doelpunten', kans:poissonAtLeast(totalExp,2), match:`${m.h} vs ${m.a}`});
     bets.push({type:'O/U', bet:'Over 2.5 doelpunten', kans:poissonAtLeast(totalExp,3), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'O/U', bet:'Over 3.5 doelpunten', kans:poissonAtLeast(totalExp,4), match:`${m.h} vs ${m.a}`});
     bets.push({type:'O/U', bet:'Under 2.5 doelpunten', kans:poissonAtMost(totalExp,2), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'O/U', bet:'Under 3.5 doelpunten', kans:poissonAtMost(totalExp,3), match:`${m.h} vs ${m.a}`});
     bets.push({type:'O/U', bet:'Under 1.5 doelpunten', kans:poissonAtMost(totalExp,1), match:`${m.h} vs ${m.a}`});
 
+    // 1e Helft Over/Under
+    bets.push({type:'1e Helft O/U', bet:'1e helft Over 0.5', kans:poissonAtLeast(hExpHalf+aExpHalf,1), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'1e Helft O/U', bet:'1e helft Under 1.5', kans:poissonAtMost(hExpHalf+aExpHalf,1), match:`${m.h} vs ${m.a}`});
+    bets.push({type:'1e Helft O/U', bet:'1e helft Over 1.5', kans:poissonAtLeast(hExpHalf+aExpHalf,2), match:`${m.h} vs ${m.a}`});
+
     // Clean sheet
-    bets.push({type:'CS', bet:`${m.h} clean sheet`, kans:poissonAtMost(aExpected,0), match:`${m.h} vs ${m.a}`});
-    bets.push({type:'CS', bet:`${m.a} clean sheet`, kans:poissonAtMost(hExpected,0), match:`${m.h} vs ${m.a}`});
+    const pHCS = poissonAtMost(aExpected,0);
+    const pACS = poissonAtMost(hExpected,0);
+    bets.push({type:'Clean Sheet', bet:`${m.h} clean sheet`, kans:pHCS, match:`${m.h} vs ${m.a}`});
+    bets.push({type:'Clean Sheet', bet:`${m.a} clean sheet`, kans:pACS, match:`${m.h} vs ${m.a}`});
 
     // Team scoort 2+
     bets.push({type:'Team goals', bet:`${m.h} scoort 2+`, kans:poissonAtLeast(hExpected,2), match:`${m.h} vs ${m.a}`});
     bets.push({type:'Team goals', bet:`${m.a} scoort 2+`, kans:poissonAtLeast(aExpected,2), match:`${m.h} vs ${m.a}`});
+
+    // Draw No Bet (alleen als 1X2 odds bekend zijn)
+    if(odds) {
+      const r1=1/odds.h, rx=1/odds.d, r2=1/odds.a, tot=r1+rx+r2;
+      const p1=r1/tot, p2=r2/tot;
+      // Draw No Bet kans = kans op winst gedeeld door (1 - kans gelijkspel)
+      const pDNB1 = Math.round(p1/(p1+p2)*100);
+      const pDNB2 = Math.round(p2/(p1+p2)*100);
+      bets.push({type:'Draw No Bet', bet:`${m.h} Draw No Bet`, kans:pDNB1, match:`${m.h} vs ${m.a}`, detail:'geld terug bij gelijkspel'});
+      bets.push({type:'Draw No Bet', bet:`${m.a} Draw No Bet`, kans:pDNB2, match:`${m.h} vs ${m.a}`, detail:'geld terug bij gelijkspel'});
+
+      const px=rx/tot;
+      // Double Chance
+      bets.push({type:'Double Chance', bet:`${m.h} of Gelijkspel (1X)`, kans:Math.round((p1+px)*100), match:`${m.h} vs ${m.a}`});
+      bets.push({type:'Double Chance', bet:`${m.a} of Gelijkspel (X2)`, kans:Math.round((p2+px)*100), match:`${m.h} vs ${m.a}`});
+      bets.push({type:'Double Chance', bet:`${m.h} of ${m.a} (12)`, kans:Math.round((p1+p2)*100), match:`${m.h} vs ${m.a}`});
+
+      // Handicap -1 (favoriet moet met 2+ winnen)
+      if(p1 > 0.45) { // alleen als favoriet duidelijk
+        const pHandicap = poissonAtLeast(hExpected, 2) * poissonAtMost(aExpected, 0) / 100 +
+          poissonAtLeast(hExpected, 3) * poissonAtLeast(aExpected, 1) / 100;
+        bets.push({type:'Handicap', bet:`${m.h} -1 handicap`, kans:Math.min(Math.round(p1*80), 85), match:`${m.h} vs ${m.a}`, detail:'wint met 2+ goals verschil'});
+      }
+      if(p2 > 0.45) {
+        bets.push({type:'Handicap', bet:`${m.a} -1 handicap`, kans:Math.min(Math.round(p2*80), 85), match:`${m.h} vs ${m.a}`, detail:'wint met 2+ goals verschil'});
+      }
+
+      // 1x2 & BTTS combinaties
+      bets.push({type:'1X2 & BTTS', bet:`${m.h} wint & BTTS JA`, kans:Math.round(p1*pBTTS/100*100*0.85), match:`${m.h} vs ${m.a}`});
+      bets.push({type:'1X2 & BTTS', bet:`${m.h} wint & BTTS NEE`, kans:Math.round(p1*(100-pBTTS)/100*100*0.9), match:`${m.h} vs ${m.a}`});
+      if(p2 > 0.15) bets.push({type:'1X2 & BTTS', bet:`${m.a} wint & BTTS JA`, kans:Math.round(p2*pBTTS/100*100*0.85), match:`${m.h} vs ${m.a}`});
+
+      // 1x2 & Over/Under combinaties
+      const pOver25 = poissonAtLeast(totalExp,3);
+      const pUnder25 = poissonAtMost(totalExp,2);
+      bets.push({type:'1X2 & O/U', bet:`${m.h} wint & Over 1.5`, kans:Math.round(p1*poissonAtLeast(totalExp,2)/100*100*0.9), match:`${m.h} vs ${m.a}`});
+      bets.push({type:'1X2 & O/U', bet:`${m.h} wint & Under 3.5`, kans:Math.round(p1*poissonAtMost(totalExp,3)/100*100*0.9), match:`${m.h} vs ${m.a}`});
+      bets.push({type:'1X2 & O/U', bet:`${m.h} wint & Over 2.5`, kans:Math.round(p1*pOver25/100*100*0.85), match:`${m.h} vs ${m.a}`});
+
+      // HT/FT (rust/eindstand)
+      // HT1/FT1: sterkste favoriet leidt rust EN wint
+      if(p1 > 0.5) {
+        const pHT1FT1 = Math.round(p1 * 0.65 * 100); // ~65% kans dat als ze winnen ze ook voorstaan
+        bets.push({type:'HT/FT', bet:`${m.h} rust & ${m.h} einde (1/1)`, kans:pHT1FT1, match:`${m.h} vs ${m.a}`, detail:'leidt bij rust én wint'});
+      }
+      if(p2 > 0.5) {
+        const pHT2FT2 = Math.round(p2 * 0.65 * 100);
+        bets.push({type:'HT/FT', bet:`${m.a} rust & ${m.a} einde (2/2)`, kans:pHT2FT2, match:`${m.h} vs ${m.a}`, detail:'leidt bij rust én wint'});
+      }
+
+      // Double Chance & O/U
+      bets.push({type:'DC & O/U', bet:`${m.h} of Gelijkspel & Under 2.5`, kans:Math.round((p1+px)*pUnder25/100*100*0.9), match:`${m.h} vs ${m.a}`});
+      bets.push({type:'DC & O/U', bet:`${m.h} of Gelijkspel & Over 1.5`, kans:Math.round((p1+px)*poissonAtLeast(totalExp,2)/100*100*0.9), match:`${m.h} vs ${m.a}`});
+    }
   }
 
   // ── Speler bets via Poisson ──
