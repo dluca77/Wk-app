@@ -245,7 +245,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 <div class="container">
   <div class="view-switch">
     <button class="vtab on" onclick="setView('matches',this)">📅 Wedstrijden</button>
-    <button class="vtab" onclick="setView('standings',this)">📊 Stand</button>
+    <button class="vtab" onclick="setView('standings',this)">🏆 Schema</button>
     <button class="vtab" onclick="setView('topscorers',this)">⚽ Topscorers</button>
   </div>
   <div id="matchesView">
@@ -705,38 +705,66 @@ function renderTopscorers(){
 
 // ── STANDINGS (groepsstand) ──
 function renderStandings(){
-  const el=document.getElementById('standingsView');
-  const letters=Object.keys(GROUPS).sort();
-  if(!letters.length){
-    el.innerHTML=`<div class="empty">Groepsstand nog niet beschikbaar.<br>Komt automatisch zodra de eerste wedstrijden gespeeld zijn.</div>`;
-    return;
-  }
-  const updHtml=groupsUpdatedAt?`<div class="supdated">Bijgewerkt: ${new Date(groupsUpdatedAt).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})}</div>`:'';
-  el.innerHTML=updHtml+letters.map(letter=>{
-    const rows=GROUPS[letter]||[];
-    const trs=rows.map((r,i)=>{
-      const gd=r.gf-r.ga;
-      return `<tr class="${i<2?'q':''}">
-        <td>${i+1}</td>
-        <td class="steam">${F(r.team)} ${r.team}</td>
-        <td>${r.played}</td>
-        <td>${r.win}</td>
-        <td>${r.draw}</td>
-        <td>${r.loss}</td>
-        <td>${r.gf}</td>
-        <td>${r.ga}</td>
-        <td>${gd>0?'+':''}${gd}</td>
-        <td class="spts">${r.pts}</td>
-      </tr>`;
-    }).join('');
-    return `<div class="gwrap">
-      <div class="ghdr"><span class="gletter">${letter}</span> Groep ${letter}</div>
-      <table class="stable">
-        <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>G</th><th>V</th><th>VD</th><th>TD</th><th>+/-</th><th>Pt</th></tr></thead>
-        <tbody>${trs}</tbody>
-      </table>
+  const el = document.getElementById('standingsView');
+
+  const rounds = [
+    { label: 'Laatste 32', prefix: 'r', ids: ['r0','r1','r2','r3','r4','r5','r6','r7','r8','r9','r10','r11','r12','r13','r14','r15'] },
+    { label: 'Laatste 16', prefix: 'af', ids: ['af1','af2','af3','af4','af5','af6','af7','af8'] },
+    { label: 'Kwartfinale', prefix: 'kf', ids: ['kf1','kf2','kf3','kf4'] },
+    { label: 'Halve finale', prefix: 'hf', ids: ['hf1','hf2'] },
+    { label: '3e Plaats', prefix: '3pl', ids: ['tr'] },
+    { label: 'Finale', prefix: 'fin', ids: ['fin'] },
+  ];
+
+  const bracketCard = (m) => {
+    if(!m) return '';
+    const done = isDone(m);
+    const live = isLive(m);
+    const hWin = done && m.result && parseInt(m.result.split('-')[0]) > parseInt(m.result.split('-')[1]);
+    const aWin = done && m.result && parseInt(m.result.split('-')[1]) > parseInt(m.result.split('-')[0]);
+    const dateStr = m.date ? new Date(m.date+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : '';
+    const statusHtml = live
+      ? `<span style="color:var(--green);font-size:10px;font-weight:700">● LIVE</span>`
+      : done
+      ? `<span style="color:var(--muted2);font-size:10px">✓ FT</span>`
+      : `<span style="color:var(--muted2);font-size:10px">${dateStr} · ${m.time}</span>`;
+
+    const teamRow = (name, score, isWin) => {
+      const flag = F(name);
+      const hasFlag = flag && !flag.includes('🌐') && !flag.includes('⚽');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+        <span style="font-size:16px;width:22px">${hasFlag ? flag : '⚽'}</span>
+        <span style="flex:1;font-size:13px;font-weight:${isWin?'700':'400'};color:${isWin?'var(--mint)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
+        ${done||live ? `<span style="font-size:16px;font-weight:800;color:${isWin?'var(--mint)':'var(--muted)'};min-width:16px;text-align:right">${score}</span>` : ''}
+      </div>`;
+    };
+
+    let hScore = '', aScore = '';
+    if(m.result) { const s=m.result.split('-'); hScore=s[0]; aScore=s[1]; }
+
+    return `<div onclick="openModal('${m.id}')" style="background:var(--surface);border:1px solid ${live?'rgba(34,197,94,.3)':done?'var(--border)':'var(--border2)'};border-radius:14px;padding:11px 13px;margin-bottom:6px;cursor:pointer;transition:all .15s;animation:fadeSlideIn .3s ease both" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface)'">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:10px;color:var(--muted);font-weight:500">${m.venue||''}</span>
+        ${statusHtml}
+      </div>
+      <div style="border-top:1px solid var(--border);margin-bottom:4px"></div>
+      ${teamRow(m.h, hScore, hWin)}
+      ${teamRow(m.a, aScore, aWin)}
     </div>`;
-  }).join('')+`<div class="snote">🟢 Bovenste 2 per groep = doorgaand naar achtste finale (indicatief)</div>`;
+  };
+
+  el.innerHTML = rounds.map((round, ri) => {
+    const matches = round.ids.map(id => MATCHES.find(m => m.id === id)).filter(Boolean);
+    if(!matches.length) return '';
+    const roundColors = ['var(--accent)','var(--gold)','var(--lav)','var(--sky)','var(--muted)','var(--mint)'];
+    return `<div style="margin-bottom:24px;animation:fadeSlideIn .3s ease ${ri*0.05}s both">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="width:28px;height:28px;border-radius:8px;background:${roundColors[ri]||'var(--accent)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#000;flex-shrink:0">${matches.length}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text)">${round.label}</div>
+      </div>
+      ${matches.map(bracketCard).join('')}
+    </div>`;
+  }).join('') || `<div class="empty">Schema nog niet beschikbaar</div>`;
 }
 
 // ── RENDER ──
