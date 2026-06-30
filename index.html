@@ -211,7 +211,28 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 #admin-overlay .modal{border-radius:24px;width:calc(100% - 40px);max-width:360px;transform:scale(.95) translateY(10px)}
 #admin-overlay.on .modal{transform:scale(1) translateY(0)}
 
-/* ── TOPSCORERS ── */
+/* ── BRACKET ── */
+.bkwrap{overflow-x:auto;padding-bottom:16px;-webkit-overflow-scrolling:touch}
+.bkbracket{display:flex;gap:0;align-items:stretch;min-width:640px;padding:8px 0}
+.bkcol{flex:1;display:flex;flex-direction:column;min-width:150px}
+.bkcolhdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;text-align:center;padding:0 8px 10px;white-space:nowrap}
+.bkrow{display:flex;align-items:center;flex:var(--span,1);position:relative;padding:4px 0}
+.bkcard{background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:8px 10px;flex:1;margin:0 6px;transition:background .15s}
+.bkcard:hover{background:var(--surface2)}
+.bkcard.bklive{border-color:rgba(34,197,94,.4);box-shadow:0 0 14px rgba(34,197,94,.1)}
+.bkcard.bkup{border-style:dashed;opacity:.8}
+.bktime{font-size:9px;color:var(--muted2);margin-bottom:5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+.bks{display:flex;align-items:center;gap:6px;padding:3px 0}
+.bkn{font-size:11px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.bkscore{font-size:13px;font-weight:800;min-width:14px;text-align:right;color:var(--muted)}
+.bks.bkw .bkn{color:var(--mint);font-weight:700}
+.bks.bkw .bkscore{color:var(--mint)}
+.bks.bkl .bkn{color:var(--muted2)}
+.bks.bkl .bkscore{color:var(--muted2)}
+/* Connector lines */
+.bkline{position:absolute;right:-6px;width:6px;border-color:var(--border2);border-style:solid;z-index:1}
+.bkline-t{top:50%;bottom:0;border-width:0 1px 1px 0;border-bottom-right-radius:6px}
+.bkline-b{top:0;bottom:50%;border-width:1px 1px 0 0;border-top-right-radius:6px}
 .supdated{font-size:10px;color:var(--muted2);text-align:right;margin-bottom:10px}
 .snote{font-size:10px;color:var(--muted2);margin-top:6px;line-height:1.5}
 
@@ -395,10 +416,10 @@ const MATCHES = [
   {id:'l5',g:'L',date:'2026-06-27',time:'23:00',h:'Panama',a:'England',venue:'Boston'},
   {id:'l6',g:'L',date:'2026-06-27',time:'23:00',h:'Croatia',a:'Ghana',venue:'San Francisco'},
   // Achtste finale (kwalificatie nog te bepalen, placeholders)
-  {id:'r0',g:'R32',date:'2026-06-28',time:'21:00',h:'South Africa',a:'Canada',venue:'Los Angeles (VS)'},
-  {id:'r1',g:'R32',date:'2026-06-29',time:'19:00',h:'Brazil',a:'Japan',venue:'Houston (VS)'},
-  {id:'r2',g:'R32',date:'2026-06-29',time:'22:30',h:'Germany',a:'Paraguay',venue:'Boston (VS)'},
-  {id:'r3',g:'R32',date:'2026-06-30',time:'03:00',h:'Netherlands',a:'Morocco',venue:'Monterrey (Mexico)'},
+  {id:'r0',g:'R32',date:'2026-06-28',time:'21:00',h:'South Africa',a:'Canada',venue:'Los Angeles (VS)',result:'0-1'},
+  {id:'r1',g:'R32',date:'2026-06-29',time:'19:00',h:'Brazil',a:'Japan',venue:'Houston (VS)',result:'2-1'},
+  {id:'r2',g:'R32',date:'2026-06-29',time:'22:30',h:'Germany',a:'Paraguay',venue:'Boston (VS)',result:'1-1',penWinner:'Paraguay'},
+  {id:'r3',g:'R32',date:'2026-06-30',time:'03:00',h:'Netherlands',a:'Morocco',venue:'Monterrey (Mexico)',result:'1-1',penWinner:'Morocco'},
   {id:'r4',g:'R32',date:'2026-06-30',time:'19:00',h:'Ivory Coast',a:'Norway',venue:'Dallas (VS)'},
   {id:'r5',g:'R32',date:'2026-06-30',time:'23:00',h:'France',a:'Sweden',venue:'New York (VS)'},
   {id:'r6',g:'R32',date:'2026-07-01',time:'03:00',h:'Mexico',a:'Ecuador',venue:'Mexico-Stad (Mexico)'},
@@ -707,65 +728,151 @@ function renderTopscorers(){
 function renderStandings(){
   const el = document.getElementById('standingsView');
 
-  const rounds = [
-    { label: 'Laatste 32', prefix: 'r', ids: ['r0','r1','r2','r3','r4','r5','r6','r7','r8','r9','r10','r11','r12','r13','r14','r15'] },
-    { label: 'Laatste 16', prefix: 'af', ids: ['af1','af2','af3','af4','af5','af6','af7','af8'] },
-    { label: 'Kwartfinale', prefix: 'kf', ids: ['kf1','kf2','kf3','kf4'] },
-    { label: 'Halve finale', prefix: 'hf', ids: ['hf1','hf2'] },
-    { label: '3e Plaats', prefix: '3pl', ids: ['tr'] },
-    { label: 'Finale', prefix: 'fin', ids: ['fin'] },
-  ];
+  // Match lookup
+  const gm = id => MATCHES.find(m => m.id === id);
 
-  const bracketCard = (m) => {
-    if(!m) return '';
-    const done = isDone(m);
-    const live = isLive(m);
-    const hWin = done && m.result && parseInt(m.result.split('-')[0]) > parseInt(m.result.split('-')[1]);
-    const aWin = done && m.result && parseInt(m.result.split('-')[1]) > parseInt(m.result.split('-')[0]);
-    const dateStr = m.date ? new Date(m.date+'T12:00:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : '';
-    const statusHtml = live
-      ? `<span style="color:var(--green);font-size:10px;font-weight:700">● LIVE</span>`
-      : done
-      ? `<span style="color:var(--muted2);font-size:10px">✓ FT</span>`
-      : `<span style="color:var(--muted2);font-size:10px">${dateStr} · ${m.time}</span>`;
+  // Get winner of a match (handles penalties)
+  const win = m => {
+    if(!m) return null;
+    if(m.penWinner) return m.penWinner; // penalty shootout winner
+    if(!m.result) return null;
+    const [h,a] = m.result.split('-').map(Number);
+    if(isNaN(h)||isNaN(a)) return null;
+    return h > a ? m.h : a > h ? m.a : null;
+  };
 
-    const teamRow = (name, score, isWin) => {
-      const flag = F(name);
-      const hasFlag = flag && !flag.includes('🌐') && !flag.includes('⚽');
-      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
-        <span style="font-size:16px;width:22px">${hasFlag ? flag : '⚽'}</span>
-        <span style="flex:1;font-size:13px;font-weight:${isWin?'700':'400'};color:${isWin?'var(--mint)':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</span>
-        ${done||live ? `<span style="font-size:16px;font-weight:800;color:${isWin?'var(--mint)':'var(--muted)'};min-width:16px;text-align:right">${score}</span>` : ''}
+  // R32 → R16 → QF → SF tree
+  // Each R16 match (af1-af8) comes from 2 R32 winners
+  const r32feeds = {
+    af1: ['r0','r3'], af2: ['r2','r5'],
+    af3: ['r1','r4'], af4: ['r6','r7'],
+    af5: ['r11','r10'], af6: ['r9','r8'],
+    af7: ['r14','r13'], af8: ['r12','r15'],
+  };
+
+  // Get display name for a slot — tries real team first, then R32 winner, then "W. X/Y"
+  const teamName = (afId, side) => {
+    const m = gm(afId);
+    if(m) {
+      const raw = side === 'h' ? m.h : m.a;
+      if(raw && !raw.startsWith('W #') && !raw.startsWith('W ')) return raw;
+    }
+    const feeds = r32feeds[afId];
+    if(feeds) {
+      const r32match = gm(feeds[side === 'h' ? 0 : 1]);
+      if(!r32match) return null;
+      const w = win(r32match);
+      if(w) return w;
+      // Geen winnaar bekend maar teams wel — toon "W. Team1/Team2"
+      if(r32match.h && r32match.a) {
+        const h = r32match.h.split(' ').slice(-1)[0]; // achternaam/verkorting
+        const a = r32match.a.split(' ').slice(-1)[0];
+        return `W. ${h}/${a}`;
+      }
+    }
+    return null;
+  };
+
+  // Bracket match box
+  const matchBox = (id, label) => {
+    const m = gm(id);
+    const done = m && isDone(m);
+    const live = m && isLive(m);
+    const w = win(m);
+
+    // Determine team names
+    let hName, aName;
+    if(id.startsWith('af')) {
+      hName = teamName(id, 'h');
+      aName = teamName(id, 'a');
+    } else if(id.startsWith('kf')) {
+      // QF: winners of R16 pairs
+      const pairs = {kf1:['af1','af2'], kf2:['af3','af4'], kf3:['af5','af6'], kf4:['af7','af8']};
+      const [aid1, aid2] = pairs[id] || [];
+      const af1m = gm(aid1), af2m = gm(aid2);
+      hName = win(af1m) || (af1m ? (teamName(aid1,'h')||teamName(aid1,'a') ? '?' : null) : null);
+      aName = win(af2m) || (af2m ? (teamName(aid2,'h')||teamName(aid2,'a') ? '?' : null) : null);
+      if(!hName && af1m && (teamName(aid1,'h') || teamName(aid1,'a'))) hName = null;
+      if(!aName && af2m && (teamName(aid2,'h') || teamName(aid2,'a'))) aName = null;
+    } else if(id.startsWith('hf')) {
+      const pairs = {hf1:['kf1','kf2'], hf2:['kf3','kf4']};
+      const [k1,k2] = pairs[id] || [];
+      hName = win(gm(k1)) || null;
+      aName = win(gm(k2)) || null;
+    } else if(id === 'fin') {
+      hName = win(gm('hf1')) || null;
+      aName = win(gm('hf2')) || null;
+    } else if(id === 'tr') {
+      // 3e plaats: verliezers SF
+      const hf1m = gm('hf1'), hf2m = gm('hf2');
+      const hf1w = win(hf1m), hf2w = win(hf2m);
+      hName = hf1m?.result ? (hf1w === hf1m.h ? hf1m.a : hf1m.h) : null;
+      aName = hf2m?.result ? (hf2w === hf2m.h ? hf2m.a : hf2m.h) : null;
+    }
+
+    // Use actual match names if set
+    if(m && !id.startsWith('af')) {
+      if(m.h && !m.h.startsWith('W ')) hName = hName || m.h;
+      if(m.a && !m.a.startsWith('W ')) aName = aName || m.a;
+    }
+
+    let hScore='', aScore='';
+    if(m?.result){ const s=m.result.split('-'); hScore=s[0]; aScore=s[1]; }
+    const penStr = m?.penWinner ? ` <span style="font-size:9px;color:var(--gold)">(pen)</span>` : '';
+    const hWin = !!( (done && win(m) === hName) || (done && win(m) === m?.h) );
+    const aWin = !!( (done && win(m) === aName) || (done && win(m) === m?.a) );
+    const dateStr = m?.date ? new Date(m.date+'T12:00').toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) : '';
+    const timeStr = m ? `${dateStr} ${m.time}` : '';
+
+    const teamSlot = (name, score, isWin, isDoneM) => {
+      const flag = name ? F(name) : '';
+      const flagOk = flag && flag.trim().length > 0 && !flag.includes('\u26BD') && !flag.includes('\uD83C\uDF10');
+      const penMark = isWin && m?.penWinner ? '<span style="font-size:8px;color:var(--gold);margin-left:2px">P</span>' : '';
+      return `<div class="bks${isWin?' bkw':isDoneM&&!isWin?' bkl':''}">
+        <span style="font-size:15px;width:20px;flex-shrink:0;text-align:center">${flagOk?flag:name?'⚽':''}</span>
+        <span class="bkn">${name || '<span style="color:var(--muted2);font-size:10px;font-style:italic">TBD</span>'}</span>
+        ${(done||live) ? `<span class="bkscore">${score||'-'}${penMark}</span>` : ''}
       </div>`;
     };
 
-    let hScore = '', aScore = '';
-    if(m.result) { const s=m.result.split('-'); hScore=s[0]; aScore=s[1]; }
-
-    return `<div onclick="openModal('${m.id}')" style="background:var(--surface);border:1px solid ${live?'rgba(34,197,94,.3)':done?'var(--border)':'var(--border2)'};border-radius:14px;padding:11px 13px;margin-bottom:6px;cursor:pointer;transition:all .15s;animation:fadeSlideIn .3s ease both" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface)'">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:10px;color:var(--muted);font-weight:500">${m.venue||''}</span>
-        ${statusHtml}
-      </div>
-      <div style="border-top:1px solid var(--border);margin-bottom:4px"></div>
-      ${teamRow(m.h, hScore, hWin)}
-      ${teamRow(m.a, aScore, aWin)}
+    return `<div class="bkcard${live?' bklive':done?'':' bkup'}" onclick="${m?`openModal('${id}')`:''}" style="${m?'cursor:pointer':''}">
+      ${timeStr ? `<div class="bktime">${live?'🔴 LIVE':done?'✓ FT':timeStr}</div>` : ''}
+      ${teamSlot(hName, hScore, hWin, done)}
+      <div style="height:1px;background:var(--border);margin:2px 0"></div>
+      ${teamSlot(aName, aScore, aWin, done)}
     </div>`;
   };
 
-  el.innerHTML = rounds.map((round, ri) => {
-    const matches = round.ids.map(id => MATCHES.find(m => m.id === id)).filter(Boolean);
-    if(!matches.length) return '';
-    const roundColors = ['var(--accent)','var(--gold)','var(--lav)','var(--sky)','var(--muted)','var(--mint)'];
-    return `<div style="margin-bottom:24px;animation:fadeSlideIn .3s ease ${ri*0.05}s both">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <div style="width:28px;height:28px;border-radius:8px;background:${roundColors[ri]||'var(--accent)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#000;flex-shrink:0">${matches.length}</div>
-        <div style="font-size:15px;font-weight:700;color:var(--text)">${round.label}</div>
-      </div>
-      ${matches.map(bracketCard).join('')}
+  // Build bracket columns with connector lines
+  const col = (title, ids, color) => {
+    const space = 8 / ids.length; // relative vertical spacing
+    return `<div class="bkcol">
+      <div class="bkcolhdr" style="color:${color}">${title}</div>
+      ${ids.map((id, i) => {
+        const isEven = i % 2 === 1;
+        return `<div class="bkrow" style="--span:${space}">
+          ${matchBox(id)}
+          <div class="bkline${isEven?' bkline-b':' bkline-t'}"></div>
+        </div>`;
+      }).join('')}
     </div>`;
-  }).join('') || `<div class="empty">Schema nog niet beschikbaar</div>`;
+  };
+
+  el.innerHTML = `<div class="bkwrap">
+    <div class="bkbracket">
+      ${col('Laatste 16', ['af1','af2','af3','af4','af5','af6','af7','af8'], 'var(--accent)')}
+      ${col('Kwartfinale', ['kf1','kf2','kf3','kf4'], 'var(--gold)')}
+      ${col('Halve finale', ['hf1','hf2'], 'var(--lav)')}
+      <div class="bkcol">
+        <div class="bkcolhdr" style="color:var(--mint)">🏆 Finale</div>
+        <div class="bkrow" style="--span:8">${matchBox('fin')}</div>
+        <div class="bkcolhdr" style="color:var(--muted);margin-top:12px">3e Plaats</div>
+        <div class="bkrow" style="--span:4">${matchBox('tr')}</div>
+      </div>
+    </div>
+  </div>`;
 }
+
 
 // ── RENDER ──
 function render(){
