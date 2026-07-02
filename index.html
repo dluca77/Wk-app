@@ -903,6 +903,7 @@ function render(){
     return;
   }
   // Overall bet knop — alleen bij 2+ aankomende wedstrijden
+  const obContainer = document.getElementById('overall-bet-container');
   const upcoming = ms.filter(m => !isDone(m) && !isLive(m));
   const tomorrow2 = new Date(new Date(selDate).getTime() + 24*60*60*1000).toISOString().split('T')[0];
   const upcomingTomorrow = MATCHES.filter(m => m.date === tomorrow2 && !isDone(m) && !isLive(m));
