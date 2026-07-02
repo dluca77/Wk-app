@@ -918,6 +918,7 @@ function render(){
     obContainer.innerHTML = '';
   }
   document.getElementById('mc').innerHTML=ms.map(m=>{
+    try{
     const hf=F(m.h),af=F(m.a);
     const live=isLive(m),done=isDone(m)||m.result;
     const odds=getOdds(m.h,m.a);
@@ -925,7 +926,7 @@ function render(){
     if(live) statusHtml=`<div class="mc-status status-live"><div class="ldot"></div>LIVE</div>`;
     else if(m.result) statusHtml=`<div class="mc-status status-ft">✓ FT</div>`;
     else statusHtml=`<div class="mc-status status-time">${m.time}</div>`;
-    if(odds){
+    if(odds && odds.h && odds.a){
       const{p1,px,p2}=probs(odds.h,odds.d,odds.a);
       const win=p1>p2&&p1>px?'h':p2>p1&&p2>px?'a':'d';
       const{t,c}=tip(p1,px,p2);
@@ -966,6 +967,7 @@ function render(){
         ${!oddsHtml&&tipHtml?`<div style="margin-top:6px">${tipHtml}</div>`:''}
       </div>
     </div>`;
+    }catch(e){return '';}
   }).join('');
 }
 
@@ -1005,24 +1007,32 @@ function openModal(id){
   const pc=(ps, linup, team)=>{
     if(linup && linup.length){
       const gp = linup[0]?.matches || 1;
-      return linup.slice(0,3).map((p,i)=>`<div class="pc">
-        <div class="pmed">${['🥇','🥈','🥉'][i]}</div>
-        <div class="pinf">
-          <div class="pn">${p.n}</div>
-          <div class="pm">
-            <span>⭐${p.avg_rating??nf(p.rating,1)??'-'}</span>
-            <span>xG ${nf(p.avg_xg??p.xg)??'-'}/wed</span>
-            <span>🎯${nf(p.avg_sot??p.sot,1)??0} SoT/wed</span>
+      return linup.slice(0,3).map((p,i)=>{
+        // Bereken gemiddelden on-the-fly als avg_ velden ontbreken (oud formaat)
+        const matches = p.matches || 1;
+        const avgXg = p.avg_xg ?? (p.xg_total != null ? p.xg_total/matches : (p.xg ?? 0));
+        const avgSot = p.avg_sot ?? (p.sot_total != null ? p.sot_total/matches : (p.sot ?? 0));
+        const avgShots = p.avg_shots ?? (p.shots_total != null ? p.shots_total/matches : (p.shots ?? 0));
+        const avgRating = p.avg_rating ?? p.rating ?? null;
+        return `<div class="pc">
+          <div class="pmed">${['🥇','🥈','🥉'][i]}</div>
+          <div class="pinf">
+            <div class="pn">${p.n}</div>
+            <div class="pm">
+              <span>⭐${avgRating!=null?nf(avgRating,1):'-'}</span>
+              <span>xG ${nf(avgXg)??'-'}/wed</span>
+              <span>🎯${nf(avgSot,1)??0} SoT/wed</span>
+            </div>
           </div>
-        </div>
-        <div class="pr">
-          <div class="psh">${nf(p.avg_shots??p.shots,1)??0}</div>
-          <div class="psl">sch/wed</div>
-          ${p.goals>0?`<div class="psot">⚽ ${p.goals} goal${p.goals>1?'s':''}</div>`:''}
-          ${(p.keyPasses_total||0)>0?`<div class="pxg">🔑 ${p.keyPasses_total}</div>`:''}
-          <div class="pbas by">${p.matches||1} wed.</div>
-        </div>
-      </div>`).join('') + `<div class="snote" style="margin-top:6px">Gemiddelden over ${gp} WK-wedstrijd${gp>1?'en':''} · gesorteerd op rating</div>`;
+          <div class="pr">
+            <div class="psh">${nf(avgShots,1)??0}</div>
+            <div class="psl">sch/wed</div>
+            ${(p.goals||0)>0?`<div class="psot">⚽ ${p.goals} goal${p.goals>1?'s':''}</div>`:''}
+            ${((p.keyPasses_total||p.keyPasses||0))>0?`<div class="pxg">🔑 ${p.keyPasses_total||p.keyPasses}</div>`:''}
+            <div class="pbas by">${matches} wed.</div>
+          </div>
+        </div>`;
+      }).join('') + `<div class="snote" style="margin-top:6px">Gemiddelden over ${gp} WK-wedstrijd${gp>1?'en':''} · gesorteerd op rating</div>`;
     }
     if(!ps||!ps.length) return `<div class="nodata">Nog geen spelersdata voor ${team}<br><span style="font-size:10px;color:var(--muted2)">Beschikbaar na hun eerste WK-wedstrijd</span></div>`;
     return ps.map((p,i)=>`<div class="pc">
@@ -1468,9 +1478,10 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
     ...(aLinup||[]).slice(0,5).map(p=>({...p,side:'a'}))
   ];
   for(const p of allPlayers) {
-    const xg = p.avg_xg ?? p.xg ?? 0;
-    const sot = p.avg_sot ?? p.sot ?? 0;
-    const shots = p.avg_shots ?? p.shots ?? 0;
+    const matches = p.matches || 1;
+    const xg = p.avg_xg ?? (p.xg_total != null ? p.xg_total/matches : (p.xg ?? 0));
+    const sot = p.avg_sot ?? (p.sot_total != null ? p.sot_total/matches : (p.sot ?? 0));
+    const shots = p.avg_shots ?? (p.shots_total != null ? p.shots_total/matches : (p.shots ?? 0));
 
     if(xg > 0) {
       const pScores = Math.round((1 - Math.exp(-xg)) * 100);
