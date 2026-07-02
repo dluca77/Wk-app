@@ -1106,7 +1106,7 @@ async function generateAiBet(m, odds, hLinup, aLinup){
 
   // Pre-bereken alle bet kansen met Poisson model
   const allBets = calculateBetProbs(m, odds, hLinup, aLinup);
-  const topBets = allBets.filter(b => b.kans >= 40 && b.kans <= 93).slice(0, 30);
+  const topBets = allBets.filter(b => b.kans >= 40 && b.kans <= 85).slice(0, 30);
   const betsStr = topBets.map(b => `${b.type} | ${b.bet} | ${b.kans}%${b.detail ? " (" + b.detail + ")" : ""}`).join("\n");
 
   // Haal echte marktodds op uit The Odds API cache
@@ -1142,6 +1142,12 @@ PRIORITEIT — kies in deze volgorde als de data het ondersteunt:
 2. Speler SoT combineren met matchwinnaar of BTTS — geeft goede quote
 3. Draw No Bet, Double Chance, 1X2 & BTTS — als geen spelersdata
 4. Over/Under, HT/FT, Handicap — als aanvulling
+
+BELANGRIJK — vermijd bets met kans > 85%:
+- Bets boven 85% hebben een echte quote van ~1.15 of lager — geen waarde
+- "Lamine Yamal 1+ schot" op 92% = quote 1.01 bij de boekmaker = NUTTELOOS
+- Kies bets tussen 55-85% kans — dat geeft quotes van 1.20 tot 2.50
+- Liever 2 bets van 75% elk (gecombineerd 56%, quote ~1.80) dan 1 bet van 92% (quote 1.01)
 
 Beschikbare bettypen:
 • Speler scoort — gebaseerd op xG/wed (prioriteit als xG > 0.25)
@@ -1538,7 +1544,7 @@ async function generateOverallBet(){
     const mH = (PLAYER_STATS[m.h] || []);
     const mA = (PLAYER_STATS[m.a] || []);
     const bets = calculateBetProbs(m, mOdds, mH, mA);
-    const topBets = bets.filter(b => b.kans >= 45 && b.kans <= 93).slice(0, 15);
+    const topBets = bets.filter(b => b.kans >= 45 && b.kans <= 85).slice(0, 15);
     const oddsApiM = getOddsApiMatch(m.h, m.a);
     const realO = oddsApiM?.odds;
     const realOStr = realO ? ` [echte odds:${realO["BTTS"] ? ` BTTS Ja=${realO["BTTS"].yes} Nee=${realO["BTTS"].no}` : ""}${realO["O/U_2.5"] ? ` O2.5=${realO["O/U_2.5"].over} U2.5=${realO["O/U_2.5"].under}` : ""}${realO["1X2"] ? ` 1X2 h=${realO["1X2"].h} d=${realO["1X2"].d} a=${realO["1X2"].a}` : ""}]` : "";
