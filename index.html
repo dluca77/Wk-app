@@ -178,8 +178,11 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .stable tr.q td.steam{color:var(--mint)}
 
 /* ── OVERALL BET BUTTON ── */
-.overall-bet-btn{
-  width:100%;padding:15px;border-radius:16px;
+.sel-toggle{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;flex-shrink:0;color:transparent}
+.sel-toggle:hover{border-color:var(--gold);background:rgba(245,158,11,.1)}
+.sel-toggle.sel-on{background:var(--gold);border-color:var(--gold);color:#000}
+.match-card.sel-card{border-color:rgba(245,158,11,.4);box-shadow:0 0 16px rgba(245,158,11,.08)}
+.overall-bet-btn{  width:100%;padding:15px;border-radius:16px;
   border:1px solid rgba(245,158,11,.35);
   background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(249,115,22,.06));
   color:var(--gold2);font-size:14px;font-weight:700;cursor:pointer;
@@ -524,6 +527,7 @@ const TODAY = NOW.toISOString().split('T')[0];
 let selDate = TODAY;
 let selFilter = 'all';
 let selView = 'matches';
+let selectedMatchIds = new Set(); // wedstrijden geselecteerd voor dagtip
 let GROUPS = {};
 let groupsUpdatedAt = null;
 let oddsUpdatedAt = null;
@@ -903,9 +907,12 @@ function render(){
   const tomorrow2 = new Date(new Date(selDate).getTime() + 24*60*60*1000).toISOString().split('T')[0];
   const upcomingTomorrow = MATCHES.filter(m => m.date === tomorrow2 && !isDone(m) && !isLive(m));
   const totalUpcoming = upcoming.length + upcomingTomorrow.length;
-  const obContainer = document.getElementById('overall-bet-container');
+  const selCount = selectedMatchIds.size;
+  const btnLabel = selCount > 0
+    ? `🎯 Beste Dagtip — ${selCount} geselecteerde wedstrijden`
+    : `🎯 Beste Dagtip — ${totalUpcoming} wedstrijden (vandaag + morgen)`;
   if(totalUpcoming >= 2){
-    obContainer.innerHTML = `<button class="overall-bet-btn" onclick="generateOverallBet()">🎯 Beste Dagtip — ${totalUpcoming} wedstrijden (vandaag + morgen)</button><div id="overall-bet-result"></div>`;
+    obContainer.innerHTML = `<button class="overall-bet-btn" onclick="generateOverallBet()">${btnLabel}</button><div id="overall-bet-result"></div>`;
   } else {
     obContainer.innerHTML = '';
   }
@@ -931,11 +938,16 @@ function render(){
     }
     const hW=m.result&&parseInt(m.result[0])>parseInt(m.result[2]);
     const aW=m.result&&parseInt(m.result[2])>parseInt(m.result[0]);
-    return `<div class="match-card ${live?'live':''}" onclick="openModal('${m.id}')">
+    const isSel = selectedMatchIds.has(m.id);
+    const canSelect = !done && !live; // alleen aankomende wedstrijden
+    return `<div class="match-card ${live?'live':''} ${isSel?'sel-card':''}" onclick="openModal('${m.id}')">
       <div class="mc-inner">
         <div class="mc-top">
           <div class="mc-league">🌍 ${RL(m.g)}</div>
-          ${statusHtml}
+          <div style="display:flex;align-items:center;gap:8px">
+            ${statusHtml}
+            ${canSelect?`<div class="sel-toggle ${isSel?'sel-on':''}" onclick="event.stopPropagation();toggleSelect('${m.id}')" title="Toevoegen aan dagtip">${isSel?'✓':''}</div>`:''}
+          </div>
         </div>
         <div class="mc-body">
           <div class="mc-teams">
@@ -1113,9 +1125,16 @@ Regels:
 - 2-3 bets: gecombineerd 60%+
 - 4-6 bets: gecombineerd 40%+, maar elke losse bet 70%+
 - Meer bets = hogere quote, minder bets = hogere zekerheid
-- Kies wat het beste risico/beloning geeft op basis van de data
 
-Beschikbare bettypen (kies wat het sterkst is onderbouwd):
+PRIORITEIT — kies in deze volgorde als de data het ondersteunt:
+1. Speler SoT / Speler scoort — gebruik dit als er spelersdata is met duidelijk hoge xG of SoT/wed
+2. Speler SoT combineren met matchwinnaar of BTTS — geeft goede quote
+3. Draw No Bet, Double Chance, 1X2 & BTTS — als geen spelersdata
+4. Over/Under, HT/FT, Handicap — als aanvulling
+
+Beschikbare bettypen:
+• Speler scoort — gebaseerd op xG/wed (prioriteit als xG > 0.25)
+• Speler 1+ SoT — gebaseerd op SoT/wed gemiddelde (prioriteit als SoT/wed > 1.5)
 • Draw No Bet — veiliger dan 1X2, geld terug bij gelijkspel
 • Double Chance (1X/X2/12) — twee uitkomsten tegelijk
 • 1X2 & BTTS combinaties — team wint EN beide scoren of niet
@@ -1124,7 +1143,6 @@ Beschikbare bettypen (kies wat het sterkst is onderbouwd):
 • Clean Sheet — een team houdt nul
 • Handicap (-1) — favoriet wint met 2+ goals verschil
 • HT/FT (rust/eindstand) — leidt bij rust én wint ook
-• DC & Over/Under — dubbele kans gecombineerd met goals
 
 Gecombineerde kans = kans1/100 x kans2/100 x ... x 100. Gebruik exact de kansen uit de lijst.
 
@@ -1473,6 +1491,12 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
   // Sorteer op kans (hoogste eerst)
   return bets.sort((a,b) => b.kans - a.kans);
 }
+function toggleSelect(id){
+  if(selectedMatchIds.has(id)) selectedMatchIds.delete(id);
+  else selectedMatchIds.add(id);
+  render();
+}
+
 async function generateOverallBet(){
   if(!WORKER_URL) return;
   const btn = document.querySelector('.overall-bet-btn');
@@ -1488,9 +1512,12 @@ async function generateOverallBet(){
 
   // Verzamel aankomende wedstrijden van vandaag én morgen
   const tomorrow = new Date(new Date(selDate).getTime() + 24*60*60*1000).toISOString().split('T')[0];
-  const ms = MATCHES.filter(m =>
-    (m.date === selDate || m.date === tomorrow) && !isDone(m) && !isLive(m)
-  ).sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+  // Gebruik geselecteerde wedstrijden als die er zijn, anders vandaag + morgen
+  const ms = selectedMatchIds.size > 0
+    ? MATCHES.filter(m => selectedMatchIds.has(m.id) && !isDone(m) && !isLive(m))
+    : MATCHES.filter(m =>
+        (m.date === selDate || m.date === tomorrow) && !isDone(m) && !isLive(m)
+      ).sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
 
   // Bouw matchdata op per wedstrijd
   // Pre-bereken kansen voor alle wedstrijden
