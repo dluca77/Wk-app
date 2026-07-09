@@ -1169,11 +1169,13 @@ Antwoord ALLEEN in dit JSON formaat (array van tips):
       // Strip markdown code blocks in alle varianten
       let clean = text.trim();
       clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-      // Zoek de eerste { en laatste } voor het geval er tekst omheen staat
-      const first = clean.indexOf('{');
-      const last = clean.lastIndexOf('}');
+      // Zoek naar array [ ] of object { } — array heeft prioriteit
+      const fi = clean.indexOf('['), li = clean.lastIndexOf(']');
+      const fo = clean.indexOf('{'), lo = clean.lastIndexOf('}');
+      const useArr = fi !== -1 && (fo === -1 || fi < fo);
+      const first = useArr ? fi : fo;
+      const last = useArr ? li : lo;
       if(first !== -1 && last !== -1) clean = clean.slice(first, last + 1);
-      // Claude geeft array van tips OF enkel object terug
       const parsed = JSON.parse(clean);
       bet = Array.isArray(parsed) ? parsed : [parsed];
     } catch(e) {
