@@ -1130,41 +1130,27 @@ ${realOddsStr}
 PRE-BEREKENDE KANSEN (gebruik deze exact, verzin niets):
 ${betsStr || "Onvoldoende data"}
 
-OPDRACHT: Kies het optimale aantal onderdelen (1 tot 10) uit de lijst.
-Regels:
-- 1 bet: alleen als die 85%+ heeft
-- 2-3 bets: gecombineerd 60%+
-- 4-6 bets: gecombineerd 40%+, maar elke losse bet 70%+
-- Meer bets = hogere quote, minder bets = hogere zekerheid
+OPDRACHT: Geef 3 tot 5 VERSCHILLENDE tips voor deze wedstrijd. Elke tip is een aparte bet-combinatie.
+Geen twee tips mogen hetzelfde onderdeel bevatten.
+Kies bets tussen 55-85% kans — boven 85% heeft geen waarde (quote < 1.15).
 
-PRIORITEIT — kies in deze volgorde als de data het ondersteunt:
-1. Speler SoT / Speler scoort — gebruik dit als er spelersdata is met duidelijk hoge xG of SoT/wed
-2. Speler SoT combineren met matchwinnaar of BTTS — geeft goede quote
-3. Draw No Bet, Double Chance, 1X2 & BTTS — als geen spelersdata
-4. Over/Under, HT/FT, Handicap — als aanvulling
+Maak deze 5 typen tips (als data het toelaat):
+TIP 1 — SPELER SCOORT: bijv. "Mbappé scoort + Over 2.5" of "Speler X scoort of geeft assist"
+TIP 2 — SPELER SCHOTEN: bijv. "Speler X 2+ schoten op doel + BTTS JA"
+TIP 3 — MATCH RESULTAAT: bijv. "Matchwinnaar + Clean Sheet" of "Draw No Bet + 1e helft Over 0.5"
+TIP 4 — DOELPUNTEN: bijv. "Over 2.5 doelpunten + BTTS JA" of "Handicap -1 favoriet"
+TIP 5 — WAARDE BET: hogere risico maar betere quote, bijv. "HT/FT 1/1" of combinatie met 45-60% kans
 
-BELANGRIJK — vermijd bets met kans > 85%:
-- Bets boven 85% hebben een echte quote van ~1.15 of lager — geen waarde
-- "Lamine Yamal 1+ schot" op 92% = quote 1.01 bij de boekmaker = NUTTELOOS
-- Kies bets tussen 55-85% kans — dat geeft quotes van 1.20 tot 2.50
-- Liever 2 bets van 75% elk (gecombineerd 56%, quote ~1.80) dan 1 bet van 92% (quote 1.01)
+Gebruik de spelersdata intensief:
+- Speler met hoge xG (>0.3/wed) → kans op goal
+- Speler met hoge SoT (>1.5/wed) → kans op schot op doel
+- Speler met hoge shots/wed → kans op schot of schot op doel
+- Meerdere spelers combineren uit BEIDE teams
 
-Beschikbare bettypen:
-• Speler scoort — gebaseerd op xG/wed (prioriteit als xG > 0.25)
-• Speler 1+ SoT — gebaseerd op SoT/wed gemiddelde (prioriteit als SoT/wed > 1.5)
-• Draw No Bet — veiliger dan 1X2, geld terug bij gelijkspel
-• Double Chance (1X/X2/12) — twee uitkomsten tegelijk
-• 1X2 & BTTS combinaties — team wint EN beide scoren of niet
-• 1X2 & Over/Under combinaties — team wint EN goals boven/onder grens
-• 1e Helft Over/Under — ruststand totaal goals
-• Clean Sheet — een team houdt nul
-• Handicap (-1) — favoriet wint met 2+ goals verschil
-• HT/FT (rust/eindstand) — leidt bij rust én wint ook
+BELANGRIJK: bets boven 85% kans zijn waardeloos (quote 1.01-1.10). Sla die over.
 
-Gecombineerde kans = kans1/100 x kans2/100 x ... x 100. Gebruik exact de kansen uit de lijst.
-
-Antwoord ALLEEN in dit JSON formaat:
-{"type":"Combinatie","tip":"<tip>","onderdelen":[{"bet":"<bet uit lijst>","kans":<getal>},{"bet":"<bet>","kans":<getal>}],"gecombineerde_kans":<product>,"onderbouwing":"<2-3 zinnen>","risico":"laag|middel","data_basis":"<cijfers>"}`;
+Antwoord ALLEEN in dit JSON formaat (array van tips):
+[{"label":"Tip 1 — Speler Scoort","tip":"<concrete tip>","onderdelen":[{"bet":"<bet>","kans":<55-85>},{"bet":"<bet>","kans":<55-85>}],"gecombineerde_kans":<product>,"onderbouwing":"<1-2 zinnen>","risico":"laag|middel"},{"label":"Tip 2 — Speler Schoten","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 3 — Match","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 4 — Doelpunten","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 5 — Waarde","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"middel"}]`;
 
   try {
     const res = await fetch(WORKER_URL + '/ai-bet', {
@@ -1187,54 +1173,71 @@ Antwoord ALLEEN in dit JSON formaat:
       const first = clean.indexOf('{');
       const last = clean.lastIndexOf('}');
       if(first !== -1 && last !== -1) clean = clean.slice(first, last + 1);
-      bet = JSON.parse(clean);
+      // Claude geeft array van tips OF enkel object terug
+      const parsed = JSON.parse(clean);
+      bet = Array.isArray(parsed) ? parsed : [parsed];
     } catch(e) {
-      el.innerHTML = `<div style="font-size:12px;line-height:1.6;color:var(--text)">${text.replace(/</g,'&lt;').slice(0,400)}</div>`;
+      el.innerHTML = `<div style="font-size:12px;line-height:1.6;color:var(--text)">${text.replace(/</g,"&lt;").slice(0,400)}</div>`;
       return;
     }
-    const riskColor = bet.risico==='laag'?'var(--mint)':'var(--gold)';
-    const onderdelen = Array.isArray(bet.onderdelen) ? bet.onderdelen : [];
-    // Zoek echte odds per onderdeel + bereken gecombineerde odd
-    let combOdd = 1;
-    let allHaveOdds = true;
-    const onderdelenHtml = onderdelen.filter(o=>o&&o.bet).map(o => {
-      const k = o.kans ?? 0;
-      const kleur = k >= 70 ? 'var(--mint)' : k >= 50 ? 'var(--gold)' : 'var(--peach)';
-      // Probeer echte odd op te zoeken
-      const matchRef = o.wedstrijd || `${m.h} vs ${m.a}`;
-      const parts = matchRef.split(' vs ');
-      const realOdd = getRealOddForBet(o.bet, parts[0]||m.h, parts[1]||m.a);
-      if(realOdd) combOdd *= realOdd; else allHaveOdds = false;
-      const oddStr = realOdd ? `<span style="background:rgba(251,191,36,.15);color:var(--gold);font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:6px">${realOdd.toFixed(2)}</span>` : '';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1">
-          <span style="font-size:12px">✓ ${o.bet}</span>${oddStr}
-          ${o.wedstrijd ? `<div style="font-size:10px;color:var(--muted2)">${o.wedstrijd}</div>` : ''}
+
+    // SVG gauge meter per tip
+    const tipGauge = (kans) => {
+      const clamp = Math.max(35, Math.min(90, kans));
+      const angle = 160 - ((clamp - 35) / 55) * 140;
+      const rad = (angle * Math.PI) / 180;
+      const cx = 50, cy = 54, r = 36;
+      const nx = cx + r * 0.82 * Math.cos(rad);
+      const ny = cy - r * 0.82 * Math.sin(rad);
+      const seg = (a1, a2, col) => {
+        const r1=(a1*Math.PI/180), r2=(a2*Math.PI/180);
+        const x1=cx+r*Math.cos(r1),y1=cy-r*Math.sin(r1);
+        const x2=cx+r*Math.cos(r2),y2=cy-r*Math.sin(r2);
+        const xi=cx+(r-10)*Math.cos(r1),yi=cy-(r-10)*Math.sin(r1);
+        const xj=cx+(r-10)*Math.cos(r2),yj=cy-(r-10)*Math.sin(r2);
+        return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 0,0 ${x2.toFixed(1)},${y2.toFixed(1)} L${xj.toFixed(1)},${yj.toFixed(1)} A${r-10},${r-10} 0 0,1 ${xi.toFixed(1)},${yi.toFixed(1)} Z" fill="${col}"/>`;
+      };
+      const col = kans>=72?"#22c55e":kans>=60?"#f59e0b":kans>=48?"#f97316":"#ef4444";
+      return `<svg viewBox="0 0 100 62" width="88" height="54" style="flex-shrink:0">
+        ${seg(18,50,"#22c55e")}${seg(50,78,"#84cc16")}${seg(78,102,"#eab308")}
+        ${seg(102,126,"#f97316")}${seg(126,150,"#f97316")}${seg(150,162,"#ef4444")}
+        <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="rgba(255,255,255,.9)" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="${cx}" cy="${cy}" r="4.5" fill="rgba(255,255,255,.9)"/>
+        <text x="${cx}" y="${cy+11}" text-anchor="middle" font-size="8.5" font-weight="800" fill="${col}" font-family="Inter,sans-serif">${kans}%</text>
+      </svg>`;
+    };
+
+    const tipHtml = (tip) => {
+      const onderdelen = Array.isArray(tip.onderdelen) ? tip.onderdelen : [];
+      let combOdd = 1, allOdds = true;
+      const legsHtml = onderdelen.filter(o=>o&&o.bet).map(o => {
+        const k = o.kans ?? 0;
+        const kl = k>=70?"var(--mint)":k>=50?"var(--gold)":"var(--peach)";
+        const realOdd = getRealOddForBet(o.bet, m.h, m.a);
+        if(realOdd) combOdd *= realOdd; else allOdds = false;
+        const oddBadge = realOdd ? " <span style=\"background:rgba(251,191,36,.12);color:var(--gold);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px\">" + realOdd.toFixed(2) + "</span>" : "";
+        return "<div style=\"display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)\">" +
+          "<div style=\"flex:1;font-size:12px\">✓ " + o.bet + oddBadge + "</div>" +
+          "<span style=\"font-size:12px;font-weight:700;color:" + kl + ";margin-left:8px\">" + k + "%</span></div>";
+      }).join("");
+      const ck = tip.gecombineerde_kans ?? 0;
+      const riskC = tip.risico==="laag"?"var(--mint)":"var(--gold)";
+      const oddRow = allOdds && onderdelen.length > 0
+        ? "<div style=\"display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--border)\"><span style=\"font-size:11px;color:var(--muted2)\">Quote (ind.)</span><span style=\"font-size:14px;font-weight:700;color:var(--gold)\">" + combOdd.toFixed(2) + "</span></div>" : "";
+      return `<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:14px;padding:12px 14px;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:700;color:var(--lav);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">${tip.label||"Tip"}</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          ${tipGauge(ck)}
+          <div style="flex:1"><div style="font-size:13px;font-weight:700;line-height:1.3">🎯 ${tip.tip}</div>
+          <div style="font-size:11px;color:${riskC};margin-top:3px">Risico: ${tip.risico}</div></div>
         </div>
-        <span style="font-size:12px;font-weight:700;color:${kleur};white-space:nowrap;margin-left:8px">${k}%</span>
+        ${legsHtml}${oddRow}
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:6px">${tip.onderbouwing}</div>
       </div>`;
-    }).join('');
-    const combKans = bet.gecombineerde_kans ?? null;
-    const combKleur = combKans >= 60 ? 'var(--mint)' : combKans >= 45 ? 'var(--gold)' : 'var(--peach)';
-    const totalOddHtml = allHaveOdds && onderdelen.length > 0 ?
-      `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border);margin-top:4px">
-        <span style="font-size:12px;color:var(--muted2)">Gecombineerde quote</span>
-        <span style="font-size:16px;font-weight:700;color:var(--gold)">${combOdd.toFixed(2)}</span>
-      </div>` : '';
-    el.innerHTML = `
-      ${reliabilityHtml}
-      <div class="bbt" style="margin-bottom:8px">🎯 ${bet.tip}</div>
-      ${onderdelenHtml ? `<div style="margin:10px 0">${onderdelenHtml}${totalOddHtml}</div>` : ''}
-      ${combKans ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-weight:700">
-        <span>Slagingskans</span>
-        <span style="color:${combKleur};font-size:16px">${combKans}%</span>
-      </div>${combKans < 60 ? `<div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:7px 10px;margin-bottom:4px;font-size:11px;color:var(--peach)">⚠️ Onder 60% — overweeg minder onderdelen</div>` : ''}` : ''}
-      <div class="bbw" style="margin-top:8px">
-        <div style="margin-bottom:4px"><span style="color:var(--gold);font-weight:700">${bet.type}</span>&nbsp;·&nbsp;<span style="color:${riskColor}">Risico: ${bet.risico}</span></div>
-        <div style="line-height:1.6;font-size:12px">${bet.onderbouwing}</div>
-        ${bet.data_basis?`<div style="margin-top:6px;font-size:10px;color:var(--muted2)">📊 ${bet.data_basis}</div>`:''}
-        <div style="margin-top:8px;font-size:11px;color:var(--gold)">→ Check quotes bij je boekmaker en combineer in Bet Builder</div>
-      </div>`;
+    };
+    el.innerHTML = reliabilityHtml + bet.map(tipHtml).join("") +
+      `<div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:4px">→ Check quotes bij je boekmaker · Combineer in Bet Builder</div>`;
+
   } catch(e) {
     el.innerHTML = `<span style="color:var(--muted2);font-size:12px">Fout: ${e.message}</span>`;
   }
