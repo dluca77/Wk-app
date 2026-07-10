@@ -435,19 +435,19 @@ const MATCHES = [
   {id:'r13',g:'R32',date:'2026-07-03',time:'20:00',h:'Australia',a:'Egypt',venue:'Dallas (VS)',result:'1-1',penWinner:'Egypt'},
   {id:'r14',g:'R32',date:'2026-07-04',time:'00:00',h:'Argentina',a:'Cape Verde',venue:'Miami (VS)',result:'3-2'},
   {id:'r15',g:'R32',date:'2026-07-04',time:'03:30',h:'Colombia',a:'Ghana',venue:'Kansas City (VS)',result:'2-0'},
-  {id:'af1',g:'R16',date:'2026-07-04',time:'19:00',h:'Canada',a:'Morocco',venue:'Houston (VS)'},
-  {id:'af2',g:'R16',date:'2026-07-04',time:'23:00',h:'Paraguay',a:'France',venue:'Philadelphia (VS)'},
-  {id:'af3',g:'R16',date:'2026-07-05',time:'22:00',h:'Brazil',a:'Norway',venue:'New York/New Jersey (VS)'},
-  {id:'af4',g:'R16',date:'2026-07-06',time:'02:00',h:'Mexico',a:'England',venue:'Mexico-Stad (Mexico)'},
-  {id:'af5',g:'R16',date:'2026-07-06',time:'21:00',h:'Portugal',a:'Spain',venue:'Dallas (VS)'},
-  {id:'af6',g:'R16',date:'2026-07-07',time:'02:00',h:'United States',a:'Belgium',venue:'Seattle (VS)'},
-  {id:'af7',g:'R16',date:'2026-07-07',time:'18:00',h:'Argentina',a:'Egypt',venue:'Atlanta (VS)'},
-  {id:'af8',g:'R16',date:'2026-07-07',time:'22:00',h:'Switzerland',a:'Colombia',venue:'Vancouver (Canada)'},
-  {id:'kf1',g:'QF',date:'2026-07-09',time:'22:00',h:'W #89',a:'W #90',venue:'Boston (VS)'},
-  {id:'kf2',g:'QF',date:'2026-07-10',time:'21:00',h:'W #93',a:'W #94',venue:'Los Angeles (VS)'},
-  {id:'kf3',g:'QF',date:'2026-07-11',time:'23:00',h:'W #91',a:'W #92',venue:'Miami (VS)'},
-  {id:'kf4',g:'QF',date:'2026-07-12',time:'03:00',h:'W #95',a:'W #96',venue:'Kansas City (VS)'},
-  {id:'hf1',g:'SF',date:'2026-07-14',time:'21:00',h:'W KF1',a:'W KF2',venue:'Dallas (VS)'},
+  {id:'af1',g:'R16',date:'2026-07-04',time:'19:00',h:'Canada',a:'Morocco',venue:'Houston (VS)',result:'1-2'},
+  {id:'af2',g:'R16',date:'2026-07-04',time:'23:00',h:'Paraguay',a:'France',venue:'Philadelphia (VS)',result:'1-3'},
+  {id:'af3',g:'R16',date:'2026-07-05',time:'22:00',h:'Brazil',a:'Norway',venue:'New York/New Jersey (VS)',result:'1-2'},
+  {id:'af4',g:'R16',date:'2026-07-06',time:'02:00',h:'Mexico',a:'England',venue:'Mexico-Stad (Mexico)',result:'0-2'},
+  {id:'af5',g:'R16',date:'2026-07-06',time:'21:00',h:'Portugal',a:'Spain',venue:'Dallas (VS)',result:'1-2'},
+  {id:'af6',g:'R16',date:'2026-07-07',time:'02:00',h:'United States',a:'Belgium',venue:'Seattle (VS)',result:'1-4'},
+  {id:'af7',g:'R16',date:'2026-07-07',time:'18:00',h:'Argentina',a:'Egypt',venue:'Atlanta (VS)',result:'3-2'},
+  {id:'af8',g:'R16',date:'2026-07-07',time:'22:00',h:'Switzerland',a:'Colombia',venue:'Vancouver (Canada)',result:'0-0',penWinner:'Switzerland'},
+  {id:'kf1',g:'QF',date:'2026-07-09',time:'22:00',h:'France',a:'Morocco',venue:'Boston (VS)',result:'2-0'},
+  {id:'kf2',g:'QF',date:'2026-07-10',time:'21:00',h:'Spain',a:'Belgium',venue:'Los Angeles (VS)'},
+  {id:'kf3',g:'QF',date:'2026-07-11',time:'23:00',h:'Norway',a:'England',venue:'Miami (VS)'},
+  {id:'kf4',g:'QF',date:'2026-07-12',time:'03:00',h:'Switzerland',a:'Argentina',venue:'Kansas City (VS)'},
+  {id:'hf1',g:'SF',date:'2026-07-14',time:'21:00',h:'France',a:'W. Spa/Bel',venue:'Dallas (VS)'},
   {id:'hf2',g:'SF',date:'2026-07-15',time:'21:00',h:'W KF3',a:'W KF4',venue:'Atlanta (VS)'},
   {id:'tr',g:'3PL',date:'2026-07-18',time:'23:00',h:'Verliezer HF1',a:'Verliezer HF2',venue:'Miami (VS)'},
   {id:'fin',g:'FIN',date:'2026-07-19',time:'21:00',h:'W HF1',a:'W HF2',venue:'MetLife Stadium, New York'},
@@ -1555,7 +1555,7 @@ function updateKnockoutNames(){
 
   // Update QF (kf1-kf4) met R16 winnaars
   const r16feeds = {
-    kf1:['af1','af2'], kf2:['af3','af4'], kf3:['af5','af6'], kf4:['af7','af8'],
+    kf1:['af2','af1'], kf2:['af5','af6'], kf3:['af3','af4'], kf4:['af8','af7'],
   };
   for(const [kfId, feeds] of Object.entries(r16feeds)){
     const m = gm(kfId);
