@@ -446,9 +446,9 @@ const MATCHES = [
   {id:'kf1',g:'QF',date:'2026-07-09',time:'22:00',h:'France',a:'Morocco',venue:'Boston (VS)',result:'2-0'},
   {id:'kf2',g:'QF',date:'2026-07-10',time:'21:00',h:'Spain',a:'Belgium',venue:'Los Angeles (VS)',result:'2-1'},
   {id:'kf3',g:'QF',date:'2026-07-11',time:'23:00',h:'Norway',a:'England',venue:'Miami (VS)'},
-  {id:'kf4',g:'QF',date:'2026-07-12',time:'03:00',h:'Switzerland',a:'Argentina',venue:'Kansas City (VS)',result:'1-3'},
+  {id:'kf4',g:'QF',date:'2026-07-12',time:'03:00',h:'Switzerland',a:'Argentina',venue:'Kansas City (VS)'},
   {id:'hf1',g:'SF',date:'2026-07-14',time:'21:00',h:'France',a:'Spain',venue:'Dallas (VS)'},
-  {id:'hf2',g:'SF',date:'2026-07-15',time:'21:00',h:'England',a:'Argentina',venue:'Atlanta (VS)'},
+  {id:'hf2',g:'SF',date:'2026-07-15',time:'21:00',h:'W KF3',a:'W KF4',venue:'Atlanta (VS)'},
   {id:'tr',g:'3PL',date:'2026-07-18',time:'23:00',h:'Verliezer HF1',a:'Verliezer HF2',venue:'Miami (VS)'},
   {id:'fin',g:'FIN',date:'2026-07-19',time:'21:00',h:'W HF1',a:'W HF2',venue:'MetLife Stadium, New York'},
 ];
@@ -1261,10 +1261,7 @@ function mergeLive(liveMatches){
       (x.h===m.h && x.a===m.a) || (x.h===m.a && x.a===m.h)
     );
     if(!hit) continue;
-    if(hit.result) {
-      const reversed = hit.h===m.a && hit.a===m.h;
-      m.result = reversed ? hit.result.split('-').reverse().join('-') : hit.result;
-    }
+    if(hit.result) m.result = hit.result;
     m.apiLive = !!hit.live;
   }
 }
