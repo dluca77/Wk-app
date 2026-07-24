@@ -527,11 +527,29 @@ const GS = n => SH[n]||null;
 const nf = (v,d=2) => (v===null||v===undefined||isNaN(v)) ? null : (Math.round(v*Math.pow(10,d))/Math.pow(10,d));
 const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}) : null;
 function teamStanding(team){
+  if(!team) return null;
+  const t = team.toLowerCase();
+  // WK groepen
   for(const letter in GROUPS){
-    const row=(GROUPS[letter]||[]).find(r=>r.team===team);
+    if(letter === '_multi') continue;
+    const row=(GROUPS[letter]||[]).find(r=>r.team&&r.team.toLowerCase()===t);
     if(row) return row;
   }
-  return null;
+  // Club competities
+  const multi = GROUPS['_multi'] || [];
+  return multi.find(r=>r.team&&r.team.toLowerCase()===t) || null;
+}
+function mergeMultiStandings(res){
+  if(!res) return;
+  const addRows = (rows) => {
+    if(!GROUPS['_multi']) GROUPS['_multi'] = [];
+    for(const row of (rows||[])){
+      const idx = GROUPS['_multi'].findIndex(r=>r.team===row.team);
+      if(idx>=0) GROUPS['_multi'][idx]=row; else GROUPS['_multi'].push(row);
+    }
+  };
+  if(res.standings) { addRows(res.standings); }
+  else { for(const id in res){ if(res[id]?.standings) addRows(res[id].standings); } }
 }
 
 // ── ODDS (hardcoded van the-odds-api) ──
@@ -1367,23 +1385,27 @@ function mergeGroups(groupsRes){
 async function fetchLiveData(){
   if(!WORKER_URL) return;
   try{
-    // Haal alle competities op + odds + player stats
+    // Haal alle competities op + odds + player stats + standen
     const compUrl = selComp === 'all'
       ? WORKER_URL+'/matches'
       : WORKER_URL+'/matches?comp='+selComp;
-    const [matchRes, oddsRes, playerRes] = await Promise.all([
+    const standingsUrl = selComp === 'all'
+      ? WORKER_URL+'/standings'
+      : WORKER_URL+'/standings?comp='+selComp;
+    const playerUrl = selComp === 'all'
+      ? WORKER_URL+'/player-stats'
+      : WORKER_URL+'/player-stats?comp='+selComp;
+    const [matchRes, oddsRes, playerRes, standingsRes] = await Promise.all([
       fetch(compUrl).then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/odds').then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(WORKER_URL+'/player-stats').then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(playerUrl).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(standingsUrl).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     // Nieuwe matches uit Worker toevoegen aan MATCHES
-    if(matchRes?.matches?.length){
-      mergeNewMatches(matchRes.matches);
-    }
+    if(matchRes?.matches?.length) mergeNewMatches(matchRes.matches);
     if(oddsRes) mergeOdds(oddsRes);
     if(playerRes) { const {_processed,...stats}=playerRes; PLAYER_STATS=stats; }
-    // Odds API voor quotes
-    const oddsApiRes = await fetch(WORKER_URL+'/odds').then(r=>r.ok?r.json():null).catch(()=>null);
+    if(standingsRes) mergeMultiStandings(standingsRes);
     if(oddsApiRes?.matches) ODDS_API_DATA = oddsApiRes.matches;
     updateKnockoutNames();
   }catch(e){
