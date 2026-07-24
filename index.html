@@ -37,6 +37,11 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 @keyframes lp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
 
 /* ── DATE NAV ── */
+.comp-nav{display:flex;gap:5px;overflow-x:auto;padding:8px 0 6px;scrollbar-width:none}
+.comp-nav::-webkit-scrollbar{display:none}
+.cpill{flex-shrink:0;padding:5px 12px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;font-family:inherit;display:flex;align-items:center;gap:4px}
+.cpill.on{background:var(--surface2);border-color:var(--border2);color:var(--text)}
+.cpill:active{transform:scale(.97)}
 .date-nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:12px;scrollbar-width:none}
 .date-nav::-webkit-scrollbar{display:none}
 .dpill{flex-shrink:0;padding:6px 16px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .2s cubic-bezier(.34,1.56,.64,1)}
@@ -264,6 +269,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
       <button onclick="openAdminLogin()" style="background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:6px 9px;color:var(--muted);font-size:13px;cursor:pointer;transition:all .15s;line-height:1">⚙️</button>
     </div>
   </div>
+  <div class="comp-nav" id="compNav"></div>
   <div class="date-nav" id="dateNav"></div>
 </div>
 <div class="container">
@@ -445,12 +451,38 @@ const MATCHES = [
   {id:'af8',g:'R16',date:'2026-07-07',time:'22:00',h:'Switzerland',a:'Colombia',venue:'Vancouver (Canada)',result:'0-0',penWinner:'Switzerland'},
   {id:'kf1',g:'QF',date:'2026-07-09',time:'22:00',h:'France',a:'Morocco',venue:'Boston (VS)',result:'2-0'},
   {id:'kf2',g:'QF',date:'2026-07-10',time:'21:00',h:'Spain',a:'Belgium',venue:'Los Angeles (VS)',result:'2-1'},
-  {id:'kf3',g:'QF',date:'2026-07-11',time:'23:00',h:'Norway',a:'England',venue:'Miami (VS)'},
-  {id:'kf4',g:'QF',date:'2026-07-12',time:'03:00',h:'Switzerland',a:'Argentina',venue:'Kansas City (VS)'},
-  {id:'hf1',g:'SF',date:'2026-07-14',time:'21:00',h:'France',a:'Spain',venue:'Dallas (VS)'},
-  {id:'hf2',g:'SF',date:'2026-07-15',time:'21:00',h:'W KF3',a:'W KF4',venue:'Atlanta (VS)'},
-  {id:'tr',g:'3PL',date:'2026-07-18',time:'23:00',h:'Verliezer HF1',a:'Verliezer HF2',venue:'Miami (VS)'},
-  {id:'fin',g:'FIN',date:'2026-07-19',time:'21:00',h:'W HF1',a:'W HF2',venue:'MetLife Stadium, New York'},
+  {id:'kf3',g:'QF',date:'2026-07-11',time:'23:00',h:'Norway',a:'England',venue:'Miami (VS)',result:'1-2'},
+  {id:'kf4',g:'QF',date:'2026-07-12',time:'03:00',h:'Switzerland',a:'Argentina',venue:'Kansas City (VS)',result:'1-2'},
+  {id:'hf1',g:'SF',date:'2026-07-14',time:'21:00',h:'France',a:'Spain',venue:'Dallas (VS)',result:'0-2'},
+  {id:'hf2',g:'SF',date:'2026-07-15',time:'21:00',h:'England',a:'Argentina',venue:'Atlanta (VS)',result:'1-2'},
+  {id:'tr',g:'3PL',date:'2026-07-18',time:'23:00',h:'France',a:'England',venue:'Miami (VS)',result:'4-6'},
+  {id:'fin',g:'FIN',date:'2026-07-19',time:'21:00',h:'Spain',a:'Argentina',venue:'MetLife Stadium, New York',result:'1-0'},
+  // ── EREDIVISIE 2026/27 — Speelronde 1 (7-9 augustus) ──
+  {id:'er1_1',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-07',time:'20:00',h:'SC Cambuur',a:'Excelsior',venue:'Kooi Stadion, Leeuwarden'},
+  {id:'er1_2',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-08',time:'16:30',h:'NEC',a:'Telstar',venue:'De Goffert, Nijmegen'},
+  {id:'er1_3',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-08',time:'18:45',h:'Go Ahead Eagles',a:'Willem II',venue:'De Adelaarshorst, Deventer'},
+  {id:'er1_4',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-08',time:'20:00',h:'PSV',a:'Fortuna Sittard',venue:'Philips Stadion, Eindhoven'},
+  {id:'er1_5',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-08',time:'21:00',h:'AZ',a:'ADO Den Haag',venue:'AFAS Stadion, Alkmaar'},
+  {id:'er1_6',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-09',time:'12:15',h:'Sparta Rotterdam',a:'Feyenoord',venue:'Het Kasteel, Rotterdam'},
+  {id:'er1_7',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-09',time:'14:30',h:'FC Groningen',a:'FC Utrecht',venue:'Euroborg, Groningen'},
+  {id:'er1_8',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-09',time:'14:30',h:'PEC Zwolle',a:'Ajax',venue:'MAC3PARK Stadion, Zwolle'},
+  {id:'er1_9',g:'1',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-08-09',time:'16:45',h:'sc Heerenveen',a:'FC Twente',venue:'Abe Lenstra Stadion'},
+
+  // Eredivisie Topper: Ajax - PSV (speelronde 5)
+  {id:'er5_1',g:'5',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-09-05',time:'20:00',h:'Ajax',a:'PSV',venue:'Johan Cruijff ArenA, Amsterdam'},
+  // Klassieker (speelronde 14)
+  {id:'er14_1',g:'14',compId:37,compName:'Eredivisie',compFlag:'🇳🇱',date:'2026-11-29',time:'12:15',h:'Feyenoord',a:'Ajax',venue:'De Kuip, Rotterdam'},
+
+  // ── CHAMPIONS LEAGUE KWALIFICATIE — Ronde 2 Heen (28-29 juli) ──
+  {id:'clq2_1',g:'Q2',compId:7,compName:'Champions League',compFlag:'⭐',date:'2026-07-28',time:'20:00',h:'Dinamo Zagreb',a:'FC Thun',venue:''},
+  {id:'clq2_2',g:'Q2',compId:7,compName:'Champions League',compFlag:'⭐',date:'2026-07-28',time:'20:45',h:'Heart of Midlothian',a:'SK Sturm Graz',venue:'Tynecastle, Edinburgh'},
+  {id:'clq2_3',g:'Q2',compId:7,compName:'Champions League',compFlag:'⭐',date:'2026-07-28',time:'21:00',h:'Shamrock Rovers',a:'FC Ararat-Armenia',venue:''},
+  {id:'clq2_4',g:'Q2',compId:7,compName:'Champions League',compFlag:'⭐',date:'2026-07-29',time:'19:00',h:'Lech Poznan',a:'Aarhus GF',venue:''},
+  {id:'clq2_5',g:'Q2',compId:7,compName:'Champions League',compFlag:'⭐',date:'2026-07-29',time:'19:30',h:'Universitatea Craiova',a:'Levski Sofia',venue:''},
+
+  // ── CONFERENCE LEAGUE KWALIFICATIE — Ajax (Ronde 2) ──
+  {id:'eclq2_ajax1',g:'Q2',compId:17015,compName:'Conference League',compFlag:'🟣',date:'2026-07-23',time:'20:00',h:'Ajax',a:'nader bekend',venue:'Johan Cruijff ArenA'},
+  {id:'eclq2_ajax2',g:'Q2',compId:17015,compName:'Conference League',compFlag:'🟣',date:'2026-07-30',time:'20:00',h:'nader bekend',a:'Ajax',venue:''},
 ];
 
 // ── FLAGS ──
@@ -524,9 +556,23 @@ const ODDS = {
 // ── STATE ──
 const NOW = new Date();
 const TODAY = NOW.toISOString().split('T')[0];
+// Competitie configuratie
+const COMP_CONFIG = {
+  7:     { name: 'Champions League',   flag: '⭐', short: 'CL' },
+  679:   { name: 'Europa League',      flag: '🟠', short: 'EL' },
+  17015: { name: 'Conference League',  flag: '🟣', short: 'ECL' },
+  37:    { name: 'Eredivisie',         flag: '🇳🇱', short: 'NL' },
+  17:    { name: 'Premier League',     flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', short: 'PL' },
+  8:     { name: 'La Liga',            flag: '🇪🇸', short: 'ESP' },
+  35:    { name: 'Bundesliga',         flag: '🇩🇪', short: 'DE' },
+  23:    { name: 'Serie A',            flag: '🇮🇹', short: 'IT' },
+  34:    { name: 'Ligue 1',            flag: '🇫🇷', short: 'FR' },
+};
+
 let selDate = TODAY;
 let selFilter = 'all';
 let selView = 'matches';
+let selComp = 'all'; // geselecteerde competitie
 let selectedMatchIds = new Set(); // wedstrijden geselecteerd voor dagtip
 let GROUPS = {};
 let groupsUpdatedAt = null;
@@ -536,7 +582,18 @@ let PLAYER_STATS = {}; // spelersdata per team van hun meest recente gespeelde w
 let ODDS_API_DATA = {}; // The Odds API: echte marktodds (BTTS, O/U, 1X2)
 
 // ── HELPERS ──
-const RL = g => g==='FIN'?'🏆 Finale':g==='SF'?'Halve Finale':g==='QF'?'Kwartfinale':g==='R16'?'Achtste Finale':g==='R32'?'Ronde van 32':g==='3PL'?'3e Plaatswedstrijd':`Groep ${g}`;
+const RL = (g, m) => {
+  if(g==='FIN') return '🏆 Finale';
+  if(g==='SF') return 'Halve Finale';
+  if(g==='QF') return 'Kwartfinale';
+  if(g==='R16') return 'Achtste Finale';
+  if(g==='R32') return 'Ronde van 32';
+  if(g==='3PL') return '3e Plaatswedstrijd';
+  // Club wedstrijden: toon competitienaam
+  if(m?.compName) return (m.compFlag||'') + ' ' + (m.round || m.compName);
+  if(/^[A-L]$/.test(g)) return `Groep ${g}`;
+  return g || '?';
+};
 function isLive(m){
   if(m.apiLive!==undefined) return m.apiLive; // echte status van de API wint altijd
   if(m.result) return false;
@@ -662,14 +719,35 @@ function tip(p1,px,p2){const m=Math.max(p1,px,p2);if(m===p1)return px>p1-8?{t:'1
 function getOdds(h,a){const f=ODDS[h+'_'+a],r=ODDS[a+'_'+h];return f||r?{h:f?.h||r?.a,d:f?.d||r?.d,a:f?.a||r?.h,fetchedAt:f?.fetchedAt||r?.fetchedAt}:null;}
 
 // ── DATE NAV ──
+function buildCompNav(){
+  // Welke competities zijn aanwezig in MATCHES?
+  const compIds = [...new Set(MATCHES.filter(m=>m.compId).map(m=>m.compId))];
+  if(!compIds.length) { document.getElementById('compNav').innerHTML=''; return; }
+  const pills = [
+    `<button class="cpill ${selComp==='all'?'on':''}" onclick="selCompFn('all',this)">🌍 Alle</button>`,
+    ...compIds.map(id => {
+      const c = COMP_CONFIG[id] || {name:'Comp '+id, flag:'⚽', short:'?'};
+      return `<button class="cpill ${selComp==id?'on':''}" onclick="selCompFn(${id},this)">${c.flag} ${c.short}</button>`;
+    })
+  ];
+  document.getElementById('compNav').innerHTML = pills.join('');
+}
+function selCompFn(id, btn){
+  selComp = id;
+  document.querySelectorAll('.cpill').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  buildNav(); render();
+}
 function buildNav(){
-  const dates=[...new Set(MATCHES.map(m=>m.date))].sort();
+  // Filter matches op geselecteerde competitie
+  const filtered = selComp==='all' ? MATCHES : MATCHES.filter(m=>m.compId==selComp || (!m.compId && selComp==='wk'));
+  const dates=[...new Set(filtered.map(m=>m.date))].filter(Boolean).sort();
+  if(!dates.includes(selDate) && dates.length) selDate = dates.includes(TODAY) ? TODAY : dates[0];
   document.getElementById('dateNav').innerHTML=dates.map(d=>{
     const dt=new Date(d+'T12:00:00');
     const lbl=d===TODAY?'Vandaag':d<TODAY?dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+' ✓':dt.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
     return `<button class="dpill ${d===selDate?'on':''}" onclick="selDay('${d}',this)" data-date="${d}">${lbl}</button>`;
   }).join('');
-  // Scroll automatisch naar vandaag
   requestAnimationFrame(()=>{
     const active=document.querySelector('.dpill.on');
     if(active) active.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});
@@ -880,8 +958,11 @@ function renderStandings(){
 
 // ── RENDER ──
 function render(){
+  buildCompNav(); // update competitie selector
   const ms=MATCHES.filter(m=>{
     if(m.date!==selDate) return false;
+    // Filter op competitie
+    if(selComp!=='all' && m.compId && m.compId != selComp) return false;
     const live=isLive(m),done=isDone(m);
     if(selFilter==='live') return live;
     if(selFilter==='done') return done;
@@ -1284,27 +1365,61 @@ function mergeGroups(groupsRes){
 }
 
 async function fetchLiveData(){
-  if(!WORKER_URL) return; // nog niet geconfigureerd — gewoon lokale data tonen
+  if(!WORKER_URL) return;
   try{
-    const [liveRes, oddsRes, topRes, groupsRes, globalRes, playerRes, oddsApiRes] = await Promise.all([
-      fetch(WORKER_URL+'/live').then(r=>r.ok?r.json():null).catch(()=>null),
+    // Haal alle competities op + odds + player stats
+    const compUrl = selComp === 'all'
+      ? WORKER_URL+'/matches'
+      : WORKER_URL+'/matches?comp='+selComp;
+    const [matchRes, oddsRes, playerRes] = await Promise.all([
+      fetch(compUrl).then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/odds').then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(WORKER_URL+'/topscorers').then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(WORKER_URL+'/groups').then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(WORKER_URL+'/topscorers/global').then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(WORKER_URL+'/player-stats').then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(WORKER_URL+'/odds-api').then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
-    if(liveRes?.matches) mergeLive(liveRes.matches);
+    // Nieuwe matches uit Worker toevoegen aan MATCHES
+    if(matchRes?.matches?.length){
+      mergeNewMatches(matchRes.matches);
+    }
     if(oddsRes) mergeOdds(oddsRes);
-    if(topRes?.topscorers) mergeTopscorers(topRes.topscorers, topRes.updatedAt);
-    if(groupsRes) mergeGroups(groupsRes);
-    if(globalRes?.list){ globalTopscorers=globalRes.list; globalTopscorersUpdatedAt=globalRes.updatedAt; if(selView==='topscorers') renderTopscorers(); }
     if(playerRes) { const {_processed,...stats}=playerRes; PLAYER_STATS=stats; }
-    if(oddsApiRes) ODDS_API_DATA = oddsApiRes?.matches || {};
-    updateKnockoutNames(); // vul knockout teamnamen in op basis van resultaten
+    // Odds API voor quotes
+    const oddsApiRes = await fetch(WORKER_URL+'/odds').then(r=>r.ok?r.json():null).catch(()=>null);
+    if(oddsApiRes?.matches) ODDS_API_DATA = oddsApiRes.matches;
+    updateKnockoutNames();
   }catch(e){
-    console.warn('Live data ophalen mislukt, val terug op lokale data:', e);
+    console.warn('Live data ophalen mislukt:', e);
+  }
+}
+
+// Voeg nieuwe matches uit Worker toe aan MATCHES array (dedupliceert op apiId + teamnamen)
+function mergeNewMatches(newMatches){
+  for(const nm of newMatches){
+    // Kijk of match al bestaat (op teamnaam)
+    const existing = MATCHES.find(m =>
+      ((m.h===nm.h||m.h===nm.a) && (m.a===nm.a||m.a===nm.h)) ||
+      (m.apiId && m.apiId === nm.apiId)
+    );
+    if(existing){
+      // Update result/live status
+      if(nm.result) existing.result = nm.result;
+      existing.apiLive = !!nm.live;
+    } else {
+      // Nieuwe match toevoegen
+      MATCHES.push({
+        id: 'dyn_'+(nm.apiId||Math.random().toString(36).slice(2)),
+        apiId: nm.apiId,
+        g: nm.compName || nm.compFlag || '?',
+        compId: nm.compId,
+        compName: nm.compName,
+        compFlag: nm.compFlag,
+        date: nm.date,
+        time: nm.time,
+        h: nm.h, a: nm.a,
+        venue: nm.venue || '',
+        result: nm.result || null,
+        round: nm.round || '',
+      });
+    }
   }
 }
 
@@ -1821,11 +1936,12 @@ const DEVICE_ID = localStorage.getItem('wk_device') || (()=>{const id='d_'+Math.
 
 // ── INIT ──
 buildNav();
+buildCompNav();
 render();
-fetchLiveData().then(render);
+fetchLiveData().then(()=>{ buildNav(); buildCompNav(); render(); });
 setInterval(()=>{
   fetchLiveData().then(()=>{
-    if(selView==="matches" && selDate===TODAY) render();
+    if(selView==="matches") { buildNav(); buildCompNav(); render(); }
     if(selView==="standings") renderStandings();
     if(selView==="topscorers") renderTopscorers();
   });
