@@ -1439,7 +1439,7 @@ function mergeNewMatches(newMatches){
       MATCHES.push({
         id: 'dyn_'+(nm.apiId||Math.random().toString(36).slice(2)),
         apiId: nm.apiId,
-        g: nm.compName || nm.compFlag || '?',
+        g: nm.compName || nm.compFlag || nm.round || '?',
         compId: nm.compId,
         compName: nm.compName,
         compFlag: nm.compFlag,
