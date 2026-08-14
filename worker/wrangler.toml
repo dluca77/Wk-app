@@ -1,0 +1,7 @@
+name = "wk2026-proxy"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "WK_CACHE"
+id = "4f4cc7ab98fc4c01a6686003e7e2fbcf"

@@ -1044,7 +1044,7 @@ function render(){
     return `<div class="match-card ${live?'live':''} ${isSel?'sel-card':''}" onclick="openModal('${m.id}')">
       <div class="mc-inner">
         <div class="mc-top">
-          <div class="mc-league">🌍 ${RL(m.g)}</div>
+          <div class="mc-league">${m.compName ? '' : '🌍 '}${RL(m.g, m)}</div>
           <div style="display:flex;align-items:center;gap:8px">
             ${statusHtml}
             ${canSelect?`<div class="sel-toggle ${isSel?'sel-on':''}" onclick="event.stopPropagation();toggleSelect('${m.id}')" title="Toevoegen aan dagtip">${isSel?'✓':''}</div>`:''}
@@ -1145,7 +1145,7 @@ function openModal(id){
   document.getElementById('mbody').innerHTML=`
     ${topBox}
     <div class="md-hero">
-      <div class="md-meta">${RL(m.g)} · ${m.time} NL · ${m.venue}</div>
+      <div class="md-meta">${RL(m.g, m)} · ${m.time} NL · ${m.venue}</div>
       <div class="md-teams">
         <div class="md-team"><span class="md-flag">${hf}</span><div class="md-name">${m.h}</div></div>
         <div class="md-mid">${m.result?`<div class="md-score">${m.result}</div>`:`<div class="md-vs">vs</div>`}</div>
@@ -1219,9 +1219,10 @@ async function generateAiBet(m, odds, hLinup, aLinup){
     return `${k}: ${JSON.stringify(v)}`;
   }).join('\n') : null;
 
-  const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
+  const compLabel = m.compName || 'WK 2026';
+  const prompt = `Je bent een sportsbetting analist voor ${compLabel}. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
-WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g)}, ${m.date} ${m.time} NL)
+WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g, m)}, ${m.date} ${m.time} NL)
 
 ${realOddsStr ? `ECHTE MARKTODDS (gebruik deze voor waardebepaling en gecombineerde quote schatting):
 ${realOddsStr}
@@ -1406,7 +1407,7 @@ async function fetchLiveData(){
     if(oddsRes) mergeOdds(oddsRes);
     if(playerRes) { const {_processed,...stats}=playerRes; PLAYER_STATS=stats; }
     if(standingsRes) mergeMultiStandings(standingsRes);
-    if(oddsApiRes?.matches) ODDS_API_DATA = oddsApiRes.matches;
+    if(oddsRes?.matches) ODDS_API_DATA = oddsRes.matches;
     updateKnockoutNames();
   }catch(e){
     console.warn('Live data ophalen mislukt:', e);
@@ -1760,10 +1761,10 @@ async function generateOverallBet(){
     const oddsApiM = getOddsApiMatch(m.h, m.a);
     const realO = oddsApiM?.odds;
     const realOStr = realO ? ` [echte odds:${realO["BTTS"] ? ` BTTS Ja=${realO["BTTS"].yes} Nee=${realO["BTTS"].no}` : ""}${realO["O/U_2.5"] ? ` O2.5=${realO["O/U_2.5"].over} U2.5=${realO["O/U_2.5"].under}` : ""}${realO["1X2"] ? ` 1X2 h=${realO["1X2"].h} d=${realO["1X2"].d} a=${realO["1X2"].a}` : ""}]` : "";
-    return `WEDSTRIJD: ${m.h} vs ${m.a} (${m.time} NL${m.date !== selDate ? " morgen" : ""})${realOStr}\n` +
+    return `WEDSTRIJD: ${m.h} vs ${m.a} (${m.compName || 'WK 2026'}, ${m.time} NL${m.date !== selDate ? " morgen" : ""})${realOStr}\n` +
       topBets.map(b => `  ${b.type} | ${b.bet} | ${b.kans}%${b.detail?" ("+b.detail+")":""}`).join("\n");
   }).join("\n---\n");
-  const prompt = `Je bent een sportsbetting analist voor WK 2026. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
+  const prompt = `Je bent een sportsbetting analist voor voetbal. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
 DOEL: Kies het optimale aantal onderdelen (1 tot 10) uit VERSCHILLENDE wedstrijden.
 Regels:
