@@ -8,6 +8,16 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  debug-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test football API response
+        run: |
+          curl -sS --request GET \
+            --url 'https://free-api-live-football-data.p.rapidapi.com/football-get-matches-by-date?date=20260814' \
+            --header 'x-rapidapi-host: free-api-live-football-data.p.rapidapi.com' \
+            --header 'x-rapidapi-key: 07accd4fc4msh8b1b61b5809134cp19f2eejsnd5fee04cc877' \
+            | head -c 4000
   deploy:
     runs-on: ubuntu-latest
     steps:
