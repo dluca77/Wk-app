@@ -248,7 +248,15 @@ export default {
     if (url.pathname === '/debug') {
       const meta = await kvGet(env, 'meta_global', {});
       const d = await kvGet(env, 'matches_all', { matches: [] });
-      return json({ meta, totalMatches: (d.matches || []).length });
+      let oddsApiCheck = 'ODDS_API_KEY ontbreekt';
+      if (env.ODDS_API_KEY) {
+        try {
+          const r = await fetch(`https://api.the-odds-api.com/v4/sports/soccer_epl/odds?regions=eu&markets=h2h&oddsFormat=decimal&apiKey=${env.ODDS_API_KEY}`);
+          const body = await r.text();
+          oddsApiCheck = { status: r.status, remaining: r.headers.get('x-requests-remaining'), body: body.slice(0, 300) };
+        } catch(e) { oddsApiCheck = `fetch error: ${e.message}`; }
+      }
+      return json({ meta, totalMatches: (d.matches || []).length, oddsApiCheck });
     }
 
     return json({ error: 'not found', routes: ['/matches', '/odds', '/standings', '/player-stats', '/ai-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
