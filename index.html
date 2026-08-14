@@ -760,7 +760,13 @@ function buildNav(){
   // Filter matches op geselecteerde competitie
   const filtered = selComp==='all' ? MATCHES : MATCHES.filter(m=>m.compId==selComp || (!m.compId && selComp==='wk'));
   const dates=[...new Set(filtered.map(m=>m.date))].filter(Boolean).sort();
-  if(!dates.includes(selDate) && dates.length) selDate = dates.includes(TODAY) ? TODAY : dates[0];
+  if(!dates.includes(selDate) && dates.length){
+    // Geen wedstrijd exact vandaag: pak de dichtstbijzijnde datum
+    // (bij voorkeur de eerstvolgende, anders de meest recente die al geweest is)
+    const upcoming = dates.find(d => d >= TODAY);
+    const past = [...dates].reverse().find(d => d < TODAY);
+    selDate = upcoming || past || dates[0];
+  }
   document.getElementById('dateNav').innerHTML=dates.map(d=>{
     const dt=new Date(d+'T12:00:00');
     const lbl=d===TODAY?'Vandaag':d<TODAY?dt.toLocaleDateString('nl-NL',{day:'numeric',month:'short'})+' ✓':dt.toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
@@ -1414,13 +1420,15 @@ async function fetchLiveData(){
   }
 }
 
-// Voeg nieuwe matches uit Worker toe aan MATCHES array (dedupliceert op apiId + teamnamen)
+// Voeg nieuwe matches uit Worker toe aan MATCHES array (dedupliceert op apiId, anders op teamnamen + datum)
 function mergeNewMatches(newMatches){
   for(const nm of newMatches){
-    // Kijk of match al bestaat (op teamnaam)
+    // Kijk of match al bestaat — apiId is leidend; zonder apiId matchen we op
+    // teams EN datum, want teams spelen vaak twee keer (heen/terug) tegen elkaar
     const existing = MATCHES.find(m =>
-      ((m.h===nm.h||m.h===nm.a) && (m.a===nm.a||m.a===nm.h)) ||
-      (m.apiId && m.apiId === nm.apiId)
+      (nm.apiId && m.apiId === nm.apiId) ||
+      (!nm.apiId && m.date === nm.date &&
+        ((m.h===nm.h && m.a===nm.a) || (m.h===nm.a && m.a===nm.h)))
     );
     if(existing){
       // Update result/live status
