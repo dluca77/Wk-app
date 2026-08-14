@@ -30,3 +30,9 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
+      - name: Ververs live data
+        env:
+          RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
+        run: |
+          CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
