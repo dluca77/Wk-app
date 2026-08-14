@@ -118,6 +118,54 @@ async function refreshAll(env, { force = false } = {}) {
   const merged = [...byId.values()].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   await kvPut(env, 'matches_all', { matches: merged, updatedAt: now.toISOString() });
 
+  // Echte marktodds (The Odds API) voor de competities die deze dekt —
+  // zonder dit heeft de AI-analyse helemaal niets om op te rekenen.
+  if (env.ODDS_API_KEY) {
+    try {
+      const sports = ['soccer_uefa_champions_league', 'soccer_uefa_europa_league', 'soccer_uefa_europa_conference_league',
+                      'soccer_netherlands_eredivisie', 'soccer_epl', 'soccer_spain_la_liga',
+                      'soccer_germany_bundesliga', 'soccer_italy_serie_a', 'soccer_france_ligue_one'];
+      const oddsCache = await kvGet(env, 'odds_multi', {});
+      const oddsStale = force || !oddsCache.fetchedAt || (now - new Date(oddsCache.fetchedAt)) > 3 * 60 * 60 * 1000;
+      if (oddsStale) {
+        const allMatches = {};
+        for (const sport of sports) {
+          try {
+            const res = await fetch(
+              `https://api.the-odds-api.com/v4/sports/${sport}/odds?regions=eu&markets=h2h,totals&oddsFormat=decimal&apiKey=${env.ODDS_API_KEY}`
+            );
+            if (res.ok) {
+              const events = await res.json();
+              for (const ev of (Array.isArray(events) ? events : [])) {
+                const key = `${ev.home_team}_${ev.away_team}`;
+                for (const bm of (ev.bookmakers || [])) {
+                  for (const mkt of (bm.markets || [])) {
+                    if (!allMatches[key]) allMatches[key] = { h: ev.home_team, a: ev.away_team, sport, odds: {} };
+                    if (mkt.key === 'h2h') {
+                      const home = mkt.outcomes?.find(o => o.name === ev.home_team);
+                      const draw = mkt.outcomes?.find(o => o.name === 'Draw');
+                      const away = mkt.outcomes?.find(o => o.name === ev.away_team);
+                      if (home && draw && away) allMatches[key].odds['1X2'] = { h: home.price, d: draw.price, a: away.price, bm: bm.title };
+                    }
+                    if (mkt.key === 'totals') {
+                      const o25 = mkt.outcomes?.find(o => o.name === 'Over' && o.point === 2.5);
+                      const u25 = mkt.outcomes?.find(o => o.name === 'Under' && o.point === 2.5);
+                      if (o25 && u25) allMatches[key].odds['O/U_2.5'] = { over: o25.price, under: u25.price, bm: bm.title };
+                    }
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+        oddsCache.matches = allMatches;
+        oddsCache.fetchedAt = now.toISOString();
+        await kvPut(env, 'odds_multi', oddsCache);
+        log.push(`odds_multi: ${Object.keys(allMatches).length} wedstrijden met echte odds`);
+      }
+    } catch(e) { log.push(`odds_multi FAIL: ${e.message.slice(0, 80)}`); }
+  }
+
   const globalMeta = { lastRun: now.toISOString(), totalCalls, totalMatches: merged.length };
   await kvPut(env, 'meta_global', globalMeta);
   return { ok: true, log, meta: globalMeta };

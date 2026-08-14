@@ -5,3 +5,8 @@ compatibility_date = "2024-01-01"
 [[kv_namespaces]]
 binding = "WK_CACHE"
 id = "4f4cc7ab98fc4c01a6686003e7e2fbcf"
+
+# Elke 3 uur automatisch verse wedstrijden + odds ophalen, zonder handmatige
+# tussenkomst — schuift het datumvenster (-2 t/m +10 dagen) vanzelf mee.
+[triggers]
+crons = ["0 */3 * * *"]

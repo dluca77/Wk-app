@@ -588,6 +588,7 @@ const COMP_CONFIG = {
 };
 
 let selDate = TODAY;
+let dateAutoPicked = true; // blijft automatisch de beste datum kiezen tot de gebruiker zelf klikt
 let selFilter = 'all';
 let selView = 'matches';
 let selComp = 'all'; // geselecteerde competitie
@@ -760,9 +761,13 @@ function buildNav(){
   // Filter matches op geselecteerde competitie
   const filtered = selComp==='all' ? MATCHES : MATCHES.filter(m=>m.compId==selComp || (!m.compId && selComp==='wk'));
   const dates=[...new Set(filtered.map(m=>m.date))].filter(Boolean).sort();
-  if(!dates.includes(selDate) && dates.length){
-    // Geen wedstrijd exact vandaag: pak de dichtstbijzijnde datum
-    // (bij voorkeur de eerstvolgende, anders de meest recente die al geweest is)
+  // Zolang de gebruiker nog geen datum heeft aangeklikt, blijven we bij elke
+  // ververing herberekenen wat de beste datum is (bv. zodra "vandaag" data krijgt)
+  if(dateAutoPicked && dates.length){
+    const upcoming = dates.find(d => d >= TODAY);
+    const past = [...dates].reverse().find(d => d < TODAY);
+    selDate = upcoming || past || dates[0];
+  } else if(!dates.includes(selDate) && dates.length){
     const upcoming = dates.find(d => d >= TODAY);
     const past = [...dates].reverse().find(d => d < TODAY);
     selDate = upcoming || past || dates[0];
@@ -778,6 +783,7 @@ function buildNav(){
   });
 }
 function selDay(d,btn){
+  dateAutoPicked = false; // gebruiker koos zelf een datum, niet meer overschrijven
   selDate=d;
   document.querySelectorAll('.dpill').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
