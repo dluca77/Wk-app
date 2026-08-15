@@ -6,7 +6,8 @@ compatibility_date = "2024-01-01"
 binding = "WK_CACHE"
 id = "4f4cc7ab98fc4c01a6686003e7e2fbcf"
 
-# Elke 3 uur automatisch verse wedstrijden + odds ophalen, zonder handmatige
-# tussenkomst — schuift het datumvenster (-2 t/m +10 dagen) vanzelf mee.
+# Twee keer per dag automatisch verse wedstrijden + vorm ophalen.
+# De football-databron heeft een streng gratis quotum — elke 3 uur met
+# een groot datumvenster liep daar al snel tegenaan (HTTP 429).
 [triggers]
-crons = ["0 */3 * * *"]
+crons = ["0 6,18 * * *"]
