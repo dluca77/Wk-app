@@ -80,12 +80,34 @@ function mapMatch(m) {
   };
 }
 
+// ---------- Vorm/statistieken berekenen uit onze eigen wedstrijddata ----------
+// Geen externe standen-API nodig: we hebben de uitslagen toch al binnen.
+function computeForm(matches) {
+  const stats = {};
+  for (const m of matches) {
+    if (!m.finished || !m.result) continue;
+    const parts = m.result.split('-').map(Number);
+    if (parts.length !== 2 || parts.some(isNaN)) continue;
+    const [hs, as] = parts;
+    for (const [team, gf, ga] of [[m.h, hs, as], [m.a, as, hs]]) {
+      if (!team) continue;
+      if (!stats[team]) stats[team] = { team, played: 0, win: 0, draw: 0, loss: 0, gf: 0, ga: 0, pts: 0 };
+      const s = stats[team];
+      s.played++; s.gf += gf; s.ga += ga;
+      if (gf > ga) { s.win++; s.pts += 3; }
+      else if (gf === ga) { s.draw++; s.pts += 1; }
+      else { s.loss++; }
+    }
+  }
+  return Object.values(stats);
+}
+
 // ---------- Refresh: alle wedstrijden voor een reeks datums ----------
 async function refreshAll(env, { force = false } = {}) {
   const now = new Date();
   const log = [];
   let totalCalls = 0;
-  const MAX_CALLS = 20; // 1 call per dag in de range
+  const MAX_CALLS = 25; // 1 call per dag in de range
 
   const meta = await kvGet(env, 'meta_global', {});
   const stale = force || !meta.lastRun || (now - new Date(meta.lastRun)) > 3 * 60 * 60 * 1000;
@@ -93,11 +115,11 @@ async function refreshAll(env, { force = false } = {}) {
     return { ok: true, log: ['skip: nog niet stale'], meta };
   }
 
-  // Van 2 dagen terug tot 10 dagen vooruit
+  // Van 7 dagen terug (voor vormberekening) tot 10 dagen vooruit
   const existing = await kvGet(env, 'matches_all', { matches: [] });
   const byId = new Map((existing.matches || []).map(m => [m.apiId, m]));
 
-  for (let offset = -2; offset <= 10; offset++) {
+  for (let offset = -7; offset <= 10; offset++) {
     if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt (${totalCalls}) — rest overgeslagen`); break; }
     const d = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
     const dateParam = ymd(d);
@@ -117,6 +139,11 @@ async function refreshAll(env, { force = false } = {}) {
 
   const merged = [...byId.values()].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   await kvPut(env, 'matches_all', { matches: merged, updatedAt: now.toISOString() });
+
+  // Vorm per team berekenen uit de laatste ~week aan uitslagen
+  const form = computeForm(merged);
+  await kvPut(env, 'standings_all', { standings: form, updatedAt: now.toISOString() });
+  log.push(`vorm berekend voor ${form.length} teams`);
 
   // Echte marktodds (The Odds API) voor de competities die deze dekt —
   // zonder dit heeft de AI-analyse helemaal niets om op te rekenen.
@@ -209,9 +236,9 @@ export default {
     if (url.pathname === '/comps') return json({});
     if (url.pathname === '/odds') return json(await kvGet(env, 'odds_multi', {}));
 
-    // Standen en spelersdata: geen bevestigde endpoint voor deze API — geeft
-    // leeg terug zodat de frontend niet crasht (AI-bet valt terug op odds/vorm).
-    if (url.pathname === '/standings') return json({});
+    // Vorm/statistieken — zelf berekend uit de laatste week aan echte uitslagen
+    // (geen aparte standen-API nodig of beschikbaar voor deze databron).
+    if (url.pathname === '/standings') return json(await kvGet(env, 'standings_all', { standings: [] }));
     if (url.pathname === '/player-stats') {
       const wk = await kvGet(env, 'player_stats', {});
       return json(wk);
@@ -248,7 +275,8 @@ export default {
     if (url.pathname === '/debug') {
       const meta = await kvGet(env, 'meta_global', {});
       const d = await kvGet(env, 'matches_all', { matches: [] });
-      return json({ meta, totalMatches: (d.matches || []).length });
+      const s = await kvGet(env, 'standings_all', { standings: [] });
+      return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
     return json({ error: 'not found', routes: ['/matches', '/odds', '/standings', '/player-stats', '/ai-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
