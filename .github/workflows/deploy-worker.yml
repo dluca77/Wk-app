@@ -38,41 +38,42 @@ jobs:
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
       - name: Zoek odds1x2-seed-URLs voor overige 8 competities
         run: |
-          python3 -c "
-          import urllib.request, urllib.parse, json, re
+          declare -A paths
+          paths["Champions League"]="/football/champions-league/ /football/europe-champions-league/"
+          paths["Europa League"]="/football/europa-league/ /football/europe-europa-league/"
+          paths["Conference League"]="/football/europa-conference-league/ /football/europe-conference-league/"
+          paths["Premier League"]="/football/england-premier-league/"
+          paths["La Liga"]="/football/spain-la-liga/ /football/spain-primera-division/"
+          paths["Bundesliga"]="/football/germany-bundesliga/"
+          paths["Serie A"]="/football/italy-serie-a/"
+          paths["Ligue 1"]="/football/france-ligue-1/ /football/france-ligue-one/"
 
-          candidates = {
-            'Champions League':  ['/football/champions-league/', '/football/europe-champions-league/'],
-            'Europa League':     ['/football/europa-league/', '/football/europe-europa-league/'],
-            'Conference League': ['/football/europa-conference-league/', '/football/europe-conference-league/'],
-            'Premier League':    ['/football/england-premier-league/'],
-            'La Liga':           ['/football/spain-la-liga/', '/football/spain-primera-division/'],
-            'Bundesliga':        ['/football/germany-bundesliga/'],
-            'Serie A':           ['/football/italy-serie-a/'],
-            'Ligue 1':           ['/football/france-ligue-1/', '/football/france-ligue-one/'],
-          }
-
-          for name, paths in candidates.items():
-              found = False
-              for path in paths:
-                  url = 'https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=' + urllib.parse.quote('https://www.odds1x2.com' + path, safe='') + '&offset=0&len=60000'
-                  try:
-                      with urllib.request.urlopen(url, timeout=20) as r:
-                          d = json.loads(r.read())
-                  except Exception as e:
-                      print(name, path, '-> FETCH FAIL', e)
-                      continue
-                  html = d.get('snippet', '')
-                  status = d.get('status')
-                  links = re.findall(r'/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html)
-                  uniq = sorted(set(links))
-                  print(name, path, '-> status', status, 'len', d.get('length'), '| odds-links gevonden:', len(uniq))
-                  for l in uniq[:3]:
-                      print('    ', l)
-                  if uniq:
-                      found = True
-                      break
-              if not found:
-                  print(name, '-> GEEN WERKENDE SEED GEVONDEN in geprobeerde paden')
-              print()
+          for name in "${!paths[@]}"; do
+            found=0
+            for path in ${paths[$name]}; do
+              enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote('https://www.odds1x2.com'+sys.argv[1], safe=''))" "$path")
+              resp=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=60000")
+              echo "$resp" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet', '')
+          links = sorted(set(re.findall(r'/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html)))
+          print('$name', '$path', '-> status', d.get('status'), 'len', d.get('length'), '| odds-links:', len(links))
+          for l in links[:3]:
+              print('    ', l)
           "
+              if echo "$resp" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet', '')
+          sys.exit(0 if re.search(r'/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html) else 1)
+          "; then
+                found=1
+                break
+              fi
+            done
+            if [ "$found" -eq 0 ]; then
+              echo "$name -> GEEN WERKENDE SEED GEVONDEN in geprobeerde paden"
+            fi
+            echo
+          done
