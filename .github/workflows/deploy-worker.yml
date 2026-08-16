@@ -36,17 +36,26 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Debug Ajax + Espanyol
+      - name: Verifieer /odds + dedup + Ajax
         run: |
+          echo "=== /odds ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/odds" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          m = d.get('matches', {})
+          print('aantal wedstrijden met odds:', len(m))
+          for k, v in list(m.items())[:5]:
+              print(' ', k, '->', v.get('odds'))
+          "
+          echo
+          echo "=== dedup + Ajax check ==="
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
           import json, sys
           d = json.load(sys.stdin)
           matches = d.get('matches', [])
-          for needle in ['Ajax', 'Espanyol']:
-              print(f'=== {needle} ===')
+          for needle in ['Espanyol', 'Ajax']:
               hits = [m for m in matches if needle.lower() in m.get('h','').lower() or needle.lower() in m.get('a','').lower()]
-              print('aantal:', len(hits))
+              print(needle, '-> aantal:', len(hits))
               for m in hits:
-                  print(' ', json.dumps(m, ensure_ascii=False))
-              print()
+                  print('   ', json.dumps(m, ensure_ascii=False))
           "

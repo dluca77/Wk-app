@@ -369,6 +369,27 @@ export default {
 
     if (url.pathname === '/comps') return json(COMPS);
     if (url.pathname === '/standings') return json(await kvGet(env, 'standings_all', { standings: [] }));
+
+    // Odds voor alle momenteel gescrapete wedstrijden (odds1x2.com), in
+    // dezelfde vorm als de oude the-odds-api-gebaseerde /odds-route
+    // ({matches: {key: {h,a,sport,odds:{'1X2':{h,d,a,bm}}}}}) zodat de
+    // frontend (ODDS_API_DATA/getOddsApiMatch) ongewijzigd kan blijven.
+    if (url.pathname === '/odds') {
+      const d = await kvGet(env, 'matches_all', { matches: [] });
+      const scrapedMatches = (d.matches || []).filter(m => m.source === 'odds1x2');
+      const result = {};
+      for (const m of scrapedMatches) {
+        try {
+          const odds = await getOddsForMatch(env, m.compId, m.h, m.a);
+          if (!odds || odds.error) continue;
+          result[`${m.h}_${m.a}`] = {
+            h: m.h, a: m.a, sport: m.compName,
+            odds: { '1X2': { h: odds.home?.best, d: odds.draw?.best, a: odds.away?.best, bm: 'odds1x2.com' } },
+          };
+        } catch { /* deze wedstrijd overslaan */ }
+      }
+      return json({ matches: result, fetchedAt: new Date().toISOString() });
+    }
     if (url.pathname === '/player-stats') {
       const wk = await kvGet(env, 'player_stats', {});
       return json(wk);
@@ -508,7 +529,7 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
+    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
   },
 
   async scheduled(event, env, ctx) {
