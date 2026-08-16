@@ -263,25 +263,6 @@ export default {
       return json(await refreshAll(env, { force: true }));
     }
 
-    if (url.pathname === '/debug-odds') {
-      const apiId = url.searchParams.get('apiId');
-      const results = {};
-      for (const path of [
-        `/matches/get-votes?matchId=${apiId}`,
-        `/matches/get-odds?matchId=${apiId}`,
-        `/odds/get-match-odds?matchId=${apiId}`,
-        `/matches/detail?matchId=${apiId}`,
-      ]) {
-        try {
-          const raw = await apiGet(env, path);
-          results[path] = raw;
-        } catch (e) {
-          results[path] = { error: e.message.slice(0, 200) };
-        }
-      }
-      return json(results);
-    }
-
     if (url.pathname === '/debug') {
       const meta = await kvGet(env, 'meta_global', {});
       const d = await kvGet(env, 'matches_all', { matches: [] });
