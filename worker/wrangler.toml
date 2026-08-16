@@ -9,7 +9,7 @@ id = "4f4cc7ab98fc4c01a6686003e7e2fbcf"
 [ai]
 binding = "AI"
 
-# Eén keer per dag automatisch verse wedstrijden + vorm ophalen (~9-18
-# calls per run, ruim binnen de 500/maand van Sofascore's gratis laag).
+# Eén keer per dag automatisch de Eredivisie-fixtures scrapen van odds1x2.com
+# (gratis, geen API-key/quotum) en de team-vorm herberekenen.
 [triggers]
 crons = ["0 6 * * *"]

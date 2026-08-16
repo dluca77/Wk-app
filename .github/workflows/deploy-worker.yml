@@ -36,24 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Probe odds1x2 fixture data
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2Ffootball%2Fholland-eredivisie%2Fodds%2Ffc-zwolle-vs-ajax%2F&offset=8000&len=44000" | python3 -c "
-          import json,sys,re
-          d=json.load(sys.stdin)
-          html=d.get('snippet','')
-          print('status',d.get('status'),'len',d.get('length'))
-          m = re.search(r'\d{1,2}[./-]\d{1,2}[./-]\d{2,4}', html)
-          if m:
-              start = max(0, m.start()-600)
-              print('---context rond gevonden datum---')
-              print(html[start:m.end()+600])
-          else:
-              print('GEEN DATUM GEVONDEN IN DIT SEGMENT')
-          print()
-          print('---ld+json check---')
-          idxld = html.find('application/ld+json')
-          print('ld+json idx:', idxld)
-          if idxld >= 0:
-              print(html[idxld-50:idxld+1500])
-          "

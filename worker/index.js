@@ -1,30 +1,23 @@
 // Football Proxy — Cloudflare Worker
-// Databron: Sofascore (via RapidAPI, "Sofascore" by Api Dojo)
-// Eerdere bronnen: v2.football.sportsapipro.com (401, sleutel hoort niet bij
-// dit account) en free-api-live-football-data (500/maand-limiet al na 1 dag
-// testen bereikt, en had sowieso geen bruikbare "alle wedstrijden per dag"
-// endpoint — alleen team/toernooi-gebaseerd).
-// Sofascore werkt per-competitie/per-seizoen — precies zoals de originele
-// (kapotte) databron ooit deed, dus we hergebruiken dezelfde bekende
-// tournament-ID's. Eén call per competitie geeft het hele seizoen (heen én
-// terug, gespeeld én nog te spelen) — zuinig met het schaarse quotum
-// (500/maand op de gratis laag).
-
-const API_BASE = 'https://sofascore.p.rapidapi.com';
-const API_HOST = 'sofascore.p.rapidapi.com';
-
-// Bekende Sofascore tournament-ID's
-const COMPS = {
-  7:     { name: 'Champions League',   flag: '⭐' },
-  679:   { name: 'Europa League',      flag: '🟠' },
-  17015: { name: 'Conference League',  flag: '🟣' },
-  37:    { name: 'Eredivisie',         flag: '🇳🇱' },
-  17:    { name: 'Premier League',     flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
-  8:     { name: 'La Liga',            flag: '🇪🇸' },
-  35:    { name: 'Bundesliga',         flag: '🇩🇪' },
-  23:    { name: 'Serie A',            flag: '🇮🇹' },
-  34:    { name: 'Ligue 1',            flag: '🇫🇷' },
-};
+// Databron: GEEN betaalde/rate-limited API's meer. Alles hieronder is
+// zelfgebouwd binnen het Worker-platform:
+// - Wedstrijdschema (Eredivisie): scraping van odds1x2.com (gratis,
+//   geen API-key, geen quotum) — zie scrapeEredivisieFixtures().
+// - Odds: scraping van odds1x2.com (zelfde bron, dezelfde pagina's).
+// - AI-analyse: Cloudflare Workers AI binding (env.AI), ingebouwd in het
+//   Workers-platform met een gratis dagelijkse toewijzing — geen losse
+//   API-key of abonnement.
+//
+// Eerdere bronnen die zijn VERWIJDERD omdat ze een betaald/rate-limited
+// quotum hadden dat kan opraken: Sofascore via RapidAPI (500 calls/maand,
+// geraakt HTTP 429 na een dag testen), the-odds-api.com, en de
+// Anthropic API (api.anthropic.com) voor /ai-bet.
+//
+// Beperking die hierbij hoort: odds1x2.com geeft alleen de huidige
+// speelronde van Eredivisie (team-paringen + datum/tijd), geen
+// wedstrijduitslagen en geen schema voor de andere 8 competities. Oude
+// Sofascore-data voor die competities blijft in de cache staan (frozen),
+// maar wordt niet meer ververst.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -39,6 +32,20 @@ function json(obj, status = 200) {
   });
 }
 
+// Bekende competities. Alleen Eredivisie heeft momenteel een gekoppelde
+// gratis scrape-bron voor het wedstrijdschema — zie ODDS_SEEDS.
+const COMPS = {
+  7:     { name: 'Champions League',   flag: '⭐' },
+  679:   { name: 'Europa League',      flag: '🟠' },
+  17015: { name: 'Conference League',  flag: '🟣' },
+  37:    { name: 'Eredivisie',         flag: '🇳🇱' },
+  17:    { name: 'Premier League',     flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
+  8:     { name: 'La Liga',            flag: '🇪🇸' },
+  35:    { name: 'Bundesliga',         flag: '🇩🇪' },
+  23:    { name: 'Serie A',            flag: '🇮🇹' },
+  34:    { name: 'Ligue 1',            flag: '🇫🇷' },
+};
+
 // ---------- KV helpers ----------
 async function kvGet(env, key, fallback = null) {
   try {
@@ -48,74 +55,6 @@ async function kvGet(env, key, fallback = null) {
 }
 async function kvPut(env, key, val) {
   try { await env.WK_CACHE.put(key, JSON.stringify(val)); } catch {}
-}
-
-// ---------- Sofascore fetch ----------
-async function apiGet(env, path) {
-  const url = `${API_BASE}${path}`;
-  const res = await fetch(url, {
-    headers: { 'x-rapidapi-key': env.SPORTSAPI_KEY, 'x-rapidapi-host': API_HOST },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`${path} -> HTTP ${res.status} ${body.slice(0, 120)}`);
-  }
-  return res.json();
-}
-
-// ---------- Season ID discovery (gecached, ~1 week) ----------
-async function getSeasonId(env, tournamentId) {
-  const meta = await kvGet(env, `meta_${tournamentId}`, {});
-  if (meta.seasonId && meta.seasonDiscoveredAt) {
-    const age = Date.now() - new Date(meta.seasonDiscoveredAt).getTime();
-    if (age < 7 * 24 * 60 * 60 * 1000) return meta.seasonId;
-  }
-  const raw = await apiGet(env, `/tournaments/get-seasons?tournamentId=${tournamentId}`);
-  const seasons = raw?.seasons || raw?.data?.seasons || raw || [];
-  const list = Array.isArray(seasons) ? seasons : (seasons.seasons || []);
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const season = list.find(s =>
-    String(s.year || s.name || '').includes(String(currentYear))
-  ) || list[0];
-  if (!season?.id) throw new Error('geen seizoen gevonden');
-  meta.seasonId = season.id;
-  meta.seasonDiscoveredAt = now.toISOString();
-  await kvPut(env, `meta_${tournamentId}`, meta);
-  return season.id;
-}
-
-// ---------- Match mapping (Sofascore event-shape) ----------
-function mapMatch(ev, tournamentId) {
-  const h = ev?.homeTeam?.name || ev?.home?.name || '';
-  const a = ev?.awayTeam?.name || ev?.away?.name || '';
-  const startTime = ev?.startTimestamp;
-  const date = startTime ? new Date(startTime * 1000) : null;
-  const dateStr = date ? date.toISOString().split('T')[0] : '';
-  const timeStr = date ? date.toLocaleTimeString('nl-NL', {
-    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Amsterdam'
-  }) : '';
-  const statusType = (ev?.status?.type || '').toLowerCase();
-  const finished = statusType === 'finished';
-  const live = statusType === 'inprogress';
-  let result = null;
-  if (finished && ev?.homeScore?.current !== undefined && ev?.awayScore?.current !== undefined) {
-    result = `${ev.homeScore.current}-${ev.awayScore.current}`;
-  }
-  return {
-    apiId: ev?.id,
-    compId: tournamentId,
-    compName: COMPS[tournamentId]?.name,
-    compFlag: COMPS[tournamentId]?.flag,
-    h, a,
-    date: dateStr,
-    time: timeStr,
-    result,
-    live,
-    finished,
-    venue: ev?.venue?.name || '',
-    round: ev?.roundInfo?.round ? `Speelronde ${ev.roundInfo.round}` : '',
-  };
 }
 
 // ---------- Vorm/statistieken berekenen uit eigen wedstrijddata ----------
@@ -139,71 +78,13 @@ function computeForm(matches) {
   return Object.values(stats);
 }
 
-// ---------- Refresh: gespeelde (get-matches) + nog te spelen (get-next-matches) ----------
-async function refreshAll(env, { force = false } = {}) {
-  const now = new Date();
-  const log = [];
-  let totalCalls = 0;
-  const MAX_CALLS = 90;
-  const MAX_PAGES_PER_COMP = 4; // tot 120 wedstrijden per richting per competitie (kwalificatierondes CL/EL/ECL kunnen over 30 heen gaan)
-
-  const meta = await kvGet(env, 'meta_global', {});
-  const stale = force || !meta.lastRun || (now - new Date(meta.lastRun)) > 12 * 60 * 60 * 1000;
-  if (!stale) {
-    return { ok: true, log: ['skip: nog niet stale'], meta };
-  }
-
-  // Begin met de bestaande dataset, zodat een competitie die dit keer faalt
-  // (bv quotum/rate-limit) zijn oude wedstrijden behoudt i.p.v. dat de hele
-  // lijst wordt vervangen door een gedeeltelijk resultaat.
-  const existing = await kvGet(env, 'matches_all', { matches: [] });
-  const byId = new Map((existing.matches || []).map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
-
-  for (const tournamentId of Object.keys(COMPS)) {
-    if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt (${totalCalls}) — rest overgeslagen`); break; }
-    try {
-      const seasonId = await getSeasonId(env, tournamentId);
-      totalCalls++;
-      const compMatches = [];
-      for (const endpoint of ['get-matches', 'get-next-matches']) {
-        for (let page = 0; page < MAX_PAGES_PER_COMP; page++) {
-          if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt tijdens ${COMPS[tournamentId]?.name} — rest overgeslagen`); break; }
-          const raw = await apiGet(env, `/tournaments/${endpoint}?tournamentId=${tournamentId}&seasonId=${seasonId}&pageIndex=${page}`);
-          totalCalls++;
-          const events = raw?.events || raw?.data?.events || [];
-          for (const e of events) compMatches.push(mapMatch(e, tournamentId));
-          if (events.length < 30) break; // laatste pagina bereikt
-        }
-      }
-      // Deze competitie is gelukt: verwijder de oude wedstrijden ervan en zet de verse erin.
-      for (const key of [...byId.keys()]) {
-        if (byId.get(key).compId === tournamentId) byId.delete(key);
-      }
-      for (const m of compMatches) byId.set(m.apiId ?? `${m.date}-${m.h}-${m.a}`, m);
-      log.push(`${COMPS[tournamentId]?.name}: ${compMatches.length} wedstrijden`);
-    } catch(e) {
-      log.push(`${tournamentId} FAIL (oude data behouden): ${e.message.slice(0, 80)}`);
-    }
-  }
-
-  const all = [...byId.values()];
-  if (all.length) {
-    await kvPut(env, 'matches_all', { matches: all, updatedAt: now.toISOString() });
-    const form = computeForm(all);
-    await kvPut(env, 'standings_all', { standings: form, updatedAt: now.toISOString() });
-    log.push(`vorm berekend voor ${form.length} teams`);
-  }
-
-  const globalMeta = { lastRun: now.toISOString(), totalCalls, totalMatches: all.length };
-  await kvPut(env, 'meta_global', globalMeta);
-  return { ok: true, log, meta: globalMeta };
-}
-
-// ---------- Odds-scraper (odds1x2.com — gratis, geen API-key) ----------
-// Elke competitie heeft een "seed"-wedstrijdpagina op odds1x2.com. Die pagina
-// bevat zelf een lijst met alle andere wedstrijden van dezelfde speelronde
-// (met hun eigen link), dus we hoeven zelf geen URL-slugs te verzinnen —
-// we volgen gewoon de links die de site al aanbiedt.
+// ---------- Scraper: odds1x2.com (gratis, geen API-key, geen quotum) ----------
+// Elke competitie heeft een "seed"-wedstrijdpagina op odds1x2.com. Die
+// pagina bevat zelf een lijst met alle andere wedstrijden van dezelfde
+// speelronde (met hun eigen link), dus we hoeven geen URL-slugs te
+// verzinnen — we volgen gewoon de links die de site al aanbiedt. Elke
+// wedstrijdpagina bevat ook een `all-time-event`-blok met de echte
+// datum/tijd, bv. "Sunday - 09/08/2026 14:30".
 const ODDS_SOURCE = 'https://www.odds1x2.com';
 const ODDS_SEEDS = {
   37: '/football/holland-eredivisie/odds/fc-zwolle-vs-ajax/', // Eredivisie
@@ -246,6 +127,21 @@ function parseRoundLinks(html) {
   return links.map(m => ({ href: m[1], home: m[2].trim(), away: m[3].trim() }));
 }
 
+// Haalt de echte wedstrijddatum/tijd en teamnamen uit een matchpagina.
+// Bron: `<div class="all-time-event">Sunday - 09/08/2026 14:30</div>` en
+// `<h1 class="h1Match">FC Zwolle v Ajax Betting Odds</h1>`.
+function parseMatchMeta(html) {
+  const dateM = html.match(/all-time-event">\w+ - (\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2})</);
+  let date = '', time = '';
+  if (dateM) {
+    const [, dd, mm, yyyy, hh, min] = dateM;
+    date = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    time = `${hh.padStart(2, '0')}:${min}`;
+  }
+  const teamsM = html.match(/<h1 class="h1Match">([^<]+?) v ([^<]+?) Betting Odds/);
+  return { date, time, home: teamsM?.[1]?.trim() || '', away: teamsM?.[2]?.trim() || '' };
+}
+
 // Zoek de odds voor een specifieke wedstrijd, cache resultaten in KV om
 // odds1x2.com niet onnodig vaak te belasten (rondelijst 6u, odds per match 1u).
 async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
@@ -261,6 +157,7 @@ async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
       links: parseRoundLinks(seedHtml),
       seedHref: seed,
       seedOdds: parseOddsTable(seedHtml),
+      seedMeta: parseMatchMeta(seedHtml),
     };
     await kvPut(env, roundCacheKey, round);
   }
@@ -272,7 +169,7 @@ async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
   };
 
   let targetHref = round.links.find(l => isMatch(l.home, l.away))?.href;
-  if (!targetHref && round.seedOdds && isMatch(round.seedOdds.home.label, round.seedOdds.away.label)) {
+  if (!targetHref && round.seedOdds && isMatch(round.seedMeta?.home, round.seedMeta?.away)) {
     return { ...round.seedOdds, source: round.seedHref };
   }
   if (!targetHref) return { error: 'wedstrijd niet gevonden in odds-bron (team-namen komen niet overeen)' };
@@ -287,6 +184,47 @@ async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
     await kvPut(env, oddsCacheKey, odds);
   }
   return odds;
+}
+
+// Haalt het volledige wedstrijdschema (huidige speelronde) van Eredivisie op:
+// de seed-wedstrijd zelf + alle wedstrijden die de seed-pagina als
+// "zelfde speelronde" linkt. Geen resultaten (odds1x2 toont alleen
+// aankomende odds, geen scores) — alleen datum/tijd/teams.
+async function scrapeEredivisieFixtures(env, compId) {
+  const seed = ODDS_SEEDS[compId];
+  if (!seed) return [];
+  const seedHtml = await fetchOddsPage(seed);
+  const seedMeta = parseMatchMeta(seedHtml);
+  const links = parseRoundLinks(seedHtml);
+  const targets = [{ href: seed, fallbackHome: seedMeta.home, fallbackAway: seedMeta.away, html: seedHtml }, ...links];
+
+  const matches = [];
+  for (const t of targets) {
+    try {
+      const html = t.html || await fetchOddsPage(t.href);
+      const meta = parseMatchMeta(html);
+      if (!meta.date) continue;
+      const h = meta.home || t.fallbackHome || t.home;
+      const a = meta.away || t.fallbackAway || t.away;
+      if (!h || !a) continue;
+      matches.push({
+        apiId: `odds1x2_${t.href}`,
+        compId,
+        compName: COMPS[compId]?.name,
+        compFlag: COMPS[compId]?.flag,
+        h, a,
+        date: meta.date,
+        time: meta.time,
+        result: null,
+        live: false,
+        finished: false,
+        venue: '',
+        round: '',
+        source: 'odds1x2',
+      });
+    } catch { /* deze wedstrijd overslaan, rest gaat door */ }
+  }
+  return matches;
 }
 
 // ---------- Eigen kansmodel (Poisson) op basis van computeForm() ----------
@@ -310,6 +248,48 @@ function matchProbabilities(homeStats, awayStats, leagueAvgGoals = 1.35) {
     }
   }
   return { pHome, pDraw, pAway, lambdaHome, lambdaAway };
+}
+
+// ---------- Refresh ----------
+async function refreshAll(env, { force = false } = {}) {
+  const now = new Date();
+  const log = [];
+
+  const meta = await kvGet(env, 'meta_global', {});
+  const stale = force || !meta.lastRun || (now - new Date(meta.lastRun)) > 12 * 60 * 60 * 1000;
+  if (!stale) {
+    return { ok: true, log: ['skip: nog niet stale'], meta };
+  }
+
+  // Begin met de bestaande dataset zodat oude wedstrijden (van de nu
+  // verwijderde Sofascore-bron, of andere competities zonder scraper)
+  // niet verloren gaan.
+  const existing = await kvGet(env, 'matches_all', { matches: [] });
+  const byId = new Map((existing.matches || []).map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
+
+  try {
+    const eredivisieMatches = await scrapeEredivisieFixtures(env, 37);
+    for (const key of [...byId.keys()]) {
+      const m = byId.get(key);
+      if (m.compId === 37 && m.source === 'odds1x2') byId.delete(key);
+    }
+    for (const m of eredivisieMatches) byId.set(m.apiId, m);
+    log.push(`Eredivisie (odds1x2-scrape): ${eredivisieMatches.length} wedstrijden van de huidige speelronde`);
+  } catch (e) {
+    log.push(`Eredivisie-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
+  }
+
+  log.push('Overige 8 competities: nog geen gratis scrape-bron gekoppeld — oude gecachete wedstrijden blijven staan maar worden niet ververst.');
+
+  const all = [...byId.values()];
+  await kvPut(env, 'matches_all', { matches: all, updatedAt: now.toISOString() });
+  const form = computeForm(all);
+  await kvPut(env, 'standings_all', { standings: form, updatedAt: now.toISOString() });
+  log.push(`vorm berekend voor ${form.length} teams (alleen op basis van wedstrijden met bekende uitslag)`);
+
+  const globalMeta = { lastRun: now.toISOString(), totalMatches: all.length };
+  await kvPut(env, 'meta_global', globalMeta);
+  return { ok: true, log, meta: globalMeta };
 }
 
 // ---------- PIN / ADMIN helpers ----------
@@ -347,69 +327,49 @@ export default {
     }
 
     if (url.pathname === '/comps') return json(COMPS);
-    if (url.pathname === '/odds') return json(await kvGet(env, 'odds_multi', {}));
     if (url.pathname === '/standings') return json(await kvGet(env, 'standings_all', { standings: [] }));
     if (url.pathname === '/player-stats') {
       const wk = await kvGet(env, 'player_stats', {});
       return json(wk);
     }
 
-    if (url.pathname === '/ai-bet') {
-      if (req.method === 'GET') return json({ ok: true, key: env.ANTHROPIC_KEY ? 'aanwezig ✓' : 'ONTBREEKT ✗' });
+    // Kansmodel + odds1x2-odds + Workers AI (env.AI) leesbare analyse.
+    // Vervangt de oude /ai-bet die de betaalde Anthropic-API gebruikte.
+    if (url.pathname === '/ai-analyse') {
+      const apiId = url.searchParams.get('apiId');
+      const d = await kvGet(env, 'matches_all', { matches: [] });
+      const match = (d.matches || []).find(m => String(m.apiId) === String(apiId));
+      if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
+
+      const s = await kvGet(env, 'standings_all', { standings: [] });
+      const homeStats = s.standings.find(t => t.team === match.h);
+      const awayStats = s.standings.find(t => t.team === match.a);
+      const model = matchProbabilities(homeStats, awayStats);
+
+      let odds = null;
       try {
-        const body = await req.json();
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2048, messages: [{ role: 'user', content: body.prompt }] }),
-        });
-        return json(await res.json());
-      } catch(e) { return json({ error: e.message }, 500); }
-    }
-
-    if (url.pathname === '/check-pin' && req.method === 'POST') return handleCheckPin(req, env);
-
-    if (url.pathname === '/visitors') {
-      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
-      const visitors = await kvGet(env, 'visitors', {});
-      const list = Object.entries(visitors).map(([id, v]) => ({ id, ...v }))
-        .sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
-      return json({ total: list.length, visitors: list });
-    }
-
-    if (url.pathname === '/refresh') {
-      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
-      return json(await refreshAll(env, { force: true }));
-    }
-
-    if (url.pathname === '/debug-quota') {
-      try {
-        const res = await fetch(`${API_BASE}/tournaments/get-seasons?tournamentId=37`, {
-          headers: { 'x-rapidapi-key': env.SPORTSAPI_KEY, 'x-rapidapi-host': API_HOST },
-        });
-        const headers = {};
-        for (const [k, v] of res.headers.entries()) {
-          if (k.toLowerCase().includes('rate') || k.toLowerCase().includes('limit') || k.toLowerCase().includes('quota')) headers[k] = v;
-        }
-        const body = await res.text();
-        return json({ status: res.status, rateLimitHeaders: headers, bodyPreview: body.slice(0, 300) });
+        odds = await getOddsForMatch(env, match.compId, match.h, match.a);
       } catch (e) {
-        return json({ error: e.message }, 500);
+        odds = { error: e.message.slice(0, 200) };
       }
-    }
 
-    if (url.pathname === '/debug-scrape') {
-      const target = url.searchParams.get('url');
-      const offset = parseInt(url.searchParams.get('offset') || '0', 10);
-      const len = parseInt(url.searchParams.get('len') || '3000', 10);
+      const prompt = `Je bent een nuchtere voetbalanalist. Wedstrijd: ${match.h} vs ${match.a} (${match.compName || ''}, ${match.date} ${match.time}).
+Modelkansen (Poisson, op basis van eigen vormberekening uit gespeelde wedstrijden): thuis ${(model.pHome * 100).toFixed(1)}%, gelijk ${(model.pDraw * 100).toFixed(1)}%, uit ${(model.pAway * 100).toFixed(1)}%.
+${odds && !odds.error ? `Bookmaker-odds (beste gevonden prijs): thuis ${odds.home?.best}, gelijk ${odds.draw?.best}, uit ${odds.away?.best}.` : 'Geen bookmaker-odds beschikbaar voor deze wedstrijd.'}
+Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelkans duidelijk hoger dan wat de odds impliceren)? Wees kritisch en nuchter — het model is simpel (Poisson op vorm) en geen garantie.`;
+
       try {
-        const res = await fetch(target, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' },
+        const aiResult = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [{ role: 'user', content: prompt }],
         });
-        const text = await res.text();
-        return json({ status: res.status, length: text.length, snippet: text.slice(offset, offset + len) });
+        return json({
+          match: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
+          model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
+          odds,
+          analysis: aiResult.response || aiResult,
+        });
       } catch (e) {
-        return json({ error: e.message }, 500);
+        return json({ error: `Workers AI fout: ${e.message}` }, 500);
       }
     }
 
@@ -455,6 +415,34 @@ export default {
       });
     }
 
+    if (url.pathname === '/check-pin' && req.method === 'POST') return handleCheckPin(req, env);
+
+    if (url.pathname === '/visitors') {
+      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
+      const visitors = await kvGet(env, 'visitors', {});
+      const list = Object.entries(visitors).map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
+      return json({ total: list.length, visitors: list });
+    }
+
+    if (url.pathname === '/refresh') {
+      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
+      return json(await refreshAll(env, { force: true }));
+    }
+
+    if (url.pathname === '/debug-scrape') {
+      const target = url.searchParams.get('url');
+      const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+      const len = parseInt(url.searchParams.get('len') || '3000', 10);
+      try {
+        const res = await fetch(target, { headers: { 'User-Agent': SCRAPE_UA } });
+        const text = await res.text();
+        return json({ status: res.status, length: text.length, snippet: text.slice(offset, offset + len) });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     if (url.pathname === '/debug') {
       const meta = await kvGet(env, 'meta_global', {});
       const d = await kvGet(env, 'matches_all', { matches: [] });
@@ -462,7 +450,7 @@ export default {
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
+    return json({ error: 'not found', routes: ['/matches', '/comps', '/standings', '/player-stats', '/ai-analyse', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
   },
 
   async scheduled(event, env, ctx) {
