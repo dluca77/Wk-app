@@ -280,11 +280,37 @@ async function refreshAll(env, { force = false } = {}) {
   for (const compId of scrapedCompIds) {
     try {
       const compMatches = await scrapeCompFixtures(env, compId);
+      // Verwijder eerst onze eigen vorige odds1x2-scrape-resultaten van deze
+      // competitie, zodat wedstrijden die uit de huidige speelronde zijn
+      // verdwenen niet blijven hangen.
       for (const key of [...byId.keys()]) {
         const m = byId.get(key);
         if (m.compId === compId && m.source === 'odds1x2') byId.delete(key);
       }
-      for (const m of compMatches) byId.set(m.apiId, m);
+      for (const scraped of compMatches) {
+        // Zoek een bestaande wedstrijd (bv. bevroren Sofascore-data) met
+        // dezelfde teams + datum, zodat we die MERGEN i.p.v. een dubbele
+        // kaart toevoegen — en zodat live/uitslag-status (die odds1x2 niet
+        // heeft) behouden blijft in plaats van overschreven te worden.
+        const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
+        let existingKey = null;
+        for (const [key, m] of byId) {
+          if (m.compId !== compId || m.date !== scraped.date) continue;
+          if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
+        }
+        if (existingKey) {
+          const old = byId.get(existingKey);
+          byId.set(existingKey, {
+            ...scraped,
+            apiId: old.apiId,
+            live: old.live || scraped.live,
+            finished: old.finished || scraped.finished,
+            result: old.result || scraped.result,
+          });
+        } else {
+          byId.set(scraped.apiId, scraped);
+        }
+      }
       log.push(`${COMPS[compId]?.name} (odds1x2-scrape): ${compMatches.length} wedstrijden van de huidige speelronde`);
     } catch (e) {
       log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
