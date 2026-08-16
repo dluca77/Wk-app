@@ -28,6 +28,20 @@ function parseGlobalMatches(html) {
   let hm;
   while ((hm = headerRe.exec(html))) headers.push({ idx: hm.index, league: hm[1], country: hm[2] });
 
+  // data-ts is een unix-timestamp in seconden (UTC, ondubbelzinnig) — daar
+  // rekenen we het Nederlandse lokale tijdstip (Europe/Amsterdam, incl. DST)
+  // vanuit uit, i.p.v. de dd,mm,yyyy,hh,mi uit data-dt blind over te nemen
+  // (die bleek in de tijdzone van de bron te staan, niet in NL-tijd).
+  const nlFmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  function tsToNlDateTime(tsSeconds) {
+    const parts = nlFmt.formatToParts(new Date(tsSeconds * 1000));
+    const get = t => parts.find(p => p.type === t).value;
+    return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
+  }
+
   const matches = [];
   const marker = 'data-ts="';
   let searchFrom = 0;
@@ -37,11 +51,11 @@ function parseGlobalMatches(html) {
     searchFrom = start + marker.length;
     const chunk = html.slice(start, start + 3000);
 
-    const dtM = chunk.match(/data-dt="(\d+),(\d+),(\d+),(\d+),(\d+)"/);
+    const tsM = chunk.match(/^(\d+)"/);
     const hrefM = chunk.match(/href="(\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9]+\/)"/);
     const homeM = chunk.match(/participantHome[^>]*>\s*<p[^>]*>([^<]+)<\/p>/);
     const awayM = chunk.match(/participantAway[^>]*>[^]*?<p[^>]*>([^<]+)<\/p>/);
-    if (!dtM || !hrefM || !homeM || !awayM) continue;
+    if (!tsM || !hrefM || !homeM || !awayM) continue;
 
     const statusM = chunk.match(/data-live-cell="time">\s*([^<]*?)\s*</);
     // Uitslag: data-live-cell="score"> ... <div class="table-main__finishedResults">2</div> ... :</div> ... 1</div>
@@ -49,9 +63,7 @@ function parseGlobalMatches(html) {
     const idx = start;
     let hdr = null;
     for (const h of headers) { if (h.idx <= idx) hdr = h; else break; }
-    const [, dd, mo, yy, hh, mi] = dtM;
-    const date = `${yy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-    const time = `${hh.padStart(2, '0')}:${mi.padStart(2, '0')}`;
+    const { date, time } = tsToNlDateTime(Number(tsM[1]));
     const statusTrim = (statusM?.[1] || '').trim();
     const finished = /^FIN/i.test(statusTrim);
     const live = !finished && statusTrim !== '' && !/^\d{1,2}:\d{2}$/.test(statusTrim);
