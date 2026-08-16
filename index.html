@@ -246,6 +246,9 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .bkline-b{top:0;bottom:50%;border-width:1px 1px 0 0;border-top-right-radius:6px}
 .supdated{font-size:10px;color:var(--muted2);text-align:right;margin-bottom:10px}
 .snote{font-size:10px;color:var(--muted2);margin-top:6px;line-height:1.5}
+.pstat{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.pstatv{font-size:17px;font-weight:800;color:var(--text);letter-spacing:-.3px}
+.pstatl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px}
 
 /* ── SPINNER / LOADING ── */
 .ai-spinner{width:26px;height:26px;border:2.5px solid rgba(245,158,11,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
@@ -276,6 +279,12 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   <div class="date-nav" id="dateNav"></div>
 </div>
 <div class="container">
+  <div class="view-switch">
+    <button class="vtab on" onclick="setView('matches',this)">📅 Wedstrijden</button>
+    <button class="vtab" onclick="setView('standings',this)">🏆 Schema</button>
+    <button class="vtab" onclick="setView('topscorers',this)">⚽ Topscorers</button>
+    <button class="vtab" onclick="setView('players',this)">👤 Spelers</button>
+  </div>
   <div id="matchesView">
     <div class="filter-row">
       <button class="ftab on" onclick="setF('all',this)">Alle</button>
@@ -288,6 +297,13 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   </div>
   <div id="standingsView" style="display:none"></div>
   <div id="topscorersView" style="display:none"></div>
+  <div id="playersView" style="display:none">
+    <div style="padding:0 0 10px">
+      <input id="playerSearch" type="text" placeholder="Zoek speler of team..." oninput="renderPlayers()"
+        style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:11px 14px;color:var(--text);font-size:13px;font-family:inherit">
+    </div>
+    <div id="playersList"></div>
+  </div>
 </div>
 <div class="overlay" id="admin-overlay" onclick="if(event.target===this)closeAdmin()">
   <div class="modal" style="border-radius:24px;margin:20px;max-height:85vh">
@@ -333,6 +349,14 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
     <div class="mhandle"></div>
     <div class="mhdr"><div class="mtitle">🎯 Beste Dagtip</div><div class="mclose" onclick="closeObModal()">✕</div></div>
     <div class="mbody" id="ob-modal-body"><div style="text-align:center;padding:40px;color:var(--muted)">⏳ Analyseren...</div></div>
+  </div>
+</div>
+
+<div class="overlay" id="player-overlay" onclick="if(event.target===this)closePlayerModal()">
+  <div class="modal" id="player-modal">
+    <div class="mhandle"></div>
+    <div class="mhdr"><div class="mtitle" id="ptitle"></div><div class="mclose" onclick="closePlayerModal()">✕</div></div>
+    <div class="mbody" id="pmbody"></div>
   </div>
 </div>
 <script>
@@ -810,9 +834,76 @@ function setView(v,btn){
   document.getElementById('matchesView').style.display=v==='matches'?'':'none';
   document.getElementById('standingsView').style.display=v==='standings'?'':'none';
   document.getElementById('topscorersView').style.display=v==='topscorers'?'':'none';
+  document.getElementById('playersView').style.display=v==='players'?'':'none';
   document.getElementById('dateNav').style.display=v==='matches'?'':'none';
   if(v==='standings') renderStandings();
   if(v==='topscorers') renderTopscorers();
+  if(v==='players') loadPlayers();
+}
+
+// ── SPELERPROFIEL (Understat) ──
+let ALL_PLAYERS = [];
+let playersLoaded = false;
+
+async function loadPlayers(){
+  if(playersLoaded) return;
+  const el = document.getElementById('playersList');
+  el.innerHTML = `<div class="empty">Spelers laden...</div>`;
+  try{
+    const res = await fetch(WORKER_URL+'/players');
+    const data = await res.json();
+    ALL_PLAYERS = data.players || [];
+    playersLoaded = true;
+  }catch(e){
+    el.innerHTML = `<div class="empty">Kon spelers niet laden.</div>`;
+    return;
+  }
+  renderPlayers();
+}
+
+function renderPlayers(){
+  const el = document.getElementById('playersList');
+  const q = (document.getElementById('playerSearch').value || '').trim().toLowerCase();
+  let list = ALL_PLAYERS;
+  if(q) list = list.filter(p => p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q));
+  list = list.slice().sort((a,b) => (b.g+b.a) - (a.g+a.a)).slice(0, 100);
+  if(!list.length){ el.innerHTML = `<div class="empty">Geen spelers gevonden.</div>`; return; }
+  el.innerHTML = list.map(p => `<div class="pc" onclick="openPlayerModal('${p.id}')">
+    <div class="pmed" style="font-size:11px;color:var(--muted2)">${p.pos||''}</div>
+    <div class="pinf">
+      <div class="pn">${p.name}</div>
+      <div class="pm"><span>${p.team}</span><span style="color:var(--muted2)">${p.league.replace('_',' ')}</span></div>
+    </div>
+    <div class="pr">
+      <div class="psh" style="font-size:16px;color:var(--mint)">${p.g}⚽ ${p.a}🅰️</div>
+      <div class="psl">${p.apps} wed. · xG ${nf(p.xg,1)}</div>
+    </div>
+  </div>`).join('');
+}
+
+function openPlayerModal(id){
+  const p = ALL_PLAYERS.find(x => x.id === id);
+  if(!p) return;
+  document.getElementById('ptitle').textContent = `${p.name} — ${p.team}`;
+  const stat = (label, val) => `<div class="pstat"><div class="pstatv">${val}</div><div class="pstatl">${label}</div></div>`;
+  document.getElementById('pmbody').innerHTML = `
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${p.pos||''} · ${p.league.replace('_',' ')} · seizoen ${p.season}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      ${stat('Wedstrijden', p.apps)}
+      ${stat('Minuten', p.min)}
+      ${stat('Goals', p.g)}
+      ${stat('Assists', p.a)}
+      ${stat('xG', nf(p.xg,2))}
+      ${stat('xA', nf(p.xa,2))}
+      ${stat('Sh/90', nf(p.sh90,2))}
+      ${stat('KP/90', nf(p.kp90,2))}
+      ${stat('xG/90', nf(p.xg90,2))}
+    </div>
+    <div class="snote" style="margin-top:14px">Data: Understat.com · seizoen ${p.season}</div>`;
+  document.getElementById('player-overlay').classList.add('on');
+}
+function closePlayerModal(){
+  document.getElementById('player-overlay').classList.remove('on');
 }
 
 // ── TOPSCORERS GLOBAAL ──
