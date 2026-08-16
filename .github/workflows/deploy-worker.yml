@@ -48,18 +48,19 @@ jobs:
           curl -sS -A "$UA" "https://www.odds1x2.com/" | grep -oE "/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/" | sort -u
           echo "=== AI-analyse test op een Eredivisie-match ==="
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" -o /tmp/matches.json
-          python3 -c "
-import json
-d=json.load(open('/tmp/matches.json'))
-ms=d.get('matches',d) if isinstance(d,dict) else d
-if isinstance(ms,dict): ms=list(ms.values())
-ered=[m for m in ms if m.get('compName')=='Eredivisie']
-print(len(ered),'eredivisie matches')
-for m in ered[:3]:
-    print(m.get('apiId'), m.get('h'),'-',m.get('a'))
-if ered:
-    with open('/tmp/testid.txt','w') as f: f.write(str(ered[0].get('apiId')))
-"
+          cat > /tmp/pick.py << 'PYEOF'
+          import json
+          d = json.load(open('/tmp/matches.json'))
+          ms = d.get('matches', d) if isinstance(d, dict) else d
+          if isinstance(ms, dict): ms = list(ms.values())
+          ered = [m for m in ms if m.get('compName') == 'Eredivisie']
+          print(len(ered), 'eredivisie matches')
+          for m in ered[:3]:
+              print(m.get('apiId'), m.get('h'), '-', m.get('a'))
+          if ered:
+              with open('/tmp/testid.txt', 'w') as f: f.write(str(ered[0].get('apiId')))
+          PYEOF
+          python3 /tmp/pick.py
           APIID=$(cat /tmp/testid.txt 2>/dev/null || echo "")
           echo "Testing AI analyse for apiId=$APIID"
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/ai-analyse?apiId=$APIID"
