@@ -1,9 +1,11 @@
 // Football Proxy — Cloudflare Worker
 // Databron: GEEN betaalde/rate-limited API's meer. Alles hieronder is
 // zelfgebouwd binnen het Worker-platform:
-// - Wedstrijdschema: scraping van odds1x2.com (gratis, geen API-key, geen
-//   quotum) — zie scrapeCompFixtures() en ODDS_SEEDS. Werkt momenteel voor
-//   Eredivisie, Premier League, La Liga en Champions League (kwalificatie).
+// - Wedstrijdschema: scraping van odds1x2.com (Eredivisie, Premier League,
+//   La Liga, Champions League-kwalificatie — zie scrapeCompFixtures() en
+//   ODDS_SEEDS) + betexplorer.com (Bundesliga, Serie A, Ligue 1, Europa
+//   League, Conference League — zie scrapeBetExplorerFixtures() en
+//   BETEXPLORER_COMPS). Beide gratis, geen API-key, geen quotum.
 // - Odds: scraping van odds1x2.com (zelfde bron, dezelfde pagina's).
 // - AI-analyse: Cloudflare Workers AI binding (env.AI), ingebouwd in het
 //   Workers-platform met een gratis dagelijkse toewijzing — geen losse
@@ -14,12 +16,10 @@
 // geraakt HTTP 429 na een dag testen), the-odds-api.com, en de
 // Anthropic API (api.anthropic.com) voor /ai-bet.
 //
-// Beperking die hierbij hoort: odds1x2.com geeft alleen de huidige
-// speelronde per competitie (team-paringen + datum/tijd), geen
-// wedstrijduitslagen. Voor Europa League, Conference League, Bundesliga,
-// Serie A en Ligue 1 is nog geen gratis seed-URL gevonden (stonden niet op
-// de odds1x2-homepage) — hun oude Sofascore-data blijft in de cache staan
-// (frozen), maar wordt niet meer ververst.
+// Beperking: geen van beide bronnen geeft wedstrijduitslagen, alleen
+// aankomend schema. Team-vorm (computeForm) werkt dus pas zodra er zelf
+// verzamelde uitslagen zijn — dat groeit vanzelf naarmate het seizoen
+// vordert.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -267,6 +267,65 @@ async function scrapeCompFixtures(env, compId) {
   return matches;
 }
 
+// ---------- Scraper: betexplorer.com (gratis, geen bot-blokkade aangetroffen) ----------
+// Vult de competities aan die odds1x2.com niet toont: Bundesliga, Serie A,
+// Ligue 1, Europa League, Conference League. BetExplorer heeft een simpele
+// server-gerenderde fixtures-tabel per competitie, geen Cloudflare-uitdaging
+// zoals Forebet, en toont ook per-wedstrijd H2H via de "mutual-matches"-pagina.
+const BETEXPLORER_SOURCE = 'https://www.betexplorer.com';
+const BETEXPLORER_COMPS = {
+  35:    'germany/bundesliga',              // Bundesliga
+  23:    'italy/serie-a',                   // Serie A
+  34:    'france/ligue-1',                  // Ligue 1
+  679:   'europe/europa-league',            // Europa League
+  17015: 'europe/europa-conference-league', // Conference League
+};
+
+async function fetchBetExplorerPage(path) {
+  const res = await fetch(`${BETEXPLORER_SOURCE}${path}`, { headers: { 'User-Agent': SCRAPE_UA } });
+  if (!res.ok) throw new Error(`betexplorer ${path} -> HTTP ${res.status}`);
+  return res.text();
+}
+
+// Fixtures-tabel bevat rijen als:
+// <td class="table-main__datetime">28.08. 19:30</td>
+// <td class="h-text-left"><a href="/football/germany/bundesliga/bayern-munich-vfb-stuttgart/xrtCcyAe/" class="in-match"><span>Bayern Munich</span> - <span>Stuttgart</span></a></td>
+// Geen jaartal in de datum — we leiden het af (volgend jaar als de maand al
+// >2 maanden "in het verleden" zou liggen t.o.v. vandaag, i.v.m. seizoenen
+// die het jaar overschrijden).
+function parseBetExplorerFixtures(html, compId) {
+  const now = new Date();
+  const curYear = now.getUTCFullYear();
+  const rows = [...html.matchAll(
+    /<td class="table-main__datetime">(\d{1,2})\.(\d{1,2})\.\s*(\d{1,2}):(\d{2})<\/td>\s*<td class="h-text-left"><a href="(\/football\/[^"]+)" class="in-match"><span>([^<]+)<\/span>\s*-\s*<span>([^<]+)<\/span>/g
+  )];
+  return rows.map(m => {
+    const [, dd, mm, hh, min, href, home, away] = m;
+    let year = curYear;
+    const candidate = new Date(Date.UTC(year, Number(mm) - 1, Number(dd)));
+    if (candidate.getTime() < now.getTime() - 60 * 24 * 60 * 60 * 1000) year++;
+    const date = `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    return {
+      apiId: `betexplorer_${href}`,
+      compId,
+      compName: COMPS[compId]?.name,
+      compFlag: COMPS[compId]?.flag,
+      h: home.trim(), a: away.trim(),
+      date, time: `${hh.padStart(2, '0')}:${min}`,
+      result: null, live: false, finished: false,
+      venue: '', round: '', source: 'betexplorer',
+      beHref: href,
+    };
+  });
+}
+
+async function scrapeBetExplorerFixtures(env, compId) {
+  const slug = BETEXPLORER_COMPS[compId];
+  if (!slug) return [];
+  const html = await fetchBetExplorerPage(`/football/${slug}/fixtures/`);
+  return parseBetExplorerFixtures(html, compId);
+}
+
 // ---------- Eigen kansmodel (Poisson) op basis van computeForm() ----------
 function factorial(n) { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
 function poissonP(k, lambda) { return Math.exp(-lambda) * Math.pow(lambda, k) / factorial(k); }
@@ -359,7 +418,46 @@ async function refreshAll(env, { force = false } = {}) {
     }
   }
 
-  const uncoveredComps = Object.keys(COMPS).map(Number).filter(id => !scrapedCompIds.includes(id));
+  const beCompIds = Object.keys(BETEXPLORER_COMPS).map(Number);
+  for (const compId of beCompIds) {
+    try {
+      const compMatches = await scrapeBetExplorerFixtures(env, compId);
+      for (const key of [...byId.keys()]) {
+        const m = byId.get(key);
+        if (m.compId === compId && m.source === 'betexplorer') byId.delete(key);
+      }
+      let mergedCount = 0, newCount = 0;
+      const snapshot = [...byId.entries()];
+      for (const scraped of compMatches) {
+        const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
+        let existingKey = null;
+        for (const [key, m] of snapshot) {
+          if (String(m.compId) !== String(compId) || m.date !== scraped.date) continue;
+          if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
+        }
+        if (existingKey && byId.has(existingKey)) {
+          const old = byId.get(existingKey);
+          byId.set(existingKey, {
+            ...scraped,
+            apiId: old.apiId,
+            source: old.source,
+            live: old.live || scraped.live,
+            finished: old.finished || scraped.finished,
+            result: old.result || scraped.result,
+          });
+          mergedCount++;
+        } else {
+          byId.set(scraped.apiId, scraped);
+          newCount++;
+        }
+      }
+      log.push(`${COMPS[compId]?.name} (betexplorer-scrape): ${compMatches.length} wedstrijden (${mergedCount} gemerged met bestaande data, ${newCount} nieuw)`);
+    } catch (e) {
+      log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
+    }
+  }
+
+  const uncoveredComps = Object.keys(COMPS).map(Number).filter(id => !scrapedCompIds.includes(id) && !beCompIds.includes(id));
   if (uncoveredComps.length) {
     log.push(`Nog geen gratis scrape-bron gekoppeld voor: ${uncoveredComps.map(id => COMPS[id]?.name).join(', ')} — oude gecachete wedstrijden blijven staan maar worden niet ververst.`);
   }

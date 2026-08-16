@@ -36,21 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: BetExplorer fixtures-tabel structuur inspecteren
-        run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          curl -sS -A "$UA" "https://www.betexplorer.com/football/germany/bundesliga/fixtures/" -o /tmp/fx.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          echo "=== Zoek data-attributen op tr/td (vaak JS-driven timestamps) ==="
-          grep -oE '<tr[^>]*data-[a-z-]+="[^"]*"[^>]*>' /tmp/fx.html | head -10
-          echo "=== Zoek team-namen in fixtures tabel ==="
-          grep -oE 'class="in-match"[^>]*>[^<]*<[^>]*>[^<]*' /tmp/fx.html | head -5
-          grep -oE 'href="/football/germany/bundesliga/[a-z0-9-]+/[a-zA-Z0-9]+/"[^>]*>[^<]+' /tmp/fx.html | head -10
-          echo "=== Zoek datum/tijd elementen ==="
-          grep -oE 'data-etime="[0-9]+"' /tmp/fx.html | head -5
-          grep -oE 'class="h-text-left"[^>]*>[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{4}' /tmp/fx.html | head -5
-          echo "=== Ruwe stukjes rond eerste tr ==="
-          python3 - << 'PYEOF'
-          content = open('/tmp/fx.html', encoding='utf-8', errors='ignore').read()
-          idx = content.find('table-main')
-          print(content[idx-50:idx+1500] if idx != -1 else 'table-main NIET gevonden')
-          PYEOF
