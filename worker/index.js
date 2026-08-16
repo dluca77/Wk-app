@@ -277,19 +277,7 @@ export default {
       const meta = await kvGet(env, 'meta_global', {});
       const d = await kvGet(env, 'matches_all', { matches: [] });
       const s = await kvGet(env, 'standings_all', { standings: [] });
-      let quotaCheck = null;
-      try {
-        const r = await fetch(`${API_BASE}/football-get-matches-by-date?date=${ymd(new Date())}`, {
-          headers: { 'x-rapidapi-key': env.SPORTSAPI_KEY, 'x-rapidapi-host': API_HOST },
-        });
-        const body = await r.text();
-        quotaCheck = {
-          status: r.status,
-          headers: Object.fromEntries([...r.headers.entries()].filter(([k]) => k.toLowerCase().includes('rate') || k.toLowerCase().includes('quota') || k.toLowerCase().includes('reset'))),
-          body: body.slice(0, 500),
-        };
-      } catch(e) { quotaCheck = `fetch error: ${e.message}`; }
-      return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length, quotaCheck });
+      return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
     return json({ error: 'not found', routes: ['/matches', '/odds', '/standings', '/player-stats', '/ai-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
