@@ -36,24 +36,20 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Diepe scan wedstrijdschema-bronnen
+      - name: Test LiveScore.com
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Feredivisie.com%2Fcompetition%2Ffixtures%2F&offset=0&len=250000" | python3 -c "
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.livescore.com%2Fen%2Ffootball%2Fnetherlands%2Feredivisie%2F&offset=0&len=400000" | python3 -c "
           import json, sys, re
           d = json.load(sys.stdin)
           html = d.get('snippet','')
-          print('length=', d.get('length'))
-          idx = html.find('Ajax')
-          print('CONTEXT ROND EERSTE Ajax (idx=' + str(idx) + '):')
-          print(html[max(0,idx-800):idx+800] if idx != -1 else 'NIET GEVONDEN')
-          "
-          echo "--- skysports ---"
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.skysports.com%2Feredivisie-scores-fixtures&offset=0&len=600000" | python3 -c "
-          import json, sys, re
-          d = json.load(sys.stdin)
-          html = d.get('snippet','')
-          print('length=', d.get('length'))
-          idx = html.find('Ajax')
-          print('CONTEXT ROND EERSTE Ajax (idx=' + str(idx) + '):')
-          print(html[max(0,idx-800):idx+800] if idx != -1 else 'NIET GEVONDEN')
+          print('status=', d.get('status'), 'length=', d.get('length'))
+          # zoek een match-achtig patroon: team vs team met score/tijd
+          m = re.search(r'(Ajax[\s\S]{0,600})', html)
+          print('CONTEXT ROND Ajax:')
+          print(m.group(1) if m else 'NIET GEVONDEN')
+          print()
+          # zoek naar JSON data embedded in de pagina (veel sites embedden __NEXT_DATA__ of vergelijkbaar)
+          idx2 = html.find('__NEXT_DATA__')
+          idx3 = html.find('window.__INITIAL_STATE__')
+          print('__NEXT_DATA__ idx:', idx2, '| __INITIAL_STATE__ idx:', idx3)
           "
