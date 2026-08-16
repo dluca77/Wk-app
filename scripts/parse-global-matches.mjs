@@ -18,6 +18,10 @@ const COUNTRY_FLAGS = {
 };
 function countryFlag(country) { return COUNTRY_FLAGS[country] || '🌍'; }
 
+// In plaats van één lange samengestelde regex (fragiel gebleken — de exacte
+// afstand tussen attributen varieert blijkbaar meer dan verwacht) zoeken we
+// per wedstrijd-blok (elk begint bij "data-ts=") de losse velden apart op
+// binnen een ruim tekstvenster. Veel robuuster tegen kleine structuurverschillen.
 function parseGlobalMatches(html) {
   const headers = [];
   const headerRe = /data-league-name="([^"]+)"[^]{0,150}?data-country-name="([^"]+)"/g;
@@ -25,24 +29,36 @@ function parseGlobalMatches(html) {
   while ((hm = headerRe.exec(html))) headers.push({ idx: hm.index, league: hm[1], country: hm[2] });
 
   const matches = [];
-  const matchRe = /data-ts="(\d+)"[^]{0,250}?data-dt="(\d+),(\d+),(\d+),(\d+),(\d+)"[^]{0,400}?data-live-cell="time">\s*([^<]*?)\s*<[^]{0,600}?href="(\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9]+\/)"[^]{0,600}?participantHome[^>]*>\s*<p[^>]*>([^<]+)<\/p>[^]{0,300}?participantAway[^>]*>[^]{0,250}?<p[^>]*>([^<]+)<\/p>/g;
-  let mm;
-  while ((mm = matchRe.exec(html))) {
-    const idx = mm.index;
+  const marker = 'data-ts="';
+  let searchFrom = 0;
+  while (true) {
+    const start = html.indexOf(marker, searchFrom);
+    if (start === -1) break;
+    searchFrom = start + marker.length;
+    const chunk = html.slice(start, start + 3000);
+
+    const dtM = chunk.match(/data-dt="(\d+),(\d+),(\d+),(\d+),(\d+)"/);
+    const hrefM = chunk.match(/href="(\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9]+\/)"/);
+    const homeM = chunk.match(/participantHome[^>]*>\s*<p[^>]*>([^<]+)<\/p>/);
+    const awayM = chunk.match(/participantAway[^>]*>[^]*?<p[^>]*>([^<]+)<\/p>/);
+    if (!dtM || !hrefM || !homeM || !awayM) continue;
+
+    const statusM = chunk.match(/data-live-cell="time">\s*([^<]*?)\s*</);
+    const idx = start;
     let hdr = null;
     for (const h of headers) { if (h.idx <= idx) hdr = h; else break; }
-    const [, , dd, mo, yy, hh, mi, status, href, home, away] = mm;
+    const [, dd, mo, yy, hh, mi] = dtM;
     const date = `${yy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}`;
     const time = `${hh.padStart(2, '0')}:${mi.padStart(2, '0')}`;
-    const statusTrim = (status || '').trim();
+    const statusTrim = (statusM?.[1] || '').trim();
     const finished = /^FIN/i.test(statusTrim);
     const live = !finished && statusTrim !== '' && !/^\d{1,2}:\d{2}$/.test(statusTrim);
     matches.push({
-      apiId: `betexplorer_global_${href}`,
+      apiId: `betexplorer_global_${hrefM[1]}`,
       compId: hdr ? `be_${hdr.country}_${hdr.league}` : 'be_onbekend',
       compName: hdr ? hdr.league : 'Onbekend',
       compFlag: hdr ? countryFlag(hdr.country) : '🌍',
-      h: (home || '').trim(), a: (away || '').trim(),
+      h: homeM[1].trim(), a: awayM[1].trim(),
       date, time, result: null, live, finished,
       venue: '', round: '', source: 'betexplorer_global',
     });
