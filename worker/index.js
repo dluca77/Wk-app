@@ -676,28 +676,24 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
     // frontend 'm gewoon als <img src="/crest?team=..."> kan gebruiken.
     if (url.pathname === '/crest') {
       const team = url.searchParams.get('team') || '';
-      const debug = url.searchParams.get('debug') === '1';
-      const nocache = url.searchParams.get('nocache') === '1';
       if (!team) return new Response('', { status: 400 });
       const cacheKey = `crest_${normTeam(team)}`;
-      let cached = nocache ? null : await kvGet(env, cacheKey, null);
-      let debugInfo = { fromCache: !!cached };
-      if (!cached) {
+      let cached = await kvGet(env, cacheKey, null);
+      // Alleen een GEVONDEN badge is permanent geldig om te cachen. Een
+      // eerdere mislukte/niet-gevonden lookup slaan we NIET op — anders
+      // blijft die voor altijd "vastzitten" en wordt de zoekopdracht nooit
+      // opnieuw geprobeerd (bug: eerdere versie cachete ook {badge:null}).
+      if (!cached || !cached.badge) {
         try {
           const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(team)}`);
-          debugInfo.fetchStatus = res.status;
-          const text = await res.text();
-          debugInfo.rawTextSnippet = text.slice(0, 300);
-          const data = JSON.parse(text);
+          const data = await res.json();
           const badge = data?.teams?.[0]?.strBadge || data?.teams?.[0]?.strTeamBadge || null;
           cached = { badge, fetchedAt: new Date().toISOString() };
-        } catch (e) {
-          debugInfo.error = e.message;
-          cached = { badge: null, fetchedAt: new Date().toISOString() };
+          if (badge) await kvPut(env, cacheKey, cached);
+        } catch {
+          cached = { badge: null };
         }
-        if (!nocache) await kvPut(env, cacheKey, cached);
       }
-      if (debug) return json({ cached, debugInfo });
       if (cached.badge) return Response.redirect(cached.badge, 302);
       return new Response('', { status: 404 });
     }
