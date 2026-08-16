@@ -36,16 +36,15 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test scrape-doelen
+      - name: Test bet365 en Opta rechtstreeks
         run: |
           for T in \
-            "https%3A%2F%2Fwww.odds1x2.com%2F" \
-            "https%3A%2F%2Fgood-sport.co%2Ffootball-odds-comparison%2F" \
-            "https%3A%2F%2Foddsscanner.com%2Ffootball" \
-            "https%3A%2F%2Fwww.bet365.com%2Fhub%2Fen-us%2Ffootball" \
-            "https%3A%2F%2Fwww.oddsportal.com%2Ffootball%2F" \
+            "https%3A%2F%2Fwww.bet365.com%2F%23%2FAC%2FB1%2FC1%2FD1002%2FE71947839%2FF3%2F" \
+            "https%3A%2F%2Fwww.bet365.com%2FSport%2FFootball" \
+            "https%3A%2F%2Foptaplayerstats.statsperform.com%2Fen_GB%2Fabout" \
+            "https%3A%2F%2Fwww.statsperform.com%2Fproducts%2Fopta-for-betting%2F" \
           ; do
             echo "=== $T ==="
-            curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=$T&len=1500"
+            curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=$T&len=2000"
             echo ""
           done
