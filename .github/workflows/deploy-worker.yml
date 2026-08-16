@@ -36,9 +36,16 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test /crest voor teams uit de screenshot
+      - name: Inspecteer BetExplorer homepage-structuur (datum/tijd per match)
         run: |
-          for t in "Real Racing Club" "Villarreal" "Espanyol" "Levante"; do
-            echo "=== $t ==="
-            curl -sSI "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$t")" | head -3
-          done
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          curl -sS -A "$UA" "https://www.betexplorer.com/" -o /tmp/home.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          echo "=== rond eerste in-match ==="
+          python3 - << 'PYEOF'
+          content = open('/tmp/home.html', encoding='utf-8', errors='ignore').read()
+          idx = content.find('in-match')
+          print(content[max(0,idx-800):idx+400] if idx != -1 else 'niet gevonden')
+          PYEOF
+          echo "=== is er een datum-selector / vandaag-morgen link? ==="
+          grep -oE 'href="/football/\?[^"]*"' /tmp/home.html | sort -u | head -10
+          grep -oE 'data-day="[^"]*"' /tmp/home.html | sort -u | head -10
