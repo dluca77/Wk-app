@@ -107,7 +107,7 @@ async function refreshAll(env, { force = false } = {}) {
   const now = new Date();
   const log = [];
   let totalCalls = 0;
-  const MAX_CALLS = 13; // 1 call per dag in de range
+  const MAX_CALLS = 18; // 1 call per dag in de range
 
   const meta = await kvGet(env, 'meta_global', {});
   const stale = force || !meta.lastRun || (now - new Date(meta.lastRun)) > 3 * 60 * 60 * 1000;
@@ -115,12 +115,12 @@ async function refreshAll(env, { force = false } = {}) {
     return { ok: true, log: ['skip: nog niet stale'], meta };
   }
 
-  // Van 5 dagen terug (voor vormberekening) tot 7 dagen vooruit — zuinig
-  // met het quotum van de databron
+  // Van 10 dagen terug (voor vormberekening — een speelronde ligt soms al
+  // een week terug) tot 7 dagen vooruit
   const existing = await kvGet(env, 'matches_all', { matches: [] });
   const byId = new Map((existing.matches || []).map(m => [m.apiId, m]));
 
-  for (let offset = -5; offset <= 7; offset++) {
+  for (let offset = -10; offset <= 7; offset++) {
     if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt (${totalCalls}) — rest overgeslagen`); break; }
     const d = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
     const dateParam = ymd(d);
