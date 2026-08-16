@@ -22,6 +22,17 @@ jobs:
           echo "opgehaald: $(wc -c < home.html) bytes"
       - name: Parseer wedstrijden
         run: node scripts/parse-global-matches.mjs home.html > matches.json
+      - name: Debug odds-telling
+        run: |
+          echo "aantal data-odd= in ruwe HTML:"
+          grep -oc 'data-odd="' home.html || true
+          echo "aantal wedstrijden totaal, met odds:"
+          python3 -c "
+          import json
+          d = json.load(open('matches.json'))
+          ms = d['matches']
+          print(len(ms), sum(1 for m in ms if m.get('oddsH')))
+          "
       - name: Stuur naar Worker
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
