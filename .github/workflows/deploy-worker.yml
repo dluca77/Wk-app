@@ -36,12 +36,48 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Check waarom sommige clublogo's ontbreken
+      - name: Volledige systeemcontrole
         run: |
-          for t in "Besiktas" "Eyupspor" "Amedspor" "Erzurumspor"; do
-            echo "=== $t ==="
-            curl -sSI "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$t")" | head -3
-            echo "--- direct via TheSportsDB ---"
-            curl -sS "https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$t")" | head -c 300
-            echo ""
-          done
+          echo "=== /matches: totalen per bron ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" -o /tmp/matches.json
+          python3 -c "
+          import json
+          from collections import Counter
+          d = json.load(open('/tmp/matches.json'))
+          ms = d.get('matches', d) if isinstance(d, dict) else d
+          if isinstance(ms, dict): ms = list(ms.values())
+          print('totaal:', len(ms))
+          print(Counter(m.get('source') for m in ms))
+          today = [m for m in ms if m.get('date')=='2026-08-16']
+          print(len(today), 'wedstrijden vandaag')
+          finished_today = [m for m in today if m.get('finished')]
+          print(len(finished_today), 'daarvan afgelopen, met result:', sum(1 for m in finished_today if m.get('result')))
+          for m in today[:5]:
+              print(' ', m.get('date'), m.get('time'), m.get('compName'), m.get('h'),'vs',m.get('a'),'finished:',m.get('finished'),'result:',m.get('result'))
+          "
+          echo "=== /odds sample ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/odds" -o /tmp/odds.json
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/odds.json'))
+          print(len(d.get('matches',{})), 'wedstrijden met odds')
+          "
+          echo "=== /ai-analyse test (Eredivisie-match) ==="
+          EREID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/matches.json'))
+          ms = d.get('matches', d) if isinstance(d, dict) else d
+          if isinstance(ms, dict): ms = list(ms.values())
+          ered=[m for m in ms if m.get('compName')=='Eredivisie']
+          print(ered[0]['apiId'] if ered else '')
+          ")
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/ai-analyse?apiId=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$EREID")" | python3 -c "
+          import json,sys
+          d = json.load(sys.stdin)
+          print('heeft analyse:', bool(d.get('analysis')))
+          print('analyse-snippet:', (d.get('analysis') or d.get('error') or '')[:150])
+          "
+          echo "=== /crest sample (bekende club) ==="
+          curl -sSI "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=Ajax" | head -3
+          echo "=== /debug ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug"
