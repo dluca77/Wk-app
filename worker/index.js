@@ -139,13 +139,13 @@ function computeForm(matches) {
   return Object.values(stats);
 }
 
-// ---------- Refresh: één call per competitie geeft het hele seizoen ----------
+// ---------- Refresh: gespeelde (get-matches) + nog te spelen (get-next-matches) ----------
 async function refreshAll(env, { force = false } = {}) {
   const now = new Date();
   const log = [];
   let totalCalls = 0;
-  const MAX_CALLS = 50;
-  const MAX_PAGES_PER_COMP = 4; // tot 120 wedstrijden per competitie (kwalificatierondes CL/EL/ECL kunnen over 30 heen gaan)
+  const MAX_CALLS = 90;
+  const MAX_PAGES_PER_COMP = 4; // tot 120 wedstrijden per richting per competitie (kwalificatierondes CL/EL/ECL kunnen over 30 heen gaan)
 
   const meta = await kvGet(env, 'meta_global', {});
   const stale = force || !meta.lastRun || (now - new Date(meta.lastRun)) > 12 * 60 * 60 * 1000;
@@ -153,22 +153,26 @@ async function refreshAll(env, { force = false } = {}) {
     return { ok: true, log: ['skip: nog niet stale'], meta };
   }
 
-  const all = [];
+  const byId = new Map();
   for (const tournamentId of Object.keys(COMPS)) {
     if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt (${totalCalls}) — rest overgeslagen`); break; }
     try {
       const seasonId = await getSeasonId(env, tournamentId);
       totalCalls++;
       let compTotal = 0;
-      for (let page = 0; page < MAX_PAGES_PER_COMP; page++) {
-        if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt tijdens ${COMPS[tournamentId]?.name} — rest overgeslagen`); break; }
-        const raw = await apiGet(env, `/tournaments/get-matches?tournamentId=${tournamentId}&seasonId=${seasonId}&pageIndex=${page}`);
-        totalCalls++;
-        const events = raw?.events || raw?.data?.events || [];
-        const matches = events.map(e => mapMatch(e, tournamentId));
-        all.push(...matches);
-        compTotal += matches.length;
-        if (events.length < 30) break; // laatste pagina bereikt
+      for (const endpoint of ['get-matches', 'get-next-matches']) {
+        for (let page = 0; page < MAX_PAGES_PER_COMP; page++) {
+          if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt tijdens ${COMPS[tournamentId]?.name} — rest overgeslagen`); break; }
+          const raw = await apiGet(env, `/tournaments/${endpoint}?tournamentId=${tournamentId}&seasonId=${seasonId}&pageIndex=${page}`);
+          totalCalls++;
+          const events = raw?.events || raw?.data?.events || [];
+          for (const e of events) {
+            const m = mapMatch(e, tournamentId);
+            byId.set(m.apiId ?? `${m.date}-${m.h}-${m.a}`, m);
+          }
+          compTotal += events.length;
+          if (events.length < 30) break; // laatste pagina bereikt
+        }
       }
       log.push(`${COMPS[tournamentId]?.name}: ${compTotal} wedstrijden`);
     } catch(e) {
@@ -176,6 +180,7 @@ async function refreshAll(env, { force = false } = {}) {
     }
   }
 
+  const all = [...byId.values()];
   if (all.length) {
     await kvPut(env, 'matches_all', { matches: all, updatedAt: now.toISOString() });
     const form = computeForm(all);
@@ -263,35 +268,6 @@ export default {
       const d = await kvGet(env, 'matches_all', { matches: [] });
       const s = await kvGet(env, 'standings_all', { standings: [] });
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
-    }
-
-    if (url.pathname === '/debug-next') {
-      const tid = url.searchParams.get('tid') || '37';
-      const seasonId = await getSeasonId(env, tid);
-      const results = {};
-      for (const path of [
-        `/tournaments/get-next-matches?tournamentId=${tid}&seasonId=${seasonId}&pageIndex=0`,
-        `/tournaments/get-last-matches?tournamentId=${tid}&seasonId=${seasonId}&pageIndex=0`,
-        `/tournaments/get-matches?tournamentId=${tid}&seasonId=${seasonId}&pageIndex=-1`,
-      ]) {
-        try {
-          const raw = await apiGet(env, path);
-          const events = raw?.events || raw?.data?.events || [];
-          results[path] = { count: events.length, first: events[0] ? { home: events[0]?.homeTeam?.name, away: events[0]?.awayTeam?.name, ts: events[0]?.startTimestamp, status: events[0]?.status?.type } : null };
-        } catch (e) {
-          results[path] = { error: e.message.slice(0, 150) };
-        }
-      }
-      return json({ seasonId, results });
-    }
-
-    if (url.pathname === '/debug-seasons') {
-      const tid = url.searchParams.get('tid') || '37';
-      const raw = await apiGet(env, `/tournaments/get-seasons?tournamentId=${tid}`);
-      const seasons = raw?.seasons || raw?.data?.seasons || raw || [];
-      const list = Array.isArray(seasons) ? seasons : (seasons.seasons || []);
-      const cachedMeta = await kvGet(env, `meta_${tid}`, {});
-      return json({ cachedMeta, seasonsFound: list.slice(0, 6) });
     }
 
     return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
