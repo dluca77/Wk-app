@@ -36,36 +36,13 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Analyseer wedstrijden per datum en competitie
+      - name: Check BetExplorer "vandaag"-pagina (alle landen/competities)
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" -o /tmp/matches.json
-          cat > /tmp/analyze.py << 'PYEOF'
-          import json
-          from collections import Counter
-          d = json.load(open('/tmp/matches.json'))
-          ms = d.get('matches', d) if isinstance(d, dict) else d
-          if isinstance(ms, dict): ms = list(ms.values())
-          print('totaal:', len(ms))
-          bydate = Counter(m.get('date') for m in ms)
-          print('=== aantal wedstrijden per datum (top 15, gesorteerd op datum) ===')
-          for date in sorted(bydate)[:40]:
-              print(date, bydate[date])
-          print('=== wedstrijden vandaag (2026-08-16) per competitie ===')
-          today = [m for m in ms if m.get('date') == '2026-08-16']
-          bycomp = Counter(m.get('compName') for m in today)
-          for comp, cnt in bycomp.items():
-              print(comp, cnt)
-          print('=== lijst wedstrijden vandaag ===')
-          for m in today:
-              print(m.get('compName'), '-', m.get('h'), 'vs', m.get('a'), m.get('time'), 'source:', m.get('source'))
-          print('=== per competitie: laagste en hoogste datum in dataset ===')
-          bycompall = {}
-          for m in ms:
-              c = m.get('compName')
-              bycompall.setdefault(c, []).append(m.get('date'))
-          for c, dates in bycompall.items():
-              dates = sorted(d for d in dates if d)
-              if dates:
-                  print(c, 'van', dates[0], 'tot', dates[-1], f'({len(dates)} wedstrijden)')
-          PYEOF
-          python3 /tmp/analyze.py
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          curl -sS -A "$UA" "https://www.betexplorer.com/football/" -o /tmp/beall.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          echo "=== aantal wedstrijd-links op de wereldwijde 'vandaag'-pagina ==="
+          grep -ocE 'class="in-match"' /tmp/beall.html || true
+          echo "=== welke landen/competities komen voor? (uit de href-paden) ==="
+          grep -oE 'href="/football/[a-z-]+/[a-z0-9-]+/' /tmp/beall.html | sed -E 's#href="/football/([a-z-]+)/([a-z0-9-]+)/#\1/\2#' | sort -u | head -60
+          echo "=== is dit een 'live vandaag' pagina of een landenoverzicht? titel-check ==="
+          grep -oE '<title>[^<]+</title>' /tmp/beall.html
