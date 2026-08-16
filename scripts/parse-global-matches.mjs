@@ -44,6 +44,8 @@ function parseGlobalMatches(html) {
     if (!dtM || !hrefM || !homeM || !awayM) continue;
 
     const statusM = chunk.match(/data-live-cell="time">\s*([^<]*?)\s*</);
+    // Uitslag: data-live-cell="score"> ... <div class="table-main__finishedResults">2</div> ... :</div> ... 1</div>
+    const scoreM = chunk.match(/data-live-cell="score">[^]*?table-main__finishedResults">(\d+)<\/div>[^]*?table-main__finishedResults">:<\/div>[^]*?table-main__finishedResults">(\d+)<\/div>/);
     const idx = start;
     let hdr = null;
     for (const h of headers) { if (h.idx <= idx) hdr = h; else break; }
@@ -53,13 +55,14 @@ function parseGlobalMatches(html) {
     const statusTrim = (statusM?.[1] || '').trim();
     const finished = /^FIN/i.test(statusTrim);
     const live = !finished && statusTrim !== '' && !/^\d{1,2}:\d{2}$/.test(statusTrim);
+    const result = scoreM ? `${scoreM[1]}-${scoreM[2]}` : null;
     matches.push({
       apiId: `betexplorer_global_${hrefM[1]}`,
       compId: hdr ? `be_${hdr.country}_${hdr.league}` : 'be_onbekend',
       compName: hdr ? hdr.league : 'Onbekend',
       compFlag: hdr ? countryFlag(hdr.country) : '🌍',
       h: homeM[1].trim(), a: awayM[1].trim(),
-      date, time, result: null, live, finished,
+      date, time, result, live, finished,
       venue: '', round: '', source: 'betexplorer_global',
     });
   }

@@ -1101,7 +1101,7 @@ function openModal(id){
   const hf=TF(m,m.h),af=TF(m,m.a);
   const live=isLive(m);
   const odds=getOdds(m.h,m.a);
-  document.getElementById('mtitle').textContent=`${hf} ${m.h} vs ${m.a} ${af}`;
+  document.getElementById('mtitle').innerHTML=`${hf} ${m.h} vs ${m.a} ${af}`;
   let oddsHtml='',p1=33,px=33,p2=34;
   if(odds){
     ({p1,px,p2}=probs(odds.h,odds.d,odds.a));
