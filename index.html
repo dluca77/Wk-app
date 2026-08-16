@@ -1253,6 +1253,30 @@ function openModal(id){
       <div class="pr"><div class="psh">${nf(p.spg)??'-'}</div><div class="psl">sch/wed</div><div class="psot">${p.sot!=null?nf(p.sot)+' op doel':''}</div><div class="pxg">${p.xg!=null?'xG '+nf(p.xg):''}</div></div>
     </div>`).join('') + `<div class="snote" style="margin-top:6px">Globale WK-topscorers — geen per-wedstrijd data</div>`;
   };
+  // Speler-kansen dit seizoen (Understat xG/xA/schoten per 90 min → Poisson-kans)
+  const propRow = p => {
+    const pGoal = 1 - Math.exp(-(p.xg90 || 0));
+    const pAssist = 1 - Math.exp(-(p.xa90 || 0));
+    const pSot = 1 - Math.exp(-((p.sh90 || 0) * 0.45)); // ruwe schatting: ~45% v/d schoten is op doel
+    return `<div class="pc">
+      <div class="pmed" style="font-size:10px;color:var(--muted2)">${p.pos||''}</div>
+      <div class="pinf"><div class="pn">${p.name}</div><div class="pm"><span>xG90 ${nf(p.xg90,2)}</span><span>xA90 ${nf(p.xa90,2)}</span></div></div>
+      <div class="pr">
+        <div class="psh" style="font-size:15px;color:var(--mint)">${Math.round(pGoal*100)}%</div>
+        <div class="psl">kans op goal</div>
+        <div class="psot">🎯 ${Math.round(pSot*100)}% op doel</div>
+        <div class="pxg">🅰️ ${Math.round(pAssist*100)}% assist</div>
+      </div>
+    </div>`;
+  };
+  const propBlock = team => {
+    const norm = t => (t||'').toLowerCase().trim();
+    const players = ALL_PLAYERS.filter(p => norm(p.team) === norm(team) && p.min > 0)
+      .sort((a,b) => (b.xg90+b.xa90) - (a.xg90+a.xa90)).slice(0,3);
+    if(!players.length) return '';
+    return `<div class="shdr"><span class="sname">${team}</span><span class="slbl">Speler kansen dit seizoen</span></div>${players.map(propRow).join('')}<div class="snote" style="margin-top:6px">Kansschatting o.b.v. Understat seizoensgemiddelden (xG/xA/schoten per 90 min) — geen garantie, check je boekmaker</div>`;
+  };
+  const propHtml = propBlock(m.h) + propBlock(m.a);
   const shdrH = `<div class="shdr"><span class="sflag">${hf}</span><span class="sname">${m.h}</span><span class="slbl">${hLinup.length?'WK-gemiddelden':'Top schutters'}</span></div>`;
   const shdrA = `<div class="shdr"><span class="sflag">${af}</span><span class="sname">${m.a}</span><span class="slbl">${aLinup.length?'WK-gemiddelden':'Top schutters'}</span></div>`;
   document.getElementById('mbody').innerHTML=`
@@ -1275,6 +1299,7 @@ function openModal(id){
       </div>
     </div>
     ${bbHtml}
+    ${propHtml}
     ${shdrH}
     ${pc(hs, hLinup, m.h)}
     ${shdrA}
@@ -2103,6 +2128,7 @@ buildNav();
 buildCompNav();
 render();
 fetchLiveData().then(()=>{ buildNav(); buildCompNav(); render(); });
+loadPlayers(); // spelersdata alvast op de achtergrond ophalen, voor speler-kansen in wedstrijdmodal
 setInterval(()=>{
   fetchLiveData().then(()=>{
     if(selView==="matches") { buildNav(); buildCompNav(); render(); }
