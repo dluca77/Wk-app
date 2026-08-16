@@ -36,8 +36,43 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test /ai-bet (frontend-compatibiliteit)
+      - name: Zoek odds1x2-seed-URLs voor overige 8 competities
         run: |
-          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ai-bet" \
-            -H "Content-Type: application/json" \
-            -d '{"prompt":"Zeg alleen het woord: werkt"}'
+          python3 -c "
+          import urllib.request, urllib.parse, json, re
+
+          candidates = {
+            'Champions League':  ['/football/champions-league/', '/football/europe-champions-league/'],
+            'Europa League':     ['/football/europa-league/', '/football/europe-europa-league/'],
+            'Conference League': ['/football/europa-conference-league/', '/football/europe-conference-league/'],
+            'Premier League':    ['/football/england-premier-league/'],
+            'La Liga':           ['/football/spain-la-liga/', '/football/spain-primera-division/'],
+            'Bundesliga':        ['/football/germany-bundesliga/'],
+            'Serie A':           ['/football/italy-serie-a/'],
+            'Ligue 1':           ['/football/france-ligue-1/', '/football/france-ligue-one/'],
+          }
+
+          for name, paths in candidates.items():
+              found = False
+              for path in paths:
+                  url = 'https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=' + urllib.parse.quote('https://www.odds1x2.com' + path, safe='') + '&offset=0&len=60000'
+                  try:
+                      with urllib.request.urlopen(url, timeout=20) as r:
+                          d = json.loads(r.read())
+                  except Exception as e:
+                      print(name, path, '-> FETCH FAIL', e)
+                      continue
+                  html = d.get('snippet', '')
+                  status = d.get('status')
+                  links = re.findall(r'/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html)
+                  uniq = sorted(set(links))
+                  print(name, path, '-> status', status, 'len', d.get('length'), '| odds-links gevonden:', len(uniq))
+                  for l in uniq[:3]:
+                      print('    ', l)
+                  if uniq:
+                      found = True
+                      break
+              if not found:
+                  print(name, '-> GEEN WERKENDE SEED GEVONDEN in geprobeerde paden')
+              print()
+          "
