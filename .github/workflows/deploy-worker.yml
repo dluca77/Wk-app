@@ -36,18 +36,18 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Inspecteer Understat team-pagina
+      - name: Inspecteer Understat team-pagina ruw
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
           curl -sS -A "$UA" "https://understat.com/team/Liverpool/2025" -o /tmp/team.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          echo "=== var declaraties ==="
+          echo "=== zoek 'JSON.parse' ruw ==="
+          grep -o "JSON.parse" /tmp/team.html | wc -l
           python3 - << 'PYEOF'
-          import re
           content = open('/tmp/team.html', encoding='utf-8', errors='ignore').read()
-          for m in re.finditer(r"var\s+(\w+)\s*=\s*JSON\.parse\('(.*?)'\);", content):
-              name, enc = m.group(1), m.group(2)
-              dec = enc.encode().decode('unicode_escape').encode('latin1').decode('utf8', errors='replace')
-              print(f'=== {name} (len {len(dec)}) ===')
-              print(dec[:1500])
-              print()
+          idx = content.find('JSON.parse')
+          print(content[max(0,idx-100):idx+800] if idx != -1 else 'JSON.parse NIET gevonden')
+          print('--- titel ---')
+          import re
+          t = re.search(r'<title>[^<]+</title>', content)
+          print(t.group(0) if t else 'geen titel')
           PYEOF
