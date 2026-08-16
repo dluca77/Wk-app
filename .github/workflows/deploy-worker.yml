@@ -36,11 +36,18 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Wacht 15s (KV-propagatie) en ververs nog een keer
+      - name: Wacht 15s en ververs een 2e keer
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
         run: |
           sleep 15
+          CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Wacht 5s en ververs een 3e keer (stabiliteitscheck — mag niet meer flip-floppen)
+        env:
+          RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
+        run: |
+          sleep 5
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
       - name: Verifieer /odds + dedup + Ajax

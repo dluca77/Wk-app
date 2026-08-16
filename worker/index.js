@@ -103,7 +103,7 @@ function normTeam(s) {
   return (s || '')
     .toLowerCase()
     .replace(/\./g, '')
-    .replace(/\b(fc|sc|afc|cf|vv)\b/g, '')
+    .replace(/\b(fc|sc|afc|cf|vv|ud|cd|ac)\b/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
@@ -302,9 +302,16 @@ async function refreshAll(env, { force = false } = {}) {
         }
         if (existingKey && byId.has(existingKey)) {
           const old = byId.get(existingKey);
+          // Belangrijk: we nemen NIET scraped.source ('odds1x2') over als de
+          // oude entry dat niet had. Zou dat wel gebeuren, dan ziet de
+          // "verwijder vorige odds1x2-scrape-resultaten"-stap hierboven deze
+          // gemergede entry bij de VOLGENDE refresh aan voor een pure
+          // scrape-entry en verwijdert 'm — waarna er een nieuwe entry met
+          // een andere apiId voor terugkomt en de merge zichzelf ontrafelt.
           byId.set(existingKey, {
             ...scraped,
             apiId: old.apiId,
+            source: old.source,
             live: old.live || scraped.live,
             finished: old.finished || scraped.finished,
             result: old.result || scraped.result,
