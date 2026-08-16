@@ -36,3 +36,15 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Vergelijk wat de Worker zelf ophaalt van betexplorer.com
+        run: |
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https://www.betexplorer.com/&offset=0&len=200"
+          echo ""
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https://www.betexplorer.com/" | python3 -c "
+          import json,sys
+          d = json.load(sys.stdin)
+          print('status:', d.get('status'))
+          print('length:', d.get('length'))
+          snip = d.get('snippet','')
+          print('bevat data-league-name:', 'data-league-name' in snip)
+          "
