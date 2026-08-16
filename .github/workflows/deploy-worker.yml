@@ -36,7 +36,7 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Check odds voor wereldwijde wedstrijden
+      - name: Check Lens vs PSG specifiek
         run: |
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" -o /tmp/matches.json
           python3 -c "
@@ -44,18 +44,16 @@ jobs:
           d = json.load(open('/tmp/matches.json'))
           ms = d.get('matches', d) if isinstance(d, dict) else d
           if isinstance(ms, dict): ms = list(ms.values())
-          glob = [m for m in ms if m.get('source') == 'betexplorer_global']
-          with_odds = [m for m in glob if m.get('oddsH')]
-          print(len(glob), 'globale wedstrijden,', len(with_odds), 'met odds')
-          for m in with_odds[:8]:
-              print(' ', m.get('h'), 'vs', m.get('a'), '-', m.get('oddsH'), m.get('oddsD'), m.get('oddsA'))
+          for m in ms:
+              if m.get('h')=='Lens' and m.get('a')=='PSG':
+                  print(json.dumps(m, indent=2))
           "
-          echo "=== /odds route totaal ==="
+          echo "=== staat Lens_PSG in /odds? ==="
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/odds" | python3 -c "
           import json,sys
           d = json.load(sys.stdin)
           matches = d.get('matches', {})
-          print(len(matches), 'wedstrijden met odds')
-          be = {k:v for k,v in matches.items() if v.get('odds',{}).get('1X2',{}).get('bm')=='betexplorer.com'}
-          print(len(be), 'daarvan van betexplorer.com (wereldwijd)')
+          for k,v in matches.items():
+              if 'Lens' in k or 'PSG' in k:
+                  print(k, v)
           "
