@@ -6,8 +6,7 @@ compatibility_date = "2024-01-01"
 binding = "WK_CACHE"
 id = "4f4cc7ab98fc4c01a6686003e7e2fbcf"
 
-# Twee keer per dag automatisch verse wedstrijden + vorm ophalen.
-# De football-databron heeft een streng gratis quotum — elke 3 uur met
-# een groot datumvenster liep daar al snel tegenaan (HTTP 429).
+# Eén keer per dag automatisch verse wedstrijden + vorm ophalen (~9-18
+# calls per run, ruim binnen de 500/maand van Sofascore's gratis laag).
 [triggers]
-crons = ["0 6,18 * * *"]
+crons = ["0 6 * * *"]
