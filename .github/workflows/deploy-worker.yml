@@ -36,18 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Debug datumverdeling
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
-          import json, sys
-          from collections import Counter
-          d = json.load(sys.stdin)
-          matches = d.get('matches', d) if isinstance(d, dict) else d
-          if isinstance(matches, dict):
-              matches = matches.get('matches', [])
-          c = Counter(m.get('date') for m in matches)
-          for date, n in sorted(c.items()):
-              print(date, n)
-          print('TOTAL', len(matches))
-          print('SAMPLE', json.dumps(matches[:2], indent=2))
-          "
