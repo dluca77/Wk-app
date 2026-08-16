@@ -1252,7 +1252,13 @@ async function generateAiBet(m, odds, hLinup, aLinup){
   }
 
   const compLabel = m.compName || 'WK 2026';
-  const prompt = `Je bent een sportsbetting analist voor ${compLabel}. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
+  const hasLineups = (hLinup && hLinup.length) || (aLinup && aLinup.length);
+
+  // Zonder spelersdata mag de AI GEEN spelers noemen of verzinnen (dat
+  // leidde tot hallucinaties, bv. spelers die allang niet meer bij die club
+  // zitten). Dan krijgt de AI een simpeler, eerlijker verzoek dat alleen op
+  // de echte odds/team-kansen mag leunen.
+  const prompt = hasLineups ? `Je bent een sportsbetting analist voor ${compLabel}. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
 WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g, m)}, ${m.date} ${m.time} NL)
 
@@ -1267,13 +1273,13 @@ Geen twee tips mogen hetzelfde onderdeel bevatten.
 Kies bets tussen 55-85% kans — boven 85% heeft geen waarde (quote < 1.15).
 
 Maak deze 5 typen tips (als data het toelaat):
-TIP 1 — SPELER SCOORT: bijv. "Mbappé scoort + Over 2.5" of "Speler X scoort of geeft assist"
+TIP 1 — SPELER SCOORT: bijv. "Speler X scoort of geeft assist"
 TIP 2 — SPELER SCHOTEN: bijv. "Speler X 2+ schoten op doel + BTTS JA"
 TIP 3 — MATCH RESULTAAT: bijv. "Matchwinnaar + Clean Sheet" of "Draw No Bet + 1e helft Over 0.5"
 TIP 4 — DOELPUNTEN: bijv. "Over 2.5 doelpunten + BTTS JA" of "Handicap -1 favoriet"
 TIP 5 — WAARDE BET: hogere risico maar betere quote, bijv. "HT/FT 1/1" of combinatie met 45-60% kans
 
-Gebruik de spelersdata intensief:
+Gebruik de spelersdata intensief (alleen spelers die hieronder ECHT genoemd staan — verzin nooit een naam):
 - Speler met hoge xG (>0.3/wed) → kans op goal
 - Speler met hoge SoT (>1.5/wed) → kans op schot op doel
 - Speler met hoge shots/wed → kans op schot of schot op doel
@@ -1282,7 +1288,19 @@ Gebruik de spelersdata intensief:
 BELANGRIJK: bets boven 85% kans zijn waardeloos (quote 1.01-1.10). Sla die over.
 
 Antwoord ALLEEN in dit JSON formaat (array van tips):
-[{"label":"Tip 1 — Speler Scoort","tip":"<concrete tip>","onderdelen":[{"bet":"<bet>","kans":<55-85>},{"bet":"<bet>","kans":<55-85>}],"gecombineerde_kans":<product>,"onderbouwing":"<1-2 zinnen>","risico":"laag|middel"},{"label":"Tip 2 — Speler Schoten","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 3 — Match","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 4 — Doelpunten","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 5 — Waarde","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"middel"}]`;
+[{"label":"Tip 1 — Speler Scoort","tip":"<concrete tip>","onderdelen":[{"bet":"<bet>","kans":<55-85>},{"bet":"<bet>","kans":<55-85>}],"gecombineerde_kans":<product>,"onderbouwing":"<1-2 zinnen>","risico":"laag|middel"},{"label":"Tip 2 — Speler Schoten","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 3 — Match","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 4 — Doelpunten","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"laag|middel"},{"label":"Tip 5 — Waarde","tip":"<tip>","onderdelen":[...],"gecombineerde_kans":<product>,"onderbouwing":"<zinnen>","risico":"middel"}]`
+  : `Je bent een sportsbetting analist voor ${compLabel}.
+
+WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g, m)}, ${m.date} ${m.time} NL)
+
+${realOddsStr ? `ECHTE MARKTODDS:\n${realOddsStr}\n` : ''}
+${betsStr ? `PRE-BEREKENDE KANSEN (gebruik deze exact):\n${betsStr}\n` : ''}
+BELANGRIJK: er is GEEN spelersdata beschikbaar voor deze wedstrijd. Noem GEEN spelersnamen en verzin nooit statistieken — gebruik uitsluitend de odds/kansen hierboven.
+
+OPDRACHT: geef 1 tot 3 tips, uitsluitend op team-/matchniveau (bv. matchwinnaar, dubbele kans, over/under, BTTS), gebaseerd op de echte odds. Kies bets tussen 40-85% kans.
+
+Antwoord ALLEEN in dit JSON formaat (array van tips):
+[{"label":"Tip 1 — Match","tip":"<concrete tip>","onderdelen":[{"bet":"<bet>","kans":<40-85>}],"gecombineerde_kans":<kans>,"onderbouwing":"<1-2 zinnen, alleen op basis van de odds hierboven>","risico":"laag|middel"}]`;
 
   try {
     const res = await fetch(WORKER_URL + '/ai-bet', {
