@@ -36,16 +36,36 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test bet365 en Opta rechtstreeks
+      - name: Diepe scan odds1x2 en good-sport
         run: |
-          for T in \
-            "https%3A%2F%2Fwww.bet365.com%2F%23%2FAC%2FB1%2FC1%2FD1002%2FE71947839%2FF3%2F" \
-            "https%3A%2F%2Fwww.bet365.com%2FSport%2FFootball" \
-            "https%3A%2F%2Foptaplayerstats.statsperform.com%2Fen_GB%2Fabout" \
-            "https%3A%2F%2Fwww.statsperform.com%2Fproducts%2Fopta-for-betting%2F" \
-            "https%3A%2F%2Foptaplayerstats.statsperform.com%2Fen_GB%2Fsoccer" \
-          ; do
-            echo "=== $T ==="
-            curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=$T&len=2000"
-            echo ""
-          done
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2F&offset=0&len=200000" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet','')
+          print('LENGTH', d.get('length'))
+          odds_pat = re.findall(r'\b\d\.\d{2}\b', html)
+          print('AANTAL DECIMALE GETALLEN (bv odds):', len(odds_pat))
+          print('VOORBEELD:', odds_pat[:20])
+          classes = re.findall(r'class=\"([^\"]*odd[^\"]*)\"', html, re.I)
+          print('CLASS-NAMEN MET \"odd\":', list(set(classes))[:15])
+          idx = html.lower().find('ajax')
+          if idx == -1: idx = html.lower().find('feyenoord')
+          if idx == -1: idx = html.lower().find('vs')
+          print('CONTEXT ROND EERSTE TEAMNAAM/vs (idx=' + str(idx) + '):')
+          print(html[max(0,idx-200):idx+500] if idx != -1 else 'NIET GEVONDEN')
+          "
+          echo "--- good-sport.co ---"
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fgood-sport.co%2Ffootball-odds-comparison%2F&offset=0&len=200000" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet','')
+          print('LENGTH', d.get('length'))
+          odds_pat = re.findall(r'\b\d\.\d{2}\b', html)
+          print('AANTAL DECIMALE GETALLEN (bv odds):', len(odds_pat))
+          print('VOORBEELD:', odds_pat[:20])
+          classes = re.findall(r'class=\"([^\"]*odd[^\"]*)\"', html, re.I)
+          print('CLASS-NAMEN MET \"odd\":', list(set(classes))[:15])
+          idx = html.lower().find('table')
+          print('CONTEXT ROND EERSTE <table> (idx=' + str(idx) + '):')
+          print(html[max(0,idx-100):idx+800] if idx != -1 else 'NIET GEVONDEN')
+          "
