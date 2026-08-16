@@ -36,19 +36,15 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test spelersstat-bronnen (FBref, Understat, WhoScored, Sofascore)
+      - name: Inspecteer Understat-datastructuur
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          test_site() {
-            NAME="$1"; URL="$2"
-            CODE=$(curl -sS -A "$UA" "$URL" -o /tmp/site.html -w "%{http_code}")
-            SIZE=$(wc -c < /tmp/site.html)
-            BLOCKED=$(grep -ciE "just a moment|cf-chl|captcha|access denied|are you human|checking your browser|rate limit|429 Too Many" /tmp/site.html || true)
-            echo "$NAME -> HTTP:$CODE SIZE:$SIZE BOTCHECK-HITS:$BLOCKED"
-          }
-          test_site "FBref (speler)" "https://fbref.com/en/players/d70ce98e/Kylian-Mbappe"
-          test_site "FBref (team seizoen)" "https://fbref.com/en/squads/822bd0ba/2025-2026/Liverpool-Stats"
-          test_site "Understat (speler)" "https://understat.com/player/2097"
-          test_site "WhoScored" "https://www.whoscored.com/players/3859/show/kylian-mbappe"
-          test_site "Sofascore (speler)" "https://www.sofascore.com/player/kylian-mbappe/822593"
-          test_site "Transfermarkt (speler)" "https://www.transfermarkt.com/kylian-mbappe/profil/spieler/342229"
+          curl -sS -A "$UA" "https://understat.com/player/2097" -o /tmp/player.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          echo "=== zoek naar ingebedde JSON (groupsData/matchesData/shotsData) ==="
+          grep -oE "(groupsData|matchesData|shotsData) = JSON.parse\('[^']{0,300}" /tmp/player.html | head -c 3000
+          echo ""
+          echo "=== zoek naam/club in de HTML ==="
+          grep -oE '<title>[^<]+</title>' /tmp/player.html
+          echo "=== is er een team-search/lijst-pagina? test league page ==="
+          curl -sS -A "$UA" "https://understat.com/league/EPL" -o /tmp/league.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          grep -oc "player" /tmp/league.html || true
