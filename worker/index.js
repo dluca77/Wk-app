@@ -778,7 +778,40 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       }
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/crest', '/ingest-global', '/debug'] }, 404);
+    // Ontvangt spelersstatistieken (Understat), aangeleverd door de externe
+    // GitHub Actions cron-job (.github/workflows/scrape-players.yml) omdat
+    // Understat's tabellen client-side gerenderd worden en Playwright nodig
+    // hebben — dat draait niet in de Worker zelf.
+    if (url.pathname === '/ingest-players' && req.method === 'POST') {
+      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
+      try {
+        const body = await req.json();
+        const players = Array.isArray(body.players) ? body.players : [];
+        await kvPut(env, 'players_all', { players, updatedAt: body.updatedAt || new Date().toISOString() });
+        return json({ ok: true, received: players.length });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
+    // Spelerprofiel-endpoint: /players (lijst, met ?q=naam of ?team=naam
+    // filter) en /players?id=123 (één speler).
+    if (url.pathname === '/players') {
+      const data = await kvGet(env, 'players_all') || { players: [], updatedAt: null };
+      let players = data.players;
+      const id = url.searchParams.get('id');
+      if (id) {
+        const p = players.find(p => p.id === id);
+        return p ? json(p) : json({ error: 'not found' }, 404);
+      }
+      const q = url.searchParams.get('q');
+      if (q) players = players.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
+      const team = url.searchParams.get('team');
+      if (team) players = players.filter(p => p.team.toLowerCase() === team.toLowerCase());
+      return json({ players, updatedAt: data.updatedAt });
+    }
+
+    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/players', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/crest', '/ingest-global', '/ingest-players', '/debug'] }, 404);
   },
 
   async scheduled(event, env, ctx) {
