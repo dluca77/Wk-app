@@ -36,3 +36,43 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Onderzoek Ajax vs Heerenveen + H2H-data op odds1x2
+        run: |
+          echo "=== huidige Eredivisie-ronde (seed: fc-zwolle-vs-ajax) sibling-links ==="
+          enc=$(python3 -c "import urllib.parse; print(urllib.parse.quote('https://www.odds1x2.com/football/holland-eredivisie/odds/fc-zwolle-vs-ajax/', safe=''))")
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=60000" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet','')
+          links = re.findall(r'<li><a href=\"(/football/[^\"]+/odds/[^\"]+)\">([^<]+) v ([^<]+)</a></li>', html)
+          print('sibling-wedstrijden in deze ronde:')
+          for href, h, a in links:
+              print(' ', h, 'vs', a, '->', href)
+          date_m = re.search(r'all-time-event\">\w+ - ([\d/]+ [\d:]+)', html)
+          print('datum van deze ronde (seed):', date_m.group(1) if date_m else 'onbekend')
+          "
+          echo
+          echo "=== Probeer directe Ajax-vs-Heerenveen-pagina te vinden ==="
+          for slug in "ajax-vs-heerenveen" "heerenveen-vs-ajax"; do
+            enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote('https://www.odds1x2.com/football/holland-eredivisie/odds/'+sys.argv[1]+'/', safe=''))" "$slug")
+            resp=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=30000")
+            echo "$resp" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          print('$slug ->', 'status', d.get('status'), 'len', d.get('length'))
+          html = d.get('snippet','')
+          m = re.search(r'all-time-event\">([^<]+)<', html)
+          print('  datum:', m.group(1) if m else 'niet gevonden')
+          "
+          done
+          echo
+          echo "=== Check op H2H/head-to-head content op de seed-pagina ==="
+          enc=$(python3 -c "import urllib.parse; print(urllib.parse.quote('https://www.odds1x2.com/football/holland-eredivisie/odds/fc-zwolle-vs-ajax/', safe=''))")
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=60000" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet','')
+          for pat in [r'[Hh]ead.?to.?[Hh]ead', r'[Hh]2[Hh]', r'[Pp]revious [Mm]eetings', r'[Ll]ast \d+ [Mm]atches', r'[Rr]ecent [Ff]orm']:
+              hits = re.findall(pat, html)
+              print(pat, '-> aantal treffers:', len(hits))
+          "
