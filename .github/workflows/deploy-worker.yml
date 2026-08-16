@@ -36,39 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Diepe scan odds1x2 en good-sport
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2F&offset=0&len=200000" | python3 -c "
-          import json, sys, re
-          d = json.load(sys.stdin)
-          html = d.get('snippet','')
-          print('LENGTH', d.get('length'))
-          odds_pat = re.findall(r'\b\d\.\d{2}\b', html)
-          print('AANTAL DECIMALE GETALLEN (bv odds):', len(odds_pat))
-          print('VOORBEELD:', odds_pat[:20])
-          classes = re.findall(r'class=\"([^\"]*odd[^\"]*)\"', html, re.I)
-          print('CLASS-NAMEN MET \"odd\":', list(set(classes))[:15])
-          idx = html.lower().find('ajax')
-          if idx == -1: idx = html.lower().find('feyenoord')
-          if idx == -1: idx = html.lower().find('vs')
-          print('CONTEXT ROND EERSTE TEAMNAAM/vs (idx=' + str(idx) + '):')
-          print(html[max(0,idx-200):idx+500] if idx != -1 else 'NIET GEVONDEN')
-          "
-          echo "--- good-sport.co ---"
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fgood-sport.co%2Ffootball-odds-comparison%2F&offset=0&len=200000" | python3 -c "
-          import json, sys, re
-          d = json.load(sys.stdin)
-          html = d.get('snippet','')
-          print('LENGTH', d.get('length'))
-          odds_pat = re.findall(r'\b\d\.\d{2}\b', html)
-          print('AANTAL DECIMALE GETALLEN (bv odds):', len(odds_pat))
-          print('VOORBEELD:', odds_pat[:20])
-          classes = re.findall(r'class=\"([^\"]*odd[^\"]*)\"', html, re.I)
-          print('CLASS-NAMEN MET \"odd\":', list(set(classes))[:15])
-          idx = html.lower().find('table')
-          print('CONTEXT ROND EERSTE <table> (idx=' + str(idx) + '):')
-          print(html[max(0,idx-100):idx+800] if idx != -1 else 'NIET GEVONDEN')
-          "
-      - name: Test bet365.nl homepage
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.bet365.nl%2F%3Fgbraid%3D0AAAAADOVbuNb8v7rWKCCsyeV5jLK20N6v%26gclid%3DCj0KCQjwv4XUBhDBARIsAE6bQUQO2pkikjkZz5JU7K_1bwtwZ_6baTnqWfGLfMVNNxEjAoWdf-w_7HEaAnabEALw_wcB%23%2FHO%2F&offset=0&len=3000"
