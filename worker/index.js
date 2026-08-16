@@ -1,8 +1,9 @@
 // Football Proxy — Cloudflare Worker
 // Databron: GEEN betaalde/rate-limited API's meer. Alles hieronder is
 // zelfgebouwd binnen het Worker-platform:
-// - Wedstrijdschema (Eredivisie): scraping van odds1x2.com (gratis,
-//   geen API-key, geen quotum) — zie scrapeEredivisieFixtures().
+// - Wedstrijdschema: scraping van odds1x2.com (gratis, geen API-key, geen
+//   quotum) — zie scrapeCompFixtures() en ODDS_SEEDS. Werkt momenteel voor
+//   Eredivisie, Premier League, La Liga en Champions League (kwalificatie).
 // - Odds: scraping van odds1x2.com (zelfde bron, dezelfde pagina's).
 // - AI-analyse: Cloudflare Workers AI binding (env.AI), ingebouwd in het
 //   Workers-platform met een gratis dagelijkse toewijzing — geen losse
@@ -14,10 +15,11 @@
 // Anthropic API (api.anthropic.com) voor /ai-bet.
 //
 // Beperking die hierbij hoort: odds1x2.com geeft alleen de huidige
-// speelronde van Eredivisie (team-paringen + datum/tijd), geen
-// wedstrijduitslagen en geen schema voor de andere 8 competities. Oude
-// Sofascore-data voor die competities blijft in de cache staan (frozen),
-// maar wordt niet meer ververst.
+// speelronde per competitie (team-paringen + datum/tijd), geen
+// wedstrijduitslagen. Voor Europa League, Conference League, Bundesliga,
+// Serie A en Ligue 1 is nog geen gratis seed-URL gevonden (stonden niet op
+// de odds1x2-homepage) — hun oude Sofascore-data blijft in de cache staan
+// (frozen), maar wordt niet meer ververst.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -88,6 +90,12 @@ function computeForm(matches) {
 const ODDS_SOURCE = 'https://www.odds1x2.com';
 const ODDS_SEEDS = {
   37: '/football/holland-eredivisie/odds/fc-zwolle-vs-ajax/', // Eredivisie
+  17: '/football/england-premier-league/odds/newcastle-vs-liverpool/', // Premier League
+  8:  '/football/spain-primera-division/odds/atletico-madrid-vs-malaga/', // La Liga
+  7:  '/football/champions-league-qual/odds/dinamo-zagreb-vs-viking/', // Champions League (kwalificatieronde — seizoen is nog niet in de groepsfase)
+  // Nog geen gratis seed gevonden voor: Europa League (679), Conference
+  // League (17015), Bundesliga (35), Serie A (23), Ligue 1 (34) — stonden
+  // niet op de odds1x2-homepage op het moment van scrapen.
 };
 const SCRAPE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
@@ -186,11 +194,12 @@ async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
   return odds;
 }
 
-// Haalt het volledige wedstrijdschema (huidige speelronde) van Eredivisie op:
-// de seed-wedstrijd zelf + alle wedstrijden die de seed-pagina als
-// "zelfde speelronde" linkt. Geen resultaten (odds1x2 toont alleen
-// aankomende odds, geen scores) — alleen datum/tijd/teams.
-async function scrapeEredivisieFixtures(env, compId) {
+// Haalt het volledige wedstrijdschema (huidige speelronde) van een
+// competitie op via zijn ODDS_SEEDS-ingang: de seed-wedstrijd zelf +
+// alle wedstrijden die de seed-pagina als "zelfde speelronde" linkt.
+// Geen resultaten (odds1x2 toont alleen aankomende odds, geen scores) —
+// alleen datum/tijd/teams. Werkt voor elke compId die in ODDS_SEEDS staat.
+async function scrapeCompFixtures(env, compId) {
   const seed = ODDS_SEEDS[compId];
   if (!seed) return [];
   const seedHtml = await fetchOddsPage(seed);
@@ -267,19 +276,25 @@ async function refreshAll(env, { force = false } = {}) {
   const existing = await kvGet(env, 'matches_all', { matches: [] });
   const byId = new Map((existing.matches || []).map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
 
-  try {
-    const eredivisieMatches = await scrapeEredivisieFixtures(env, 37);
-    for (const key of [...byId.keys()]) {
-      const m = byId.get(key);
-      if (m.compId === 37 && m.source === 'odds1x2') byId.delete(key);
+  const scrapedCompIds = Object.keys(ODDS_SEEDS).map(Number);
+  for (const compId of scrapedCompIds) {
+    try {
+      const compMatches = await scrapeCompFixtures(env, compId);
+      for (const key of [...byId.keys()]) {
+        const m = byId.get(key);
+        if (m.compId === compId && m.source === 'odds1x2') byId.delete(key);
+      }
+      for (const m of compMatches) byId.set(m.apiId, m);
+      log.push(`${COMPS[compId]?.name} (odds1x2-scrape): ${compMatches.length} wedstrijden van de huidige speelronde`);
+    } catch (e) {
+      log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
     }
-    for (const m of eredivisieMatches) byId.set(m.apiId, m);
-    log.push(`Eredivisie (odds1x2-scrape): ${eredivisieMatches.length} wedstrijden van de huidige speelronde`);
-  } catch (e) {
-    log.push(`Eredivisie-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
   }
 
-  log.push('Overige 8 competities: nog geen gratis scrape-bron gekoppeld — oude gecachete wedstrijden blijven staan maar worden niet ververst.');
+  const uncoveredComps = Object.keys(COMPS).map(Number).filter(id => !scrapedCompIds.includes(id));
+  if (uncoveredComps.length) {
+    log.push(`Nog geen gratis scrape-bron gekoppeld voor: ${uncoveredComps.map(id => COMPS[id]?.name).join(', ')} — oude gecachete wedstrijden blijven staan maar worden niet ververst.`);
+  }
 
   const all = [...byId.values()];
   await kvPut(env, 'matches_all', { matches: all, updatedAt: now.toISOString() });

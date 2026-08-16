@@ -36,20 +36,15 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Scan odds1x2-homepage op wedstrijdlinks van andere competities
+      - name: Verifieer /matches per nieuw gescrapete competitie
         run: |
-          enc=$(python3 -c "import urllib.parse; print(urllib.parse.quote('https://www.odds1x2.com/', safe=''))")
-          resp=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=150000")
-          echo "$resp" | python3 -c "
-          import json, sys, re
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
+          import json, sys
           d = json.load(sys.stdin)
-          html = d.get('snippet', '')
-          print('status', d.get('status'), 'len', d.get('length'))
-          links = sorted(set(re.findall(r'/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html)))
-          print('totaal odds-matchlinks gevonden op homepage:', len(links))
-          for l in links[:40]:
-              print('  ', l)
-          comps = sorted(set(re.findall(r'/football/([a-z0-9-]+)/odds/', html)))
-          print()
-          print('unieke competitie-slugs:', comps)
+          matches = d.get('matches', [])
+          for compId, name in [(37,'Eredivisie'), (17,'Premier League'), (8,'La Liga'), (7,'Champions League')]:
+              m = [x for x in matches if str(x.get('compId')) == str(compId) and x.get('source') == 'odds1x2']
+              print(name, ':', len(m), 'wedstrijden')
+              for x in m[:2]:
+                  print('   -', x.get('h'), 'vs', x.get('a'), '|', x.get('date'), x.get('time'))
           "
