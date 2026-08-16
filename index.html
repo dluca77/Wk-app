@@ -275,11 +275,6 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   <div class="date-nav" id="dateNav"></div>
 </div>
 <div class="container">
-  <div class="view-switch">
-    <button class="vtab on" onclick="setView('matches',this)">📅 Wedstrijden</button>
-    <button class="vtab" onclick="setView('standings',this)">🏆 Schema</button>
-    <button class="vtab" onclick="setView('topscorers',this)">⚽ Topscorers</button>
-  </div>
   <div id="matchesView">
     <div class="filter-row">
       <button class="ftab on" onclick="setF('all',this)">Alle</button>
@@ -496,6 +491,9 @@ function teamInitials(n){
   return (n||'??').replace(/[^a-zA-Z]/g,'').slice(0,2).toUpperCase()||'??';
 }
 const F = n => FL[n] || `<span class="tbadge" style="background:hsl(${teamHue(n)},65%,42%)">${teamInitials(n)}</span>`;
+// Voor clubwedstrijden tonen we de landsvlag van de competitie (bv. 🇪🇸 voor
+// La Liga) i.p.v. een land-flag per club — clubs hebben geen "eigen" vlag.
+const TF = (m, n) => m?.compId && m?.compFlag ? m.compFlag : F(n);
 
 // ── SHOOTERS ──
 const SH = {
@@ -653,7 +651,7 @@ function buildBestBet(m, _unused, odds){
 
     if(withXg.length){
       const best = withXg.sort((a,b) => (b.avg_xg??b.xg??0)-(a.avg_xg??a.xg??0))[0];
-      const teamFlag = best.team === m.h ? F(m.h) : F(m.a);
+      const teamFlag = best.team === m.h ? TF(m,m.h) : TF(m,m.a);
       const gp = best.matches || 1;
       return {
         label:'⭐ Beste Bet — Speler om te Scoren',
@@ -668,7 +666,7 @@ function buildBestBet(m, _unused, odds){
 
     if(withShots.length){
       const best = withShots.sort((a,b) => (b.avg_sot??b.sot??0)-(a.avg_sot??a.sot??0))[0];
-      const teamFlag = best.team === m.h ? F(m.h) : F(m.a);
+      const teamFlag = best.team === m.h ? TF(m,m.h) : TF(m,m.a);
       const gp = best.matches || 1;
       return {
         label:'⭐ Beste Bet — Schoten op Doel',
@@ -682,7 +680,7 @@ function buildBestBet(m, _unused, odds){
 
     if(byRating[0]?.avg_rating != null || byRating[0]?.rating != null){
       const best = byRating[0];
-      const teamFlag = best.team === m.h ? F(m.h) : F(m.a);
+      const teamFlag = best.team === m.h ? TF(m,m.h) : TF(m,m.a);
       const gp = best.matches || 1;
       return {
         label:'⭐ Beste Bet — Beste Vorm',
@@ -1038,7 +1036,7 @@ function render(){
   }
   document.getElementById('mc').innerHTML=ms.map(m=>{
     try{
-    const hf=F(m.h),af=F(m.a);
+    const hf=TF(m,m.h),af=TF(m,m.a);
     const live=isLive(m),done=isDone(m)||m.result;
     const odds=getOdds(m.h,m.a);
     let statusHtml='',oddsHtml='',pctHtml='',tipHtml='';
@@ -1094,7 +1092,7 @@ function render(){
 function openModal(id){
   const m=MATCHES.find(x=>x.id===id);
   if(!m) return;
-  const hf=F(m.h),af=F(m.a);
+  const hf=TF(m,m.h),af=TF(m,m.a);
   const live=isLive(m);
   const odds=getOdds(m.h,m.a);
   document.getElementById('mtitle').textContent=`${hf} ${m.h} vs ${m.a} ${af}`;
