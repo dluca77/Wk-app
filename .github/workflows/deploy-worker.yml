@@ -36,13 +36,24 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test wedstrijdschema-bronnen
+      - name: Diepe scan wedstrijdschema-bronnen
         run: |
-          for U in \
-            "https%3A%2F%2Feredivisie.com%2Fcompetition%2Ffixtures%2F" \
-            "https%3A%2F%2Fwww.skysports.com%2Feredivisie-scores-fixtures" \
-          ; do
-            echo "=== $U ==="
-            curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=$U&offset=0&len=3000"
-            echo ""
-          done
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Feredivisie.com%2Fcompetition%2Ffixtures%2F&offset=0&len=250000" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet','')
+          print('length=', d.get('length'))
+          idx = html.find('Ajax')
+          print('CONTEXT ROND EERSTE Ajax (idx=' + str(idx) + '):')
+          print(html[max(0,idx-800):idx+800] if idx != -1 else 'NIET GEVONDEN')
+          "
+          echo "--- skysports ---"
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.skysports.com%2Feredivisie-scores-fixtures&offset=0&len=600000" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet','')
+          print('length=', d.get('length'))
+          idx = html.find('Ajax')
+          print('CONTEXT ROND EERSTE Ajax (idx=' + str(idx) + '):')
+          print(html[max(0,idx-800):idx+800] if idx != -1 else 'NIET GEVONDEN')
+          "
