@@ -36,20 +36,16 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test LiveScore.com
+      - name: Probe odds1x2 fixture data
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.livescore.com%2Fen%2Ffootball%2Fnetherlands%2Feredivisie%2F&offset=0&len=400000" | python3 -c "
-          import json, sys, re
-          d = json.load(sys.stdin)
-          html = d.get('snippet','')
-          print('status=', d.get('status'), 'length=', d.get('length'))
-          # zoek een match-achtig patroon: team vs team met score/tijd
-          m = re.search(r'(Ajax[\s\S]{0,600})', html)
-          print('CONTEXT ROND Ajax:')
-          print(m.group(1) if m else 'NIET GEVONDEN')
-          print()
-          # zoek naar JSON data embedded in de pagina (veel sites embedden __NEXT_DATA__ of vergelijkbaar)
-          idx2 = html.find('__NEXT_DATA__')
-          idx3 = html.find('window.__INITIAL_STATE__')
-          print('__NEXT_DATA__ idx:', idx2, '| __INITIAL_STATE__ idx:', idx3)
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2Ffootball%2Fholland-eredivisie%2Fodds%2Ffc-zwolle-vs-ajax%2F&offset=0&len=8000" | python3 -c "
+          import json,sys,re
+          d=json.load(sys.stdin)
+          html=d.get('snippet','')
+          print('status',d.get('status'),'len',d.get('length'))
+          for pat in [r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', r'kick.?off', r'Round \d+', r'matchday', r'roundlist', r'next.?round', r'prev.?round', r'schedule']:
+              m=re.search(pat, html, re.I)
+              print(pat,'->', m.group(0) if m else None)
+          print('---first 2000---')
+          print(html[:2000])
           "
