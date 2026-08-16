@@ -8,30 +8,30 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#060b17;--surface:#0d1424;--surface2:#141d30;--surface3:#1a2540;
-  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);--border3:rgba(255,255,255,0.2);
-  --text:#eef2ff;--muted:#7b88a8;--muted2:#4a5270;
-  --accent:#22c55e;--accent2:#16a34a;
-  --green:#22c55e;--green2:#16a34a;
-  --gold:#f59e0b;--gold2:#fbbf24;
-  --lav:#a78bfa;--peach:#fb7185;--sky:#38bdf8;--mint:#34d399;
-  --blue:#3b82f6;
-  --glow-accent:rgba(34,197,94,.15);
-  --glow-green:rgba(34,197,94,.15);
+  --bg:#f4f6fb;--surface:#ffffff;--surface2:#eef1f8;--surface3:#e4e8f2;
+  --border:rgba(15,23,42,0.08);--border2:rgba(15,23,42,0.14);--border3:rgba(15,23,42,0.22);
+  --text:#0f172a;--muted:#64748b;--muted2:#94a3b8;
+  --accent:#16a34a;--accent2:#15803d;
+  --green:#16a34a;--green2:#15803d;
+  --gold:#d97706;--gold2:#f59e0b;
+  --lav:#7c3aed;--peach:#e11d48;--sky:#0284c7;--mint:#10b981;
+  --blue:#2563eb;
+  --glow-accent:rgba(22,163,74,.12);
+  --glow-green:rgba(22,163,74,.12);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
 
 /* ── HEADER ── */
 .header{
-  background:rgba(6,11,23,.85);
+  background:rgba(244,246,251,.85);
   backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
   border-bottom:1px solid var(--border);
   padding:14px 16px 0;
   position:sticky;top:0;z-index:50;
 }
 .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.logo{font-size:19px;font-weight:800;color:#fff;letter-spacing:-.3px}
+.logo{font-size:19px;font-weight:800;color:var(--text);letter-spacing:-.3px}
 .logo-accent{color:var(--green)}
 .live-pill{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--green);background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);padding:4px 10px;border-radius:20px;letter-spacing:.02em}
 .ldot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:lp 1.4s ease-in-out infinite}
@@ -1242,6 +1242,14 @@ async function generateAiBet(m, odds, hLinup, aLinup){
     if(k.startsWith('O/U_')) return `Over/Under ${k.split('_')[1]}: Over=${v.over} Under=${v.under} (${v.bm||''})`;
     return `${k}: ${JSON.stringify(v)}`;
   }).join('\n') : null;
+
+  // Zonder odds én zonder team-vorm kan er niets betrouwbaars berekend
+  // worden — laat de AI dan niet zelf uitleggen dat het niet kan (leest
+  // rommelig), toon direct een nette melding.
+  if(!betsStr && !realOddsStr){
+    el.innerHTML = `<div class="nodata">Nog onvoldoende data voor ${m.h} vs ${m.a}.<br><span style="font-size:11px;color:var(--muted2)">Komt beschikbaar zodra er odds of eerdere wedstrijduitslagen bekend zijn.</span></div>`;
+    return;
+  }
 
   const compLabel = m.compName || 'WK 2026';
   const prompt = `Je bent een sportsbetting analist voor ${compLabel}. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
