@@ -36,7 +36,9 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Debug /crest-route met nocache+debug
+      - name: Test /crest voor teams uit de screenshot
         run: |
-          echo "=== Villarreal met debug=1&nocache=1 ==="
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=Villarreal&debug=1&nocache=1"
+          for t in "Real Racing Club" "Villarreal" "Espanyol" "Levante"; do
+            echo "=== $t ==="
+            curl -sSI "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$t")" | head -3
+          done
