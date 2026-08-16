@@ -36,9 +36,6 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Debug seizoen-check
+      - name: Debug next-matches endpoint
         run: |
-          echo "--- Eredivisie (37) ---"
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-seasons?tid=37"
-          echo "--- Champions League (7) ---"
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-seasons?tid=7"
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-next?tid=37"
