@@ -355,7 +355,7 @@ function parseGlobalMatches(html) {
   while ((hm = headerRe.exec(html))) headers.push({ idx: hm.index, league: hm[1], country: hm[2] });
 
   const matches = [];
-  const matchRe = /data-ts="(\d+)"[^]{0,80}?data-dt="(\d+),(\d+),(\d+),(\d+),(\d+)"[^]{0,300}?data-live-cell="time">\s*([^<]*?)\s*<[^]{0,500}?href="(\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9]+\/)"[^]{0,500}?participantHome[^>]*>\s*<p[^>]*>([^<]+)<\/p>[^]{0,200}?participantAway[^>]*>[^]{0,150}?<p[^>]*>([^<]+)<\/p>/g;
+  const matchRe = /data-ts="(\d+)"[^]{0,250}?data-dt="(\d+),(\d+),(\d+),(\d+),(\d+)"[^]{0,400}?data-live-cell="time">\s*([^<]*?)\s*<[^]{0,600}?href="(\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9]+\/)"[^]{0,600}?participantHome[^>]*>\s*<p[^>]*>([^<]+)<\/p>[^]{0,300}?participantAway[^>]*>[^]{0,250}?<p[^>]*>([^<]+)<\/p>/g;
   let mm;
   while ((mm = matchRe.exec(html))) {
     const idx = mm.index;
