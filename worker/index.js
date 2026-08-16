@@ -359,7 +359,7 @@ ${odds && !odds.error ? `Bookmaker-odds (beste gevonden prijs): thuis ${odds.hom
 Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelkans duidelijk hoger dan wat de odds impliceren)? Wees kritisch en nuchter — het model is simpel (Poisson op vorm) en geen garantie.`;
 
       try {
-        const aiResult = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
           messages: [{ role: 'user', content: prompt }],
         });
         return json({
