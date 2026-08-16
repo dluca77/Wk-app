@@ -36,20 +36,27 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test alle voorgestelde bronnen (bot-bescherming check)
+      - name: Diepere check BetExplorer en SoccerStats
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          test_site() {
-            NAME="$1"; URL="$2"
-            CODE=$(curl -sS -A "$UA" "$URL" -o /tmp/site.html -w "%{http_code}")
-            SIZE=$(wc -c < /tmp/site.html)
-            BLOCKED=$(grep -ciE "just a moment|cf-chl|captcha|access denied|are you human|checking your browser" /tmp/site.html || true)
-            echo "$NAME -> HTTP:$CODE SIZE:$SIZE BOTCHECK-HITS:$BLOCKED"
-          }
-          test_site "OddsPortal" "https://www.oddsportal.com/football/germany/bundesliga/"
-          test_site "BetExplorer" "https://www.betexplorer.com/football/germany/bundesliga/"
-          test_site "Forebet" "https://www.forebet.com/en/football-predictions/predictions-1x2-germany-bundesliga"
-          test_site "SoccerStats" "https://www.soccerstats.com/latest.asp?league=germany"
-          test_site "Flashscore" "https://www.flashscore.com/football/germany/bundesliga/"
-          test_site "RebelBetting" "https://rebelbetting.com/"
-          echo "=== Als een site niet geblokkeerd is, toon eerste 40 regels ruwe HTML ter inspectie ==="
+          echo "=== BetExplorer Bundesliga fixtures pagina: wedstrijd-links ==="
+          curl -sS -A "$UA" "https://www.betexplorer.com/football/germany/bundesliga/" -o /tmp/be1.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          grep -oE 'href="/football/germany/bundesliga/[a-z0-9-]+/"' /tmp/be1.html | sort -u | head -10
+          echo "aantal wedstrijd-links:"
+          grep -ocE 'href="/football/germany/bundesliga/[a-z0-9-]+/[a-zA-Z0-9]+/"' /tmp/be1.html || true
+          echo "--- fixtures/results tabel aanwezig? ---"
+          grep -ocE 'class="table-main' /tmp/be1.html
+          echo "=== BetExplorer: individuele match pagina zoeken + H2H check ==="
+          MLINK=$(grep -oE 'href="/football/germany/bundesliga/[a-z0-9-]+/[a-zA-Z0-9]+/"' /tmp/be1.html | sort -u | head -1 | sed 's/href="//;s/"$//')
+          echo "matchlink: $MLINK"
+          if [ -n "$MLINK" ]; then
+            curl -sS -A "$UA" "https://www.betexplorer.com$MLINK" -o /tmp/be2.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+            echo "H2H/previous-matches hits:"
+            grep -ciE "head-to-head|h2h|previous matches|mutual matches" /tmp/be2.html || true
+          fi
+          echo "=== SoccerStats Bundesliga: fixtures/uitslagen check ==="
+          curl -sS -A "$UA" "https://www.soccerstats.com/latest.asp?league=germany" -o /tmp/ss1.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          grep -oE '[A-Z][a-zA-Z .]+ [0-9]-[0-9] [A-Z][a-zA-Z .]+' /tmp/ss1.html | head -10
+          echo "=== SoccerStats: fixtures voor komende ronde ==="
+          curl -sS -A "$UA" "https://www.soccerstats.com/results.asp?league=germany" -o /tmp/ss2.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          grep -oE '[A-Z][a-zA-Z .]{2,20}</td>' /tmp/ss2.html | sort -u | head -15
