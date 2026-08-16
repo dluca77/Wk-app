@@ -153,30 +153,36 @@ async function refreshAll(env, { force = false } = {}) {
     return { ok: true, log: ['skip: nog niet stale'], meta };
   }
 
-  const byId = new Map();
+  // Begin met de bestaande dataset, zodat een competitie die dit keer faalt
+  // (bv quotum/rate-limit) zijn oude wedstrijden behoudt i.p.v. dat de hele
+  // lijst wordt vervangen door een gedeeltelijk resultaat.
+  const existing = await kvGet(env, 'matches_all', { matches: [] });
+  const byId = new Map((existing.matches || []).map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
+
   for (const tournamentId of Object.keys(COMPS)) {
     if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt (${totalCalls}) — rest overgeslagen`); break; }
     try {
       const seasonId = await getSeasonId(env, tournamentId);
       totalCalls++;
-      let compTotal = 0;
+      const compMatches = [];
       for (const endpoint of ['get-matches', 'get-next-matches']) {
         for (let page = 0; page < MAX_PAGES_PER_COMP; page++) {
           if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt tijdens ${COMPS[tournamentId]?.name} — rest overgeslagen`); break; }
           const raw = await apiGet(env, `/tournaments/${endpoint}?tournamentId=${tournamentId}&seasonId=${seasonId}&pageIndex=${page}`);
           totalCalls++;
           const events = raw?.events || raw?.data?.events || [];
-          for (const e of events) {
-            const m = mapMatch(e, tournamentId);
-            byId.set(m.apiId ?? `${m.date}-${m.h}-${m.a}`, m);
-          }
-          compTotal += events.length;
+          for (const e of events) compMatches.push(mapMatch(e, tournamentId));
           if (events.length < 30) break; // laatste pagina bereikt
         }
       }
-      log.push(`${COMPS[tournamentId]?.name}: ${compTotal} wedstrijden`);
+      // Deze competitie is gelukt: verwijder de oude wedstrijden ervan en zet de verse erin.
+      for (const key of [...byId.keys()]) {
+        if (byId.get(key).compId === tournamentId) byId.delete(key);
+      }
+      for (const m of compMatches) byId.set(m.apiId ?? `${m.date}-${m.h}-${m.a}`, m);
+      log.push(`${COMPS[tournamentId]?.name}: ${compMatches.length} wedstrijden`);
     } catch(e) {
-      log.push(`${tournamentId} FAIL: ${e.message.slice(0, 80)}`);
+      log.push(`${tournamentId} FAIL (oude data behouden): ${e.message.slice(0, 80)}`);
     }
   }
 
