@@ -51,7 +51,7 @@ function parseGlobalMatches(html) {
     searchFrom = start + marker.length;
     const chunk = html.slice(start, start + 3000);
 
-    const tsM = chunk.match(/^(\d+)"/);
+    const tsM = chunk.match(/data-ts="(\d+)"/);
     const hrefM = chunk.match(/href="(\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9]+\/)"/);
     const homeM = chunk.match(/participantHome[^>]*>\s*<p[^>]*>([^<]+)<\/p>/);
     const awayM = chunk.match(/participantAway[^>]*>[^]*?<p[^>]*>([^<]+)<\/p>/);
