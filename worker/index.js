@@ -265,6 +265,15 @@ export default {
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
+    if (url.pathname === '/debug-seasons') {
+      const tid = url.searchParams.get('tid') || '37';
+      const raw = await apiGet(env, `/tournaments/get-seasons?tournamentId=${tid}`);
+      const seasons = raw?.seasons || raw?.data?.seasons || raw || [];
+      const list = Array.isArray(seasons) ? seasons : (seasons.seasons || []);
+      const cachedMeta = await kvGet(env, `meta_${tid}`, {});
+      return json({ cachedMeta, seasonsFound: list.slice(0, 6) });
+    }
+
     return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
   },
 
