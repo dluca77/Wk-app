@@ -36,16 +36,15 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Inspecteer BetExplorer homepage-structuur (datum/tijd per match)
+      - name: Inspecteer BetExplorer homepage-structuur v2
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
           curl -sS -A "$UA" "https://www.betexplorer.com/" -o /tmp/home.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          echo "=== rond eerste in-match ==="
+          echo "=== rond eerste match-link (href naar /football/.../.../teams/id/) ==="
           python3 - << 'PYEOF'
+          import re
           content = open('/tmp/home.html', encoding='utf-8', errors='ignore').read()
-          idx = content.find('in-match')
-          print(content[max(0,idx-800):idx+400] if idx != -1 else 'niet gevonden')
+          m = re.search(r'href="/football/[a-z-]+/[a-z0-9-]+/[a-z0-9-]+/[a-zA-Z0-9]+/"', content)
+          idx = m.start() if m else -1
+          print(content[max(0,idx-600):idx+300] if idx != -1 else 'niet gevonden')
           PYEOF
-          echo "=== is er een datum-selector / vandaag-morgen link? ==="
-          grep -oE 'href="/football/\?[^"]*"' /tmp/home.html | sort -u | head -10
-          grep -oE 'data-day="[^"]*"' /tmp/home.html | sort -u | head -10
