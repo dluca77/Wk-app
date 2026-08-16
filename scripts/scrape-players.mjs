@@ -10,19 +10,29 @@ async function main() {
 
   for (const league of LEAGUES) {
     await page.goto(`https://understat.com/league/${league}/${SEASON}`, { waitUntil: 'networkidle', timeout: 30000 });
-    const links = await page.locator('a[href*="/team/"]').evaluateAll(els =>
-      [...new Set(els.map(el => el.getAttribute('href')))]
-    );
-    for (const href of links) {
-      const m = href.match(/\/team\/([^/]+)\//);
-      if (m) teams.set(decodeURIComponent(m[1]), league);
+    const html = await page.content();
+    const m = html.match(/var teamsData\s*=\s*JSON\.parse\('([^']+)'\)/);
+    if (m) {
+      const decoded = m[1].replace(/\\x([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+      try {
+        const data = JSON.parse(decoded);
+        for (const t of Object.values(data)) {
+          if (t && t.title) teams.set(t.title, league);
+        }
+      } catch (e) {
+        console.error(`${league}: teamsData parse fout - ${e.message}`);
+      }
+    } else {
+      console.error(`${league}: geen teamsData gevonden`);
     }
   }
+  console.error(`totaal teams gevonden: ${teams.size}`);
 
   const players = [];
   for (const [team, league] of teams) {
+    const slug = team.replace(/ /g, '_');
     try {
-      await page.goto(`https://understat.com/team/${team}/${SEASON}`, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.goto(`https://understat.com/team/${slug}/${SEASON}`, { waitUntil: 'networkidle', timeout: 30000 });
       const rows = await page.locator('table').nth(1).locator('tbody tr').evaluateAll(trs =>
         trs.map(tr => {
           const cells = [...tr.querySelectorAll('td')];
