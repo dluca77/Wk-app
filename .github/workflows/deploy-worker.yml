@@ -36,24 +36,19 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Check Lens vs PSG specifiek
+      - name: Test spelersstat-bronnen (FBref, Understat, WhoScored, Sofascore)
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" -o /tmp/matches.json
-          python3 -c "
-          import json
-          d = json.load(open('/tmp/matches.json'))
-          ms = d.get('matches', d) if isinstance(d, dict) else d
-          if isinstance(ms, dict): ms = list(ms.values())
-          for m in ms:
-              if m.get('h')=='Lens' and m.get('a')=='PSG':
-                  print(json.dumps(m, indent=2))
-          "
-          echo "=== staat Lens_PSG in /odds? ==="
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/odds" | python3 -c "
-          import json,sys
-          d = json.load(sys.stdin)
-          matches = d.get('matches', {})
-          for k,v in matches.items():
-              if 'Lens' in k or 'PSG' in k:
-                  print(k, v)
-          "
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          test_site() {
+            NAME="$1"; URL="$2"
+            CODE=$(curl -sS -A "$UA" "$URL" -o /tmp/site.html -w "%{http_code}")
+            SIZE=$(wc -c < /tmp/site.html)
+            BLOCKED=$(grep -ciE "just a moment|cf-chl|captcha|access denied|are you human|checking your browser|rate limit|429 Too Many" /tmp/site.html || true)
+            echo "$NAME -> HTTP:$CODE SIZE:$SIZE BOTCHECK-HITS:$BLOCKED"
+          }
+          test_site "FBref (speler)" "https://fbref.com/en/players/d70ce98e/Kylian-Mbappe"
+          test_site "FBref (team seizoen)" "https://fbref.com/en/squads/822bd0ba/2025-2026/Liverpool-Stats"
+          test_site "Understat (speler)" "https://understat.com/player/2097"
+          test_site "WhoScored" "https://www.whoscored.com/players/3859/show/kylian-mbappe"
+          test_site "Sofascore (speler)" "https://www.sofascore.com/player/kylian-mbappe/822593"
+          test_site "Transfermarkt (speler)" "https://www.transfermarkt.com/kylian-mbappe/profil/spieler/342229"
