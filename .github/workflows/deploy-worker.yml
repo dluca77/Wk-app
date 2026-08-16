@@ -41,7 +41,7 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install --no-save playwright@1.48 >/dev/null 2>&1
           npx playwright install --with-deps chromium
-          cat > /tmp/probe.mjs << 'EOF'
+          cat > ./probe.mjs << 'EOF'
           import { chromium } from 'playwright';
           const browser = await chromium.launch();
           const page = await browser.newPage();
@@ -56,4 +56,4 @@ jobs:
           }
           await browser.close();
           EOF
-          node /tmp/probe.mjs
+          node ./probe.mjs
