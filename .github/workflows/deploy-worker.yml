@@ -36,11 +36,7 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Test /crest-route direct
+      - name: Debug /crest-route met nocache+debug
         run: |
-          echo "=== Villarreal via onze worker ==="
-          curl -sSI "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=Villarreal"
-          echo "=== Real Racing Club via onze worker ==="
-          curl -sSI "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=Real%20Racing%20Club"
-          echo "=== TheSportsDB direct (buiten de worker om) ==="
-          curl -sS "https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=Villarreal" -w "\nHTTP:%{http_code}\n"
+          echo "=== Villarreal met debug=1&nocache=1 ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/crest?team=Villarreal&debug=1&nocache=1"

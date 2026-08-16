@@ -676,20 +676,28 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
     // frontend 'm gewoon als <img src="/crest?team=..."> kan gebruiken.
     if (url.pathname === '/crest') {
       const team = url.searchParams.get('team') || '';
+      const debug = url.searchParams.get('debug') === '1';
+      const nocache = url.searchParams.get('nocache') === '1';
       if (!team) return new Response('', { status: 400 });
       const cacheKey = `crest_${normTeam(team)}`;
-      let cached = await kvGet(env, cacheKey, null);
+      let cached = nocache ? null : await kvGet(env, cacheKey, null);
+      let debugInfo = { fromCache: !!cached };
       if (!cached) {
         try {
           const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(team)}`);
-          const data = await res.json();
+          debugInfo.fetchStatus = res.status;
+          const text = await res.text();
+          debugInfo.rawTextSnippet = text.slice(0, 300);
+          const data = JSON.parse(text);
           const badge = data?.teams?.[0]?.strBadge || data?.teams?.[0]?.strTeamBadge || null;
           cached = { badge, fetchedAt: new Date().toISOString() };
-        } catch {
+        } catch (e) {
+          debugInfo.error = e.message;
           cached = { badge: null, fetchedAt: new Date().toISOString() };
         }
-        await kvPut(env, cacheKey, cached);
+        if (!nocache) await kvPut(env, cacheKey, cached);
       }
+      if (debug) return json({ cached, debugInfo });
       if (cached.badge) return Response.redirect(cached.badge, 302);
       return new Response('', { status: 404 });
     }
