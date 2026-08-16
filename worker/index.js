@@ -114,6 +114,37 @@ async function fetchOddsPage(path) {
   return res.text();
 }
 
+// De statische seeds in ODDS_SEEDS raken na verloop van tijd achterhaald
+// (een speelronde is een keer voorbij, de site linkt dan geen sibling-
+// wedstrijden meer die nog moeten komen). Om dat op te lossen zoeken we
+// elke paar uur op de odds1x2-homepage naar een VERSERE wedstrijd van
+// dezelfde competitie (zelfde land/competitie-slug uit het pad) en
+// gebruiken die als seed in plaats van de vaste — zonder dat iemand
+// handmatig een nieuwe seed-URL hoeft op te zoeken.
+async function getCurrentSeed(env, compId) {
+  const staticSeed = ODDS_SEEDS[compId];
+  if (!staticSeed) return null;
+  const slug = staticSeed.match(/^\/football\/([a-z0-9-]+)\/odds\//)?.[1];
+  if (!slug) return staticSeed;
+
+  const cacheKey = `seed_${compId}`;
+  const cached = await kvGet(env, cacheKey, null);
+  if (cached?.seed && cached.fetchedAt && (Date.now() - new Date(cached.fetchedAt).getTime()) < 6 * 60 * 60 * 1000) {
+    return cached.seed;
+  }
+
+  try {
+    const homeHtml = await fetchOddsPage('/');
+    const re = new RegExp(`/football/${slug}/odds/[a-z0-9-]+-vs-[a-z0-9-]+/`, 'g');
+    const found = [...new Set(homeHtml.match(re) || [])];
+    const seed = found[0] || staticSeed;
+    await kvPut(env, cacheKey, { seed, fetchedAt: new Date().toISOString() });
+    return seed;
+  } catch {
+    return staticSeed;
+  }
+}
+
 // Haalt de "desktop" odds-tabel (bookmaker-kolommen, thuis/gelijk/uit-rijen) uit een matchpagina.
 function parseOddsTable(html) {
   const box = html.match(/odds-table-desktop[\s\S]*?<table class="table table-hover allbets">([\s\S]*?)<\/table>/);
@@ -153,7 +184,7 @@ function parseMatchMeta(html) {
 // Zoek de odds voor een specifieke wedstrijd, cache resultaten in KV om
 // odds1x2.com niet onnodig vaak te belasten (rondelijst 6u, odds per match 1u).
 async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
-  const seed = ODDS_SEEDS[compId];
+  const seed = await getCurrentSeed(env, compId);
   if (!seed) return { error: `geen odds-bron gekoppeld voor competitie ${compId}` };
 
   const roundCacheKey = `oddsround_${compId}`;
@@ -200,7 +231,7 @@ async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
 // Geen resultaten (odds1x2 toont alleen aankomende odds, geen scores) —
 // alleen datum/tijd/teams. Werkt voor elke compId die in ODDS_SEEDS staat.
 async function scrapeCompFixtures(env, compId) {
-  const seed = ODDS_SEEDS[compId];
+  const seed = await getCurrentSeed(env, compId);
   if (!seed) return [];
   const seedHtml = await fetchOddsPage(seed);
   const seedMeta = parseMatchMeta(seedHtml);
