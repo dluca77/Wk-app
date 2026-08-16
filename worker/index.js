@@ -287,6 +287,8 @@ async function refreshAll(env, { force = false } = {}) {
         const m = byId.get(key);
         if (m.compId === compId && m.source === 'odds1x2') byId.delete(key);
       }
+      let mergedCount = 0, newCount = 0;
+      const snapshot = [...byId.entries()]; // vaste snapshot, niet de live Map, om mutatie-tijdens-iteratie-verrassingen te vermijden
       for (const scraped of compMatches) {
         // Zoek een bestaande wedstrijd (bv. bevroren Sofascore-data) met
         // dezelfde teams + datum, zodat we die MERGEN i.p.v. een dubbele
@@ -294,11 +296,11 @@ async function refreshAll(env, { force = false } = {}) {
         // heeft) behouden blijft in plaats van overschreven te worden.
         const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
         let existingKey = null;
-        for (const [key, m] of byId) {
+        for (const [key, m] of snapshot) {
           if (String(m.compId) !== String(compId) || m.date !== scraped.date) continue;
           if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
         }
-        if (existingKey) {
+        if (existingKey && byId.has(existingKey)) {
           const old = byId.get(existingKey);
           byId.set(existingKey, {
             ...scraped,
@@ -307,11 +309,13 @@ async function refreshAll(env, { force = false } = {}) {
             finished: old.finished || scraped.finished,
             result: old.result || scraped.result,
           });
+          mergedCount++;
         } else {
           byId.set(scraped.apiId, scraped);
+          newCount++;
         }
       }
-      log.push(`${COMPS[compId]?.name} (odds1x2-scrape): ${compMatches.length} wedstrijden van de huidige speelronde`);
+      log.push(`${COMPS[compId]?.name} (odds1x2-scrape): ${compMatches.length} wedstrijden van de huidige speelronde (${mergedCount} gemerged met bestaande data, ${newCount} nieuw)`);
     } catch (e) {
       log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
     }
