@@ -36,13 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Check BetExplorer root en results/vandaag-varianten
-        run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          for u in "https://www.betexplorer.com/" "https://www.betexplorer.com/results/football/" "https://www.betexplorer.com/livescore/"; do
-            echo "=== $u ==="
-            curl -sS -A "$UA" "$u" -o /tmp/be.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-            echo "titel:"; grep -oE '<title>[^<]+</title>' /tmp/be.html
-            echo "aantal in-match links:"; grep -ocE 'class="in-match"' /tmp/be.html || true
-            echo "eerste 5 match-links:"; grep -oE 'href="/football/[a-z-]+/[a-z0-9-]+/[a-z0-9-]+/[a-zA-Z0-9]+/"' /tmp/be.html | sort -u | head -5
-          done
