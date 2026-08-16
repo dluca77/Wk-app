@@ -43,7 +43,7 @@ jobs:
           d=json.load(sys.stdin)
           html=d.get('snippet','')
           print('status',d.get('status'),'len',d.get('length'))
-          for pat in [r'\d{1,2}[/-.]\d{1,2}[/-.]\d{2,4}', r'kick.?off', r'Round \d+', r'matchday', r'roundlist', r'next.?round', r'prev.?round', r'schedule', r'\d{1,2}:\d{2}', r'class=\"date[^\"]*\"[^>]*>[^<]+', r'datetime=\"[^\"]+\"']:
+          for pat in [r'\d{1,2}[./-]\d{1,2}[./-]\d{2,4}', r'kick.?off', r'Round \d+', r'matchday', r'roundlist', r'next.?round', r'prev.?round', r'schedule', r'\d{1,2}:\d{2}', r'class=\"date[^\"]*\"[^>]*>[^<]+', r'datetime=\"[^\"]+\"']:
               ms=re.findall(pat, html, re.I)
               print(pat,'-> count', len(ms), '| sample', ms[:3])
           idx=html.find('odds-table-desktop')
