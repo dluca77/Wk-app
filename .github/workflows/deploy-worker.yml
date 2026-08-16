@@ -36,27 +36,21 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Diepere check BetExplorer en SoccerStats
+      - name: BetExplorer fixtures-tabel structuur inspecteren
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          echo "=== BetExplorer Bundesliga fixtures pagina: wedstrijd-links ==="
-          curl -sS -A "$UA" "https://www.betexplorer.com/football/germany/bundesliga/" -o /tmp/be1.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          grep -oE 'href="/football/germany/bundesliga/[a-z0-9-]+/"' /tmp/be1.html | sort -u | head -10
-          echo "aantal wedstrijd-links:"
-          grep -ocE 'href="/football/germany/bundesliga/[a-z0-9-]+/[a-zA-Z0-9]+/"' /tmp/be1.html || true
-          echo "--- fixtures/results tabel aanwezig? ---"
-          grep -ocE 'class="table-main' /tmp/be1.html
-          echo "=== BetExplorer: individuele match pagina zoeken + H2H check ==="
-          MLINK=$(grep -oE 'href="/football/germany/bundesliga/[a-z0-9-]+/[a-zA-Z0-9]+/"' /tmp/be1.html | sort -u | head -1 | sed 's/href="//;s/"$//')
-          echo "matchlink: $MLINK"
-          if [ -n "$MLINK" ]; then
-            curl -sS -A "$UA" "https://www.betexplorer.com$MLINK" -o /tmp/be2.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-            echo "H2H/previous-matches hits:"
-            grep -ciE "head-to-head|h2h|previous matches|mutual matches" /tmp/be2.html || true
-          fi
-          echo "=== SoccerStats Bundesliga: fixtures/uitslagen check ==="
-          curl -sS -A "$UA" "https://www.soccerstats.com/latest.asp?league=germany" -o /tmp/ss1.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          grep -oE '[A-Z][a-zA-Z .]+ [0-9]-[0-9] [A-Z][a-zA-Z .]+' /tmp/ss1.html | head -10
-          echo "=== SoccerStats: fixtures voor komende ronde ==="
-          curl -sS -A "$UA" "https://www.soccerstats.com/results.asp?league=germany" -o /tmp/ss2.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          grep -oE '[A-Z][a-zA-Z .]{2,20}</td>' /tmp/ss2.html | sort -u | head -15
+          curl -sS -A "$UA" "https://www.betexplorer.com/football/germany/bundesliga/fixtures/" -o /tmp/fx.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          echo "=== Zoek data-attributen op tr/td (vaak JS-driven timestamps) ==="
+          grep -oE '<tr[^>]*data-[a-z-]+="[^"]*"[^>]*>' /tmp/fx.html | head -10
+          echo "=== Zoek team-namen in fixtures tabel ==="
+          grep -oE 'class="in-match"[^>]*>[^<]*<[^>]*>[^<]*' /tmp/fx.html | head -5
+          grep -oE 'href="/football/germany/bundesliga/[a-z0-9-]+/[a-zA-Z0-9]+/"[^>]*>[^<]+' /tmp/fx.html | head -10
+          echo "=== Zoek datum/tijd elementen ==="
+          grep -oE 'data-etime="[0-9]+"' /tmp/fx.html | head -5
+          grep -oE 'class="h-text-left"[^>]*>[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{4}' /tmp/fx.html | head -5
+          echo "=== Ruwe stukjes rond eerste tr ==="
+          python3 - << 'PYEOF'
+          content = open('/tmp/fx.html', encoding='utf-8', errors='ignore').read()
+          idx = content.find('table-main')
+          print(content[idx-50:idx+1500] if idx != -1 else 'table-main NIET gevonden')
+          PYEOF
