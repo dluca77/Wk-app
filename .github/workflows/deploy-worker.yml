@@ -36,3 +36,23 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Test nieuwe endpoints (matches + ai-analyse)
+        run: |
+          echo "=== /matches (Eredivisie, compId 37) ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          m = [x for x in d.get('matches', []) if str(x.get('compId')) == '37' and x.get('source') == 'odds1x2']
+          print('aantal odds1x2 Eredivisie-wedstrijden:', len(m))
+          for x in m[:3]:
+              print(' -', x.get('h'), 'vs', x.get('a'), '|', x.get('date'), x.get('time'), '| apiId:', x.get('apiId'))
+          first_id = m[0]['apiId'] if m else ''
+          with open('/tmp/first_id.txt', 'w') as f:
+              f.write(first_id)
+          "
+          FIRST_ID=$(cat /tmp/first_id.txt)
+          echo "=== /value-bet?apiId=$FIRST_ID ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/value-bet?apiId=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$FIRST_ID")"
+          echo
+          echo "=== /ai-analyse?apiId=$FIRST_ID ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/ai-analyse?apiId=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$FIRST_ID")"
