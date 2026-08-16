@@ -382,6 +382,22 @@ export default {
       return json(await refreshAll(env, { force: true }));
     }
 
+    if (url.pathname === '/debug-quota') {
+      try {
+        const res = await fetch(`${API_BASE}/tournaments/get-seasons?tournamentId=37`, {
+          headers: { 'x-rapidapi-key': env.SPORTSAPI_KEY, 'x-rapidapi-host': API_HOST },
+        });
+        const headers = {};
+        for (const [k, v] of res.headers.entries()) {
+          if (k.toLowerCase().includes('rate') || k.toLowerCase().includes('limit') || k.toLowerCase().includes('quota')) headers[k] = v;
+        }
+        const body = await res.text();
+        return json({ status: res.status, rateLimitHeaders: headers, bodyPreview: body.slice(0, 300) });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     if (url.pathname === '/debug-scrape') {
       const target = url.searchParams.get('url');
       const offset = parseInt(url.searchParams.get('offset') || '0', 10);
