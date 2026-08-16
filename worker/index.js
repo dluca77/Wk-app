@@ -263,6 +263,21 @@ export default {
       return json(await refreshAll(env, { force: true }));
     }
 
+    if (url.pathname === '/debug-scrape') {
+      const target = url.searchParams.get('url');
+      const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+      const len = parseInt(url.searchParams.get('len') || '3000', 10);
+      try {
+        const res = await fetch(target, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' },
+        });
+        const text = await res.text();
+        return json({ status: res.status, length: text.length, snippet: text.slice(offset, offset + len) });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     if (url.pathname === '/debug') {
       const meta = await kvGet(env, 'meta_global', {});
       const d = await kvGet(env, 'matches_all', { matches: [] });
