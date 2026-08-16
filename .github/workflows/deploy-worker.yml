@@ -36,3 +36,30 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Zoek seeds voor ontbrekende competities + test AI
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          for slug in germany-bundesliga italy-serie-a france-ligue-1 europa-league uefa-europa-league europa-league-qual conference-league uefa-conference-league europa-conference-league; do
+            echo "-- $slug --"
+            curl -sS -A "$UA" "https://www.odds1x2.com/football/$slug/" -o /tmp/page.html -w "HTTP:%{http_code}\n"
+            grep -oE "/football/$slug/odds/[a-z0-9-]+-vs-[a-z0-9-]+/" /tmp/page.html | sort -u | head -5
+          done
+          echo "=== Homepage volledige lijst met alle /odds/ links ==="
+          curl -sS -A "$UA" "https://www.odds1x2.com/" | grep -oE "/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/" | sort -u
+          echo "=== AI-analyse test op een Eredivisie-match ==="
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" -o /tmp/matches.json
+          python3 -c "
+import json
+d=json.load(open('/tmp/matches.json'))
+ms=d.get('matches',d) if isinstance(d,dict) else d
+if isinstance(ms,dict): ms=list(ms.values())
+ered=[m for m in ms if m.get('compName')=='Eredivisie']
+print(len(ered),'eredivisie matches')
+for m in ered[:3]:
+    print(m.get('apiId'), m.get('h'),'-',m.get('a'))
+if ered:
+    with open('/tmp/testid.txt','w') as f: f.write(str(ered[0].get('apiId')))
+"
+          APIID=$(cat /tmp/testid.txt 2>/dev/null || echo "")
+          echo "Testing AI analyse for apiId=$APIID"
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/ai-analyse?apiId=$APIID"
