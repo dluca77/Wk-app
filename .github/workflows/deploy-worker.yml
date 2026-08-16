@@ -36,19 +36,14 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Verifieer zelf-vernieuwende seed + Ajax vs Heerenveen
+      - name: Check homepage-inhoud voor Eredivisie-links
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
-          import json, sys
+          enc=$(python3 -c "import urllib.parse; print(urllib.parse.quote('https://www.odds1x2.com/', safe=''))")
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=150000" | python3 -c "
+          import json, sys, re
           d = json.load(sys.stdin)
-          matches = d.get('matches', [])
-          eredivisie = [m for m in matches if str(m.get('compId')) == '37' and m.get('source') == 'odds1x2']
-          print('Eredivisie (odds1x2) aantal:', len(eredivisie))
-          for m in eredivisie:
-              print(' -', m.get('h'), 'vs', m.get('a'), '|', m.get('date'), m.get('time'))
-          ajax = [m for m in matches if 'ajax' in m.get('h','').lower() or 'ajax' in m.get('a','').lower()]
-          print()
-          print('Ajax-wedstrijden gevonden:', len(ajax))
-          for m in ajax:
-              print(' -', json.dumps(m, ensure_ascii=False))
+          html = d.get('snippet','')
+          print('status', d.get('status'), 'len', d.get('length'))
+          links = sorted(set(re.findall(r'/football/holland-eredivisie/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html)))
+          print('Eredivisie-links op homepage:', links)
           "
