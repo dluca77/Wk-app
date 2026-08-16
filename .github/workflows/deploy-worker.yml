@@ -36,18 +36,24 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Inspecteer Understat team-pagina ruw
+      - name: Probe Understat met Playwright (headless Chromium)
         run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          curl -sS -A "$UA" "https://understat.com/team/Liverpool/2025" -o /tmp/team.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          echo "=== zoek 'JSON.parse' ruw ==="
-          grep -o "JSON.parse" /tmp/team.html | wc -l
-          python3 - << 'PYEOF'
-          content = open('/tmp/team.html', encoding='utf-8', errors='ignore').read()
-          idx = content.find('JSON.parse')
-          print(content[max(0,idx-100):idx+800] if idx != -1 else 'JSON.parse NIET gevonden')
-          print('--- titel ---')
-          import re
-          t = re.search(r'<title>[^<]+</title>', content)
-          print(t.group(0) if t else 'geen titel')
-          PYEOF
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.48 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+          cat > /tmp/probe.mjs << 'EOF'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch();
+          const page = await browser.newPage();
+          await page.goto('https://understat.com/team/Liverpool/2025', { waitUntil: 'networkidle', timeout: 30000 });
+          await page.waitForSelector('table', { timeout: 15000 }).catch(() => console.log('geen <table> gevonden binnen 15s'));
+          const tableCount = await page.locator('table').count();
+          console.log('=== aantal <table> elementen:', tableCount, '===');
+          for (let i = 0; i < tableCount; i++) {
+            const html = await page.locator('table').nth(i).evaluate(el => el.outerHTML.slice(0, 3000));
+            console.log(`--- table[${i}] (eerste 3000 chars) ---`);
+            console.log(html);
+          }
+          await browser.close();
+          EOF
+          node /tmp/probe.mjs
