@@ -36,31 +36,22 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Zoek seeds voor ontbrekende competities + test AI
+      - name: Onderzoek Forebet als bron voor ontbrekende competities + H2H
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          for slug in germany-bundesliga italy-serie-a france-ligue-1 europa-league uefa-europa-league europa-league-qual conference-league uefa-conference-league europa-conference-league; do
-            echo "-- $slug --"
-            curl -sS -A "$UA" "https://www.odds1x2.com/football/$slug/" -o /tmp/page.html -w "HTTP:%{http_code}\n"
-            grep -oE "/football/$slug/odds/[a-z0-9-]+-vs-[a-z0-9-]+/" /tmp/page.html | sort -u | head -5
-          done
-          echo "=== Homepage volledige lijst met alle /odds/ links ==="
-          curl -sS -A "$UA" "https://www.odds1x2.com/" | grep -oE "/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/" | sort -u
-          echo "=== AI-analyse test op een Eredivisie-match ==="
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" -o /tmp/matches.json
-          cat > /tmp/pick.py << 'PYEOF'
-          import json
-          d = json.load(open('/tmp/matches.json'))
-          ms = d.get('matches', d) if isinstance(d, dict) else d
-          if isinstance(ms, dict): ms = list(ms.values())
-          ered = [m for m in ms if m.get('compName') == 'Eredivisie']
-          print(len(ered), 'eredivisie matches')
-          for m in ered[:3]:
-              print(m.get('apiId'), m.get('h'), '-', m.get('a'))
-          if ered:
-              with open('/tmp/testid.txt', 'w') as f: f.write(str(ered[0].get('apiId')))
-          PYEOF
-          python3 /tmp/pick.py
-          APIID=$(cat /tmp/testid.txt 2>/dev/null || echo "")
-          echo "Testing AI analyse for apiId=$APIID"
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/ai-analyse?apiId=$APIID"
+          echo "=== Forebet Bundesliga fixtures pagina ==="
+          curl -sS -A "$UA" "https://www.forebet.com/en/football-predictions/predictions-1x2-germany-bundesliga" -o /tmp/fb1.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          grep -ocE "predictions/" /tmp/fb1.html
+          grep -oE "/en/football-tips-and-predictions/[a-z0-9-]+" /tmp/fb1.html | sort -u | head -10
+          echo "=== Forebet homepage robots/structuur check ==="
+          curl -sS -A "$UA" "https://www.forebet.com/en/football-predictions/today" -o /tmp/fb2.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          grep -oE "/en/[a-z0-9/-]+" /tmp/fb2.html | sort -u | head -20
+          echo "=== Forebet H2H check (zoek naar head to head / previous matches op een matchpagina) ==="
+          MATCHLINK=$(grep -oE "/en/football-tips-and-predictions/[a-z0-9-]+" /tmp/fb2.html | sort -u | head -1)
+          echo "matchlink: $MATCHLINK"
+          if [ -n "$MATCHLINK" ]; then
+            curl -sS -A "$UA" "https://www.forebet.com$MATCHLINK" -o /tmp/fb3.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+            grep -ciE "head.to.head|h2h|last matches|previous meetings" /tmp/fb3.html
+          fi
+          echo "=== robots.txt check ==="
+          curl -sS -A "$UA" "https://www.forebet.com/robots.txt"
