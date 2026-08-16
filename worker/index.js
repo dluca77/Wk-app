@@ -5,7 +5,11 @@
 //   La Liga, Champions League-kwalificatie — zie scrapeCompFixtures() en
 //   ODDS_SEEDS) + betexplorer.com (Bundesliga, Serie A, Ligue 1, Europa
 //   League, Conference League — zie scrapeBetExplorerFixtures() en
-//   BETEXPLORER_COMPS). Beide gratis, geen API-key, geen quotum.
+//   BETEXPLORER_COMPS) + wereldwijde "vandaag"-data van ALLE competities
+//   samen, aangeleverd via POST /ingest-global door een externe GitHub
+//   Actions cron-job (scrape-global.yml) omdat betexplorer.com verzoeken
+//   vanaf Cloudflare's eigen IP-adressen anders/leeg beantwoordt. Alles
+//   gratis, geen API-key, geen quotum.
 // - Odds: scraping van odds1x2.com (zelfde bron, dezelfde pagina's).
 // - AI-analyse: Cloudflare Workers AI binding (env.AI), ingebouwd in het
 //   Workers-platform met een gratis dagelijkse toewijzing — geen losse
@@ -380,12 +384,21 @@ function parseGlobalMatches(html) {
   return matches.filter(m => m.h && m.a);
 }
 
-async function scrapeGlobalMatches() {
-  const res = await fetch('https://www.betexplorer.com/', { headers: { 'User-Agent': SCRAPE_UA } });
-  if (!res.ok) throw new Error(`betexplorer homepage -> HTTP ${res.status}`);
-  const html = await res.text();
-  return parseGlobalMatches(html);
-}
+// LET OP: een directe fetch vanuit de Worker zelf naar betexplorer.com/
+// (zoals hierboven parseGlobalMatches zou suggereren) werkt NIET betrouwbaar
+// — getest en bevestigd: betexplorer.com geeft aan verzoeken die vanaf
+// Cloudflare's eigen IP-adressen komen een andere, lege pagina terug (zelfde
+// bytegrootte, maar zonder de wedstrijd-data), waarschijnlijk als
+// anti-bot-maatregel specifiek tegen cloud/Worker-verkeer. Losse
+// competitiepagina's (scrapeBetExplorerFixtures hierboven) werken wel vanuit
+// de Worker — alleen deze ene "alles-in-1"-pagina niet.
+//
+// Oplossing: de HTML wordt opgehaald door een GitHub Actions workflow (die
+// GEEN Cloudflare-IP heeft en dus wel de volledige data krijgt — zie
+// .github/workflows/scrape-global.yml), geparsed met dezelfde logica als
+// parseGlobalMatches(), en vervolgens naar /ingest-global hieronder gestuurd.
+// refreshAll() leest die extern aangeleverde data uit KV i.p.v. zelf te
+// fetchen.
 
 // ---------- Eigen kansmodel (Poisson) op basis van computeForm() ----------
 function factorial(n) { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
@@ -523,29 +536,31 @@ async function refreshAll(env, { force = false } = {}) {
     log.push(`Nog geen gratis scrape-bron gekoppeld voor: ${uncoveredComps.map(id => COMPS[id]?.name).join(', ')} — oude gecachete wedstrijden blijven staan maar worden niet ververst.`);
   }
 
-  // Globale "vandaag"-scrape: ALLE wedstrijden wereldwijd, los van de vaste
-  // competitielijst hierboven. Alleen van vandaag (zie scrapeGlobalMatches).
-  // Skip wedstrijden die al via een van de bovenstaande specifieke scrapers
-  // binnen zijn gekomen (zelfde teams + datum), zodat er geen dubbele kaarten
-  // ontstaan.
-  try {
-    const globalMatches = await scrapeGlobalMatches();
+  // Globale "vandaag"-data: ALLE wedstrijden wereldwijd, los van de vaste
+  // competitielijst hierboven. Deze data komt NIET van een fetch vanuit de
+  // Worker (die wordt geblokkeerd, zie toelichting bij parseGlobalMatches)
+  // maar wordt periodiek aangeleverd door een externe GitHub Actions cron-job
+  // via POST /ingest-global, en hier alleen uit KV gelezen. Skip wedstrijden
+  // die al via een specifieke scraper binnen zijn gekomen (zelfde teams +
+  // datum), zodat er geen dubbele kaarten ontstaan.
+  const globalCache = await kvGet(env, 'global_matches_raw', null);
+  if (globalCache?.matches?.length) {
     for (const key of [...byId.keys()]) {
       const m = byId.get(key);
       if (m.source === 'betexplorer_global') byId.delete(key);
     }
     const snapshot = [...byId.entries()];
     let addedGlobal = 0, skippedDup = 0;
-    for (const scraped of globalMatches) {
+    for (const scraped of globalCache.matches) {
       const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
       const dup = snapshot.some(([, m]) => m.date === scraped.date && normTeam(m.h) === nH && normTeam(m.a) === nA);
       if (dup) { skippedDup++; continue; }
       byId.set(scraped.apiId, scraped);
       addedGlobal++;
     }
-    log.push(`Wereldwijd (betexplorer-homepage, alleen vandaag): ${globalMatches.length} wedstrijden gevonden, ${addedGlobal} toegevoegd, ${skippedDup} al aanwezig via specifieke scraper`);
-  } catch (e) {
-    log.push(`Globale scrape FAIL: ${e.message.slice(0, 150)}`);
+    log.push(`Wereldwijd (via GitHub-cron, opgehaald ${globalCache.fetchedAt}): ${globalCache.matches.length} wedstrijden gevonden, ${addedGlobal} toegevoegd, ${skippedDup} al aanwezig via specifieke scraper`);
+  } else {
+    log.push('Wereldwijd: nog geen data ontvangen van de GitHub-cron (eerste run moet nog lopen)');
   }
 
   const all = [...byId.values()];
@@ -784,7 +799,25 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       return new Response('', { status: 404 });
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/crest', '/debug'] }, 404);
+    // Ontvangt de wereldwijde "vandaag"-wedstrijdenlijst, aangeleverd door de
+    // externe GitHub Actions cron-job (.github/workflows/scrape-global.yml)
+    // omdat de Worker zelf niet bij deze data kan (zie toelichting hierboven
+    // bij parseGlobalMatches). Slaat de ruwe lijst op in KV; refreshAll()
+    // merget 'm bij de volgende refresh in matches_all.
+    if (url.pathname === '/ingest-global' && req.method === 'POST') {
+      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
+      try {
+        const body = await req.json();
+        const matches = Array.isArray(body.matches) ? body.matches : [];
+        await kvPut(env, 'global_matches_raw', { matches, fetchedAt: new Date().toISOString() });
+        const result = await refreshAll(env, { force: true });
+        return json({ ok: true, received: matches.length, refresh: result });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
+    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/crest', '/ingest-global', '/debug'] }, 404);
   },
 
   async scheduled(event, env, ctx) {

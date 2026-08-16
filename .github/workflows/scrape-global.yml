@@ -1,0 +1,32 @@
+name: Scrape wereldwijde wedstrijden (BetExplorer)
+
+# Draait vanaf GitHub Actions (NIET vanuit de Cloudflare Worker) omdat
+# betexplorer.com verzoeken vanaf Cloudflare's eigen IP-adressen een lege
+# pagina teruggeeft (zonder wedstrijd-data), waarschijnlijk als anti-bot-
+# maatregel tegen cloud/Worker-verkeer. GitHub Actions-runners krijgen wel
+# de volledige pagina. Zie worker/index.js voor de uitgebreide toelichting.
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Haal betexplorer.com-homepage op
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          curl -sS -A "$UA" "https://www.betexplorer.com/" -o home.html
+          echo "opgehaald: $(wc -c < home.html) bytes"
+      - name: Parseer wedstrijden
+        run: node scripts/parse-global-matches.mjs home.html > matches.json
+      - name: Stuur naar Worker
+        env:
+          RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
+        run: |
+          CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
+          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ingest-global?key=$CLEAN_SECRET" \
+            -H "Content-Type: application/json" \
+            --data @matches.json
