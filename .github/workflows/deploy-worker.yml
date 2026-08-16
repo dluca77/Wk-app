@@ -36,15 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Verifieer /matches per nieuw gescrapete competitie
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
-          import json, sys
-          d = json.load(sys.stdin)
-          matches = d.get('matches', [])
-          for compId, name in [(37,'Eredivisie'), (17,'Premier League'), (8,'La Liga'), (7,'Champions League')]:
-              m = [x for x in matches if str(x.get('compId')) == str(compId) and x.get('source') == 'odds1x2']
-              print(name, ':', len(m), 'wedstrijden')
-              for x in m[:2]:
-                  print('   -', x.get('h'), 'vs', x.get('a'), '|', x.get('date'), x.get('time'))
-          "
