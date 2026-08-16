@@ -581,6 +581,15 @@ export default {
           };
         } catch { /* deze wedstrijd overslaan */ }
       }
+      // Wereldwijde wedstrijden hebben hun 1X2-odds al direct meegescraped
+      // (zie /ingest-global) — geen aparte lookup nodig, gewoon overnemen.
+      const globalWithOdds = (d.matches || []).filter(m => m.source === 'betexplorer_global' && m.oddsH != null);
+      for (const m of globalWithOdds) {
+        result[`${m.h}_${m.a}`] = {
+          h: m.h, a: m.a, sport: m.compName,
+          odds: { '1X2': { h: m.oddsH, d: m.oddsD, a: m.oddsA, bm: 'betexplorer.com' } },
+        };
+      }
       return json({ matches: result, fetchedAt: new Date().toISOString() });
     }
     if (url.pathname === '/player-stats') {

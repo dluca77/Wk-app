@@ -60,6 +60,11 @@ function parseGlobalMatches(html) {
     const statusM = chunk.match(/data-live-cell="time">\s*([^<]*?)\s*</);
     // Uitslag: data-live-cell="score"> ... <div class="table-main__finishedResults">2</div> ... :</div> ... 1</div>
     const scoreM = chunk.match(/data-live-cell="score">[^]*?table-main__finishedResults">(\d+)<\/div>[^]*?table-main__finishedResults">:<\/div>[^]*?table-main__finishedResults">(\d+)<\/div>/);
+    // 1X2-odds: drie "data-odd=" waarden op rij (thuis, gelijk, uit) in het
+    // odds-blokje na de teamnamen. Niet elke wedstrijd heeft dit (bv. als er
+    // nog geen bookmaker-odds bekend zijn).
+    const oddsVals = [...chunk.matchAll(/data-odd="([\d.]+)"/g)].slice(0, 3).map(m => parseFloat(m[1]));
+    const [oddsH, oddsD, oddsA] = oddsVals.length === 3 ? oddsVals : [null, null, null];
     const idx = start;
     let hdr = null;
     for (const h of headers) { if (h.idx <= idx) hdr = h; else break; }
@@ -75,6 +80,7 @@ function parseGlobalMatches(html) {
       compFlag: hdr ? countryFlag(hdr.country) : '🌍',
       h: homeM[1].trim(), a: awayM[1].trim(),
       date, time, result, live, finished,
+      oddsH, oddsD, oddsA,
       venue: '', round: '', source: 'betexplorer_global',
     });
   }
