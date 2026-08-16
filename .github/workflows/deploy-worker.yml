@@ -30,9 +30,18 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: Ververs live data
-        env:
-          RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
+      - name: Inspecteer odds1x2 competitiepagina
         run: |
-          CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2Ffootball%2Fholland-eredivisie%2F&offset=0&len=300000" | python3 -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          html = d.get('snippet','')
+          print('STATUS check: length=', d.get('length'))
+          # zoek herhalende match-blokken
+          m = re.search(r'(<[^>]*class=\"[^\"]*odds-line[^\"]*\"[^>]*>.{0,1200})', html, re.S)
+          print('EERSTE ODDS-LINE BLOK:')
+          print(m.group(1) if m else 'NIET GEVONDEN')
+          print()
+          hrefs = re.findall(r'href=\"(/football/holland-eredivisie/odds/[^\"]+)\"', html)
+          print('GEVONDEN WEDSTRIJD-LINKS:', list(dict.fromkeys(hrefs))[:10])
+          "
