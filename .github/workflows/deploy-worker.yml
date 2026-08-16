@@ -36,3 +36,16 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Test scrape-doelen
+        run: |
+          for T in \
+            "https%3A%2F%2Fwww.odds1x2.com%2F" \
+            "https%3A%2F%2Fgood-sport.co%2Ffootball-odds-comparison%2F" \
+            "https%3A%2F%2Foddsscanner.com%2Ffootball" \
+            "https%3A%2F%2Fwww.bet365.com%2Fhub%2Fen-us%2Ffootball" \
+            "https%3A%2F%2Fwww.oddsportal.com%2Ffootball%2F" \
+          ; do
+            echo "=== $T ==="
+            curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=$T&len=1500"
+            echo ""
+          done
