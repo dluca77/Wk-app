@@ -144,7 +144,8 @@ async function refreshAll(env, { force = false } = {}) {
   const now = new Date();
   const log = [];
   let totalCalls = 0;
-  const MAX_CALLS = 20;
+  const MAX_CALLS = 50;
+  const MAX_PAGES_PER_COMP = 4; // tot 120 wedstrijden per competitie (kwalificatierondes CL/EL/ECL kunnen over 30 heen gaan)
 
   const meta = await kvGet(env, 'meta_global', {});
   const stale = force || !meta.lastRun || (now - new Date(meta.lastRun)) > 12 * 60 * 60 * 1000;
@@ -158,13 +159,18 @@ async function refreshAll(env, { force = false } = {}) {
     try {
       const seasonId = await getSeasonId(env, tournamentId);
       totalCalls++;
-      if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt na seizoen-lookup — rest overgeslagen`); break; }
-      const raw = await apiGet(env, `/tournaments/get-matches?tournamentId=${tournamentId}&seasonId=${seasonId}&pageIndex=0`);
-      const events = raw?.events || raw?.data?.events || [];
-      const matches = events.map(e => mapMatch(e, tournamentId));
-      all.push(...matches);
-      log.push(`${COMPS[tournamentId]?.name}: ${matches.length} wedstrijden`);
-      totalCalls++;
+      let compTotal = 0;
+      for (let page = 0; page < MAX_PAGES_PER_COMP; page++) {
+        if (totalCalls >= MAX_CALLS) { log.push(`Budget bereikt tijdens ${COMPS[tournamentId]?.name} — rest overgeslagen`); break; }
+        const raw = await apiGet(env, `/tournaments/get-matches?tournamentId=${tournamentId}&seasonId=${seasonId}&pageIndex=${page}`);
+        totalCalls++;
+        const events = raw?.events || raw?.data?.events || [];
+        const matches = events.map(e => mapMatch(e, tournamentId));
+        all.push(...matches);
+        compTotal += matches.length;
+        if (events.length < 30) break; // laatste pagina bereikt
+      }
+      log.push(`${COMPS[tournamentId]?.name}: ${compTotal} wedstrijden`);
     } catch(e) {
       log.push(`${tournamentId} FAIL: ${e.message.slice(0, 80)}`);
     }
