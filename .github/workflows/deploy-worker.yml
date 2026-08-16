@@ -36,44 +36,20 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Zoek odds1x2-seed-URLs voor overige 8 competities
+      - name: Scan odds1x2-homepage op wedstrijdlinks van andere competities
         run: |
-          declare -A paths
-          paths["Champions League"]="/football/champions-league/ /football/europe-champions-league/"
-          paths["Europa League"]="/football/europa-league/ /football/europe-europa-league/"
-          paths["Conference League"]="/football/europa-conference-league/ /football/europe-conference-league/"
-          paths["Premier League"]="/football/england-premier-league/"
-          paths["La Liga"]="/football/spain-la-liga/ /football/spain-primera-division/"
-          paths["Bundesliga"]="/football/germany-bundesliga/"
-          paths["Serie A"]="/football/italy-serie-a/"
-          paths["Ligue 1"]="/football/france-ligue-1/ /football/france-ligue-one/"
-
-          for name in "${!paths[@]}"; do
-            found=0
-            for path in ${paths[$name]}; do
-              enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote('https://www.odds1x2.com'+sys.argv[1], safe=''))" "$path")
-              resp=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=60000")
-              echo "$resp" | python3 -c "
+          enc=$(python3 -c "import urllib.parse; print(urllib.parse.quote('https://www.odds1x2.com/', safe=''))")
+          resp=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=150000")
+          echo "$resp" | python3 -c "
           import json, sys, re
           d = json.load(sys.stdin)
           html = d.get('snippet', '')
+          print('status', d.get('status'), 'len', d.get('length'))
           links = sorted(set(re.findall(r'/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html)))
-          print('$name', '$path', '-> status', d.get('status'), 'len', d.get('length'), '| odds-links:', len(links))
-          for l in links[:3]:
-              print('    ', l)
+          print('totaal odds-matchlinks gevonden op homepage:', len(links))
+          for l in links[:40]:
+              print('  ', l)
+          comps = sorted(set(re.findall(r'/football/([a-z0-9-]+)/odds/', html)))
+          print()
+          print('unieke competitie-slugs:', comps)
           "
-              if echo "$resp" | python3 -c "
-          import json, sys, re
-          d = json.load(sys.stdin)
-          html = d.get('snippet', '')
-          sys.exit(0 if re.search(r'/football/[a-z0-9-]+/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html) else 1)
-          "; then
-                found=1
-                break
-              fi
-            done
-            if [ "$found" -eq 0 ]; then
-              echo "$name -> GEEN WERKENDE SEED GEVONDEN in geprobeerde paden"
-            fi
-            echo
-          done
