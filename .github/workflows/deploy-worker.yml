@@ -43,11 +43,17 @@ jobs:
           d=json.load(sys.stdin)
           html=d.get('snippet','')
           print('status',d.get('status'),'len',d.get('length'))
-          for pat in [r'\d{1,2}[./-]\d{1,2}[./-]\d{2,4}', r'kick.?off', r'Round \d+', r'matchday', r'roundlist', r'next.?round', r'prev.?round', r'schedule', r'\d{1,2}:\d{2}', r'class=\"date[^\"]*\"[^>]*>[^<]+', r'datetime=\"[^\"]+\"']:
-              ms=re.findall(pat, html, re.I)
-              print(pat,'-> count', len(ms), '| sample', ms[:3])
-          idx=html.find('odds-table-desktop')
-          print('odds-table-desktop idx:', idx)
-          print('---context around match info (first 3000 of body)---')
-          print(html[:3000])
+          m = re.search(r'\d{1,2}[./-]\d{1,2}[./-]\d{2,4}', html)
+          if m:
+              start = max(0, m.start()-600)
+              print('---context rond gevonden datum---')
+              print(html[start:m.end()+600])
+          else:
+              print('GEEN DATUM GEVONDEN IN DIT SEGMENT')
+          print()
+          print('---ld+json check---')
+          idxld = html.find('application/ld+json')
+          print('ld+json idx:', idxld)
+          if idxld >= 0:
+              print(html[idxld-50:idxld+1500])
           "
