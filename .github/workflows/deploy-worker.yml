@@ -30,17 +30,18 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: Inspecteer HTML rond odds-tabel op matchpagina
+      - name: Test /value-bet op een echte Eredivisie-wedstrijd
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2Ffootball%2Fholland-eredivisie%2Fodds%2Ffc-zwolle-vs-ajax%2F&offset=0&len=300000" | python3 -c "
-          import json, sys, re
+          APIID=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
+          import json, sys
           d = json.load(sys.stdin)
-          html = d.get('snippet','')
-          print('length=', d.get('length'))
-          idx = html.find('6.50')
-          print('CONTEXT ROND EERSTE ODDS-GETAL (idx=' + str(idx) + '):')
-          print(html[max(0,idx-1500):idx+1500])
-          "
+          matches = d.get('matches', [])
+          m = next((x for x in matches if str(x.get('compId')) == '37' and 'Zwolle' in x.get('h','') and 'Ajax' in x.get('a','')), None)
+          m = m or next((x for x in matches if str(x.get('compId')) == '37' and not x.get('finished')), None)
+          print(m['apiId'] if m else '')
+          ")
+          echo "Test apiId: $APIID"
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/value-bet?apiId=$APIID"
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
