@@ -36,14 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Check homepage-inhoud voor Eredivisie-links
-        run: |
-          enc=$(python3 -c "import urllib.parse; print(urllib.parse.quote('https://www.odds1x2.com/', safe=''))")
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=${enc}&offset=0&len=150000" | python3 -c "
-          import json, sys, re
-          d = json.load(sys.stdin)
-          html = d.get('snippet','')
-          print('status', d.get('status'), 'len', d.get('length'))
-          links = sorted(set(re.findall(r'/football/holland-eredivisie/odds/[a-z0-9-]+-vs-[a-z0-9-]+/', html)))
-          print('Eredivisie-links op homepage:', links)
-          "
