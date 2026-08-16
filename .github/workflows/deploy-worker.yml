@@ -36,6 +36,3 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Check quotum-reset
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-quota"
