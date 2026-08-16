@@ -265,6 +265,26 @@ export default {
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
+    if (url.pathname === '/debug-next') {
+      const tid = url.searchParams.get('tid') || '37';
+      const seasonId = await getSeasonId(env, tid);
+      const results = {};
+      for (const path of [
+        `/tournaments/get-next-matches?tournamentId=${tid}&seasonId=${seasonId}&pageIndex=0`,
+        `/tournaments/get-last-matches?tournamentId=${tid}&seasonId=${seasonId}&pageIndex=0`,
+        `/tournaments/get-matches?tournamentId=${tid}&seasonId=${seasonId}&pageIndex=-1`,
+      ]) {
+        try {
+          const raw = await apiGet(env, path);
+          const events = raw?.events || raw?.data?.events || [];
+          results[path] = { count: events.length, first: events[0] ? { home: events[0]?.homeTeam?.name, away: events[0]?.awayTeam?.name, ts: events[0]?.startTimestamp, status: events[0]?.status?.type } : null };
+        } catch (e) {
+          results[path] = { error: e.message.slice(0, 150) };
+        }
+      }
+      return json({ seasonId, results });
+    }
+
     if (url.pathname === '/debug-seasons') {
       const tid = url.searchParams.get('tid') || '37';
       const raw = await apiGet(env, `/tournaments/get-seasons?tournamentId=${tid}`);
