@@ -36,3 +36,8 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Test /ai-bet (frontend-compatibiliteit)
+        run: |
+          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ai-bet" \
+            -H "Content-Type: application/json" \
+            -d '{"prompt":"Zeg alleen het woord: werkt"}'

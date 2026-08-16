@@ -373,6 +373,23 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       }
     }
 
+    // Vrije-vorm prompt-endpoint voor de frontend (AI-bet-tips-kaarten in
+    // index.html). Gebruikt Workers AI (env.AI) i.p.v. de vroegere,
+    // betaalde Anthropic-API — response-vorm blijft compatibel
+    // ({content:[{text}]}) zodat de bestaande frontend-code ongewijzigd werkt.
+    if (url.pathname === '/ai-bet') {
+      if (req.method === 'GET') return json({ ok: true, backend: 'Cloudflare Workers AI' });
+      try {
+        const body = await req.json();
+        const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+          messages: [{ role: 'user', content: body.prompt }],
+        });
+        return json({ content: [{ text: aiResult.response || '' }] });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     if (url.pathname === '/value-bet') {
       const apiId = url.searchParams.get('apiId');
       const d = await kvGet(env, 'matches_all', { matches: [] });
@@ -450,7 +467,7 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/standings', '/player-stats', '/ai-analyse', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
+    return json({ error: 'not found', routes: ['/matches', '/comps', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
   },
 
   async scheduled(event, env, ctx) {
