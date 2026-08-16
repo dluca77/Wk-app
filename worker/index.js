@@ -193,6 +193,119 @@ async function refreshAll(env, { force = false } = {}) {
   return { ok: true, log, meta: globalMeta };
 }
 
+// ---------- Odds-scraper (odds1x2.com — gratis, geen API-key) ----------
+// Elke competitie heeft een "seed"-wedstrijdpagina op odds1x2.com. Die pagina
+// bevat zelf een lijst met alle andere wedstrijden van dezelfde speelronde
+// (met hun eigen link), dus we hoeven zelf geen URL-slugs te verzinnen —
+// we volgen gewoon de links die de site al aanbiedt.
+const ODDS_SOURCE = 'https://www.odds1x2.com';
+const ODDS_SEEDS = {
+  37: '/football/holland-eredivisie/odds/fc-zwolle-vs-ajax/', // Eredivisie
+};
+const SCRAPE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+
+function normTeam(s) {
+  return (s || '')
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/\b(fc|sc|afc|cf|vv)\b/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+async function fetchOddsPage(path) {
+  const res = await fetch(`${ODDS_SOURCE}${path}`, { headers: { 'User-Agent': SCRAPE_UA } });
+  if (!res.ok) throw new Error(`odds1x2 ${path} -> HTTP ${res.status}`);
+  return res.text();
+}
+
+// Haalt de "desktop" odds-tabel (bookmaker-kolommen, thuis/gelijk/uit-rijen) uit een matchpagina.
+function parseOddsTable(html) {
+  const box = html.match(/odds-table-desktop[\s\S]*?<table class="table table-hover allbets">([\s\S]*?)<\/table>/);
+  if (!box) return null;
+  const rows = [...box[1].matchAll(/<tr>\s*<td class="titlecard">([^<]+)<\/td>((?:\s*<td[^>]*>\s*<a[^>]*class="allodds[^"]*"[^>]*>([\d.]+)<\/a>\s*<\/td>)+)/g)];
+  const parsed = rows.map(r => {
+    const label = r[1].trim();
+    const vals = [...r[2].matchAll(/>([\d.]+)<\/a>/g)].map(m => parseFloat(m[1]));
+    return { label, best: vals.length ? Math.max(...vals) : null, bookmakers: vals.length };
+  });
+  if (parsed.length !== 3) return null;
+  return { home: parsed[0], draw: parsed[1], away: parsed[2] };
+}
+
+// De seed-pagina bevat "<li><a href="...">Team A v Team B</a></li>" voor elke
+// andere wedstrijd van dezelfde speelronde.
+function parseRoundLinks(html) {
+  const links = [...html.matchAll(/<li><a href="(\/football\/[^"]+\/odds\/[^"]+)">([^<]+) v ([^<]+)<\/a><\/li>/g)];
+  return links.map(m => ({ href: m[1], home: m[2].trim(), away: m[3].trim() }));
+}
+
+// Zoek de odds voor een specifieke wedstrijd, cache resultaten in KV om
+// odds1x2.com niet onnodig vaak te belasten (rondelijst 6u, odds per match 1u).
+async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
+  const seed = ODDS_SEEDS[compId];
+  if (!seed) return { error: `geen odds-bron gekoppeld voor competitie ${compId}` };
+
+  const roundCacheKey = `oddsround_${compId}`;
+  let round = await kvGet(env, roundCacheKey, null);
+  if (!round || (Date.now() - new Date(round.fetchedAt).getTime()) > 6 * 60 * 60 * 1000) {
+    const seedHtml = await fetchOddsPage(seed);
+    round = {
+      fetchedAt: new Date().toISOString(),
+      links: parseRoundLinks(seedHtml),
+      seedHref: seed,
+      seedOdds: parseOddsTable(seedHtml),
+    };
+    await kvPut(env, roundCacheKey, round);
+  }
+
+  const nHome = normTeam(homeTeam), nAway = normTeam(awayTeam);
+  const isMatch = (h, a) => {
+    const lh = normTeam(h), la = normTeam(a);
+    return (nHome.includes(lh) || lh.includes(nHome)) && (nAway.includes(la) || la.includes(nAway));
+  };
+
+  let targetHref = round.links.find(l => isMatch(l.home, l.away))?.href;
+  if (!targetHref && round.seedOdds && isMatch(round.seedOdds.home.label, round.seedOdds.away.label)) {
+    return { ...round.seedOdds, source: round.seedHref };
+  }
+  if (!targetHref) return { error: 'wedstrijd niet gevonden in odds-bron (team-namen komen niet overeen)' };
+
+  const oddsCacheKey = `odds_${targetHref}`;
+  let odds = await kvGet(env, oddsCacheKey, null);
+  if (!odds || (Date.now() - new Date(odds.fetchedAt || 0).getTime()) > 60 * 60 * 1000) {
+    const html = await fetchOddsPage(targetHref);
+    const table = parseOddsTable(html);
+    if (!table) return { error: 'kon odds-tabel niet lezen op de pagina' };
+    odds = { ...table, fetchedAt: new Date().toISOString(), source: targetHref };
+    await kvPut(env, oddsCacheKey, odds);
+  }
+  return odds;
+}
+
+// ---------- Eigen kansmodel (Poisson) op basis van computeForm() ----------
+function factorial(n) { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
+function poissonP(k, lambda) { return Math.exp(-lambda) * Math.pow(lambda, k) / factorial(k); }
+
+function matchProbabilities(homeStats, awayStats, leagueAvgGoals = 1.35) {
+  const avg = leagueAvgGoals;
+  const homeAtt = homeStats?.played ? homeStats.gf / homeStats.played : avg;
+  const homeDef = homeStats?.played ? homeStats.ga / homeStats.played : avg;
+  const awayAtt = awayStats?.played ? awayStats.gf / awayStats.played : avg;
+  const awayDef = awayStats?.played ? awayStats.ga / awayStats.played : avg;
+  const lambdaHome = Math.max(0.2, (homeAtt / avg) * (awayDef / avg) * avg * 1.1);
+  const lambdaAway = Math.max(0.2, (awayAtt / avg) * (homeDef / avg) * avg * 0.95);
+
+  let pHome = 0, pDraw = 0, pAway = 0;
+  for (let h = 0; h <= 8; h++) {
+    for (let a = 0; a <= 8; a++) {
+      const p = poissonP(h, lambdaHome) * poissonP(a, lambdaAway);
+      if (h > a) pHome += p; else if (h === a) pDraw += p; else pAway += p;
+    }
+  }
+  return { pHome, pDraw, pAway, lambdaHome, lambdaAway };
+}
+
 // ---------- PIN / ADMIN helpers ----------
 async function handleCheckPin(req, env) {
   const { pin, deviceId, ua } = await req.json();
@@ -278,6 +391,48 @@ export default {
       }
     }
 
+    if (url.pathname === '/value-bet') {
+      const apiId = url.searchParams.get('apiId');
+      const d = await kvGet(env, 'matches_all', { matches: [] });
+      const match = (d.matches || []).find(m => String(m.apiId) === String(apiId));
+      if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
+
+      const s = await kvGet(env, 'standings_all', { standings: [] });
+      const homeStats = s.standings.find(t => t.team === match.h);
+      const awayStats = s.standings.find(t => t.team === match.a);
+      const model = matchProbabilities(homeStats, awayStats);
+
+      let odds = null;
+      try {
+        odds = await getOddsForMatch(env, match.compId, match.h, match.a);
+      } catch (e) {
+        odds = { error: e.message.slice(0, 200) };
+      }
+
+      const bets = [];
+      if (odds && !odds.error) {
+        const checks = [
+          { label: match.h, modelProb: model.pHome, odds: odds.home?.best },
+          { label: 'Gelijkspel', modelProb: model.pDraw, odds: odds.draw?.best },
+          { label: match.a, modelProb: model.pAway, odds: odds.away?.best },
+        ];
+        for (const c of checks) {
+          if (!c.odds) continue;
+          const impliedProb = 1 / c.odds;
+          const edge = c.modelProb - impliedProb;
+          bets.push({ ...c, impliedProb, edge, isValue: edge > 0.05 });
+        }
+        bets.sort((a, b) => b.edge - a.edge);
+      }
+
+      return json({
+        match: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
+        model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
+        odds,
+        bets,
+      });
+    }
+
     if (url.pathname === '/debug') {
       const meta = await kvGet(env, 'meta_global', {});
       const d = await kvGet(env, 'matches_all', { matches: [] });
@@ -285,7 +440,7 @@ export default {
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
+    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
   },
 
   async scheduled(event, env, ctx) {
