@@ -36,22 +36,20 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Onderzoek Forebet als bron voor ontbrekende competities + H2H
+      - name: Test alle voorgestelde bronnen (bot-bescherming check)
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          echo "=== Forebet Bundesliga fixtures pagina ==="
-          curl -sS -A "$UA" "https://www.forebet.com/en/football-predictions/predictions-1x2-germany-bundesliga" -o /tmp/fb1.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          grep -ocE "predictions/" /tmp/fb1.html
-          grep -oE "/en/football-tips-and-predictions/[a-z0-9-]+" /tmp/fb1.html | sort -u | head -10
-          echo "=== Forebet homepage robots/structuur check ==="
-          curl -sS -A "$UA" "https://www.forebet.com/en/football-predictions/today" -o /tmp/fb2.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          grep -oE "/en/[a-z0-9/-]+" /tmp/fb2.html | sort -u | head -20
-          echo "=== Forebet H2H check (zoek naar head to head / previous matches op een matchpagina) ==="
-          MATCHLINK=$(grep -oE "/en/football-tips-and-predictions/[a-z0-9-]+" /tmp/fb2.html | sort -u | head -1)
-          echo "matchlink: $MATCHLINK"
-          if [ -n "$MATCHLINK" ]; then
-            curl -sS -A "$UA" "https://www.forebet.com$MATCHLINK" -o /tmp/fb3.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-            grep -ciE "head.to.head|h2h|last matches|previous meetings" /tmp/fb3.html
-          fi
-          echo "=== robots.txt check ==="
-          curl -sS -A "$UA" "https://www.forebet.com/robots.txt"
+          test_site() {
+            NAME="$1"; URL="$2"
+            CODE=$(curl -sS -A "$UA" "$URL" -o /tmp/site.html -w "%{http_code}")
+            SIZE=$(wc -c < /tmp/site.html)
+            BLOCKED=$(grep -ciE "just a moment|cf-chl|captcha|access denied|are you human|checking your browser" /tmp/site.html || true)
+            echo "$NAME -> HTTP:$CODE SIZE:$SIZE BOTCHECK-HITS:$BLOCKED"
+          }
+          test_site "OddsPortal" "https://www.oddsportal.com/football/germany/bundesliga/"
+          test_site "BetExplorer" "https://www.betexplorer.com/football/germany/bundesliga/"
+          test_site "Forebet" "https://www.forebet.com/en/football-predictions/predictions-1x2-germany-bundesliga"
+          test_site "SoccerStats" "https://www.soccerstats.com/latest.asp?league=germany"
+          test_site "Flashscore" "https://www.flashscore.com/football/germany/bundesliga/"
+          test_site "RebelBetting" "https://rebelbetting.com/"
+          echo "=== Als een site niet geblokkeerd is, toon eerste 40 regels ruwe HTML ter inspectie ==="
