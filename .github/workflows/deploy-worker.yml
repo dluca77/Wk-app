@@ -43,6 +43,7 @@ jobs:
             "https%3A%2F%2Fwww.bet365.com%2FSport%2FFootball" \
             "https%3A%2F%2Foptaplayerstats.statsperform.com%2Fen_GB%2Fabout" \
             "https%3A%2F%2Fwww.statsperform.com%2Fproducts%2Fopta-for-betting%2F" \
+            "https%3A%2F%2Foptaplayerstats.statsperform.com%2Fen_GB%2Fsoccer" \
           ; do
             echo "=== $T ==="
             curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=$T&len=2000"
