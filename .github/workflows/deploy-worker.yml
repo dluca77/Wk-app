@@ -38,14 +38,16 @@ jobs:
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
       - name: Probe odds1x2 fixture data
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2Ffootball%2Fholland-eredivisie%2Fodds%2Ffc-zwolle-vs-ajax%2F&offset=0&len=8000" | python3 -c "
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https%3A%2F%2Fwww.odds1x2.com%2Ffootball%2Fholland-eredivisie%2Fodds%2Ffc-zwolle-vs-ajax%2F&offset=8000&len=44000" | python3 -c "
           import json,sys,re
           d=json.load(sys.stdin)
           html=d.get('snippet','')
           print('status',d.get('status'),'len',d.get('length'))
-          for pat in [r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', r'kick.?off', r'Round \d+', r'matchday', r'roundlist', r'next.?round', r'prev.?round', r'schedule']:
-              m=re.search(pat, html, re.I)
-              print(pat,'->', m.group(0) if m else None)
-          print('---first 2000---')
-          print(html[:2000])
+          for pat in [r'\d{1,2}[/-.]\d{1,2}[/-.]\d{2,4}', r'kick.?off', r'Round \d+', r'matchday', r'roundlist', r'next.?round', r'prev.?round', r'schedule', r'\d{1,2}:\d{2}', r'class=\"date[^\"]*\"[^>]*>[^<]+', r'datetime=\"[^\"]+\"']:
+              ms=re.findall(pat, html, re.I)
+              print(pat,'-> count', len(ms), '| sample', ms[:3])
+          idx=html.find('odds-table-desktop')
+          print('odds-table-desktop idx:', idx)
+          print('---context around match info (first 3000 of body)---')
+          print(html[:3000])
           "
