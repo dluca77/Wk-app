@@ -36,3 +36,17 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
+      - name: Vind wedstrijd-id en test odds-endpoints
+        run: |
+          APIID=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          matches = d.get('matches', d) if isinstance(d, dict) else d
+          if isinstance(matches, dict):
+              matches = matches.get('matches', [])
+          m = next((x for x in matches if x.get('date') == '2026-08-16' and 'Ajax' in (x.get('h','')+x.get('a',''))), None)
+          m = m or next((x for x in matches if x.get('date') == '2026-08-16'), None)
+          print(m['apiId'] if m else '')
+          ")
+          echo "Gevonden apiId: $APIID"
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-odds?apiId=$APIID"
