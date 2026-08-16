@@ -92,6 +92,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .team-row{display:flex;align-items:center;gap:8px;padding:3px 0}
 .tflag{font-size:17px;flex-shrink:0;width:22px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}
 .tbadge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;font-size:9px;font-weight:800;color:#fff;letter-spacing:-.2px;box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
+.tcrest{width:20px;height:20px;object-fit:contain;flex-shrink:0;background:rgba(255,255,255,.04);border-radius:5px}
 .tname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.1px}
 .tname.w{font-weight:700;color:var(--mint)}
 .mc-score{text-align:center;min-width:44px}
@@ -491,9 +492,14 @@ function teamInitials(n){
   return (n||'??').replace(/[^a-zA-Z]/g,'').slice(0,2).toUpperCase()||'??';
 }
 const F = n => FL[n] || `<span class="tbadge" style="background:hsl(${teamHue(n)},65%,42%)">${teamInitials(n)}</span>`;
-// Voor clubwedstrijden tonen we de landsvlag van de competitie (bv. 🇪🇸 voor
-// La Liga) i.p.v. een land-flag per club — clubs hebben geen "eigen" vlag.
-const TF = (m, n) => m?.compId && m?.compFlag ? m.compFlag : F(n);
+// Voor clubwedstrijden tonen we het echte clublogo, opgehaald via de
+// /crest-route van de Worker (gratis, gecached). Als er geen logo gevonden
+// wordt valt de afbeelding terug op de gekleurde initialen-badge.
+const badgeHtml = n => `<span class="tbadge" style="background:hsl(${teamHue(n)},65%,42%)">${teamInitials(n)}</span>`;
+function onCrestError(img){ img.outerHTML = badgeHtml(img.dataset.team); }
+const TF = (m, n) => m?.compId
+  ? `<img class="tcrest" src="${WORKER_URL}/crest?team=${encodeURIComponent(n)}" data-team="${n.replace(/"/g,'&quot;')}" loading="lazy" alt="" onerror="onCrestError(this)">`
+  : F(n);
 
 // ── SHOOTERS ──
 const SH = {

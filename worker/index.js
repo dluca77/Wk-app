@@ -669,7 +669,32 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/debug'] }, 404);
+    // Clublogo's: gratis, geen API-key nodig via TheSportsDB's publieke
+    // test-endpoint (key "3"). We cachen de gevonden badge-URL permanent per
+    // team in KV, zodat we TheSportsDB niet steeds opnieuw hoeven te vragen.
+    // Geeft een 302-redirect naar de echte afbeelding terug zodat de
+    // frontend 'm gewoon als <img src="/crest?team=..."> kan gebruiken.
+    if (url.pathname === '/crest') {
+      const team = url.searchParams.get('team') || '';
+      if (!team) return new Response('', { status: 400 });
+      const cacheKey = `crest_${normTeam(team)}`;
+      let cached = await kvGet(env, cacheKey, null);
+      if (!cached) {
+        try {
+          const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(team)}`);
+          const data = await res.json();
+          const badge = data?.teams?.[0]?.strBadge || data?.teams?.[0]?.strTeamBadge || null;
+          cached = { badge, fetchedAt: new Date().toISOString() };
+        } catch {
+          cached = { badge: null, fetchedAt: new Date().toISOString() };
+        }
+        await kvPut(env, cacheKey, cached);
+      }
+      if (cached.badge) return Response.redirect(cached.badge, 302);
+      return new Response('', { status: 404 });
+    }
+
+    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/crest', '/debug'] }, 404);
   },
 
   async scheduled(event, env, ctx) {
