@@ -326,6 +326,67 @@ async function scrapeBetExplorerFixtures(env, compId) {
   return parseBetExplorerFixtures(html, compId);
 }
 
+// ---------- Scraper: alle wedstrijden vandaag, wereldwijd (betexplorer.com homepage) ----------
+// De homepage van betexplorer.com toont (los van de vaste competities
+// hierboven) een live "vandaag"-overzicht met ALLE competities/landen door
+// elkaar (200+ wedstrijden). Elke competitie-header bevat data-league-name/
+// data-country-name, elke wedstrijd een data-ts (unix-timestamp) en
+// data-dt="dd,mm,yyyy,hh,mm". Beperking: dit is alleen VANDAAG — voor
+// toekomstige dagen zou je dit per competitie moeten herhalen, wat niet
+// haalbaar is voor 200+ competities tegelijk zonder een aparte scraper per
+// competitie te bouwen (zoals we voor de 9 hoofdcompetities al doen).
+const COUNTRY_FLAGS = {
+  'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Wales':'🏴󠁧󠁢󠁷󠁬󠁳󠁿','Spain':'🇪🇸','Germany':'🇩🇪','Italy':'🇮🇹','France':'🇫🇷',
+  'Netherlands':'🇳🇱','Portugal':'🇵🇹','Belgium':'🇧🇪','Turkey':'🇹🇷','Greece':'🇬🇷','Austria':'🇦🇹',
+  'Switzerland':'🇨🇭','Poland':'🇵🇱','Ukraine':'🇺🇦','Russia':'🇷🇺','Denmark':'🇩🇰','Sweden':'🇸🇪',
+  'Norway':'🇳🇴','Finland':'🇫🇮','Croatia':'🇭🇷','Serbia':'🇷🇸','Romania':'🇷🇴','Czech Republic':'🇨🇿',
+  'Hungary':'🇭🇺','Bulgaria':'🇧🇬','Slovakia':'🇸🇰','Slovenia':'🇸🇮','Ireland':'🇮🇪','Israel':'🇮🇱',
+  'USA':'🇺🇸','Mexico':'🇲🇽','Brazil':'🇧🇷','Argentina':'🇦🇷','Chile':'🇨🇱','Colombia':'🇨🇴','Uruguay':'🇺🇾',
+  'Peru':'🇵🇪','Ecuador':'🇪🇨','Paraguay':'🇵🇾','Bolivia':'🇧🇴','Venezuela':'🇻🇪','Japan':'🇯🇵',
+  'South Korea':'🇰🇷','China':'🇨🇳','Australia':'🇦🇺','Saudi Arabia':'🇸🇦','Qatar':'🇶🇦','Morocco':'🇲🇦',
+  'Egypt':'🇪🇬','South Africa':'🇿🇦','Nigeria':'🇳🇬','Canada':'🇨🇦','Iceland':'🇮🇸',
+};
+function countryFlag(country) { return COUNTRY_FLAGS[country] || '🌍'; }
+
+function parseGlobalMatches(html) {
+  const headers = [];
+  const headerRe = /data-league-name="([^"]+)"[^]{0,150}?data-country-name="([^"]+)"/g;
+  let hm;
+  while ((hm = headerRe.exec(html))) headers.push({ idx: hm.index, league: hm[1], country: hm[2] });
+
+  const matches = [];
+  const matchRe = /data-ts="(\d+)"[^]{0,80}?data-dt="(\d+),(\d+),(\d+),(\d+),(\d+)"[^]{0,300}?data-live-cell="time">\s*([^<]*?)\s*<[^]{0,500}?href="(\/football\/[a-z0-9-]+\/[a-z0-9-]+\/[a-z0-9-]+\/[a-zA-Z0-9]+\/)"[^]{0,500}?participantHome[^>]*>\s*<p[^>]*>([^<]+)<\/p>[^]{0,200}?participantAway[^>]*>[^]{0,150}?<p[^>]*>([^<]+)<\/p>/g;
+  let mm;
+  while ((mm = matchRe.exec(html))) {
+    const idx = mm.index;
+    let hdr = null;
+    for (const h of headers) { if (h.idx <= idx) hdr = h; else break; }
+    const [, , dd, mo, yy, hh, mi, status, href, home, away] = mm;
+    const date = `${yy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    const time = `${hh.padStart(2, '0')}:${mi.padStart(2, '0')}`;
+    const statusTrim = (status || '').trim();
+    const finished = /^FIN/i.test(statusTrim);
+    const live = !finished && statusTrim !== '' && !/^\d{1,2}:\d{2}$/.test(statusTrim);
+    matches.push({
+      apiId: `betexplorer_global_${href}`,
+      compId: hdr ? `be_${hdr.country}_${hdr.league}` : 'be_onbekend',
+      compName: hdr ? hdr.league : 'Onbekend',
+      compFlag: hdr ? countryFlag(hdr.country) : '🌍',
+      h: (home || '').trim(), a: (away || '').trim(),
+      date, time, result: null, live, finished,
+      venue: '', round: '', source: 'betexplorer_global',
+    });
+  }
+  return matches.filter(m => m.h && m.a);
+}
+
+async function scrapeGlobalMatches() {
+  const res = await fetch('https://www.betexplorer.com/', { headers: { 'User-Agent': SCRAPE_UA } });
+  if (!res.ok) throw new Error(`betexplorer homepage -> HTTP ${res.status}`);
+  const html = await res.text();
+  return parseGlobalMatches(html);
+}
+
 // ---------- Eigen kansmodel (Poisson) op basis van computeForm() ----------
 function factorial(n) { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
 function poissonP(k, lambda) { return Math.exp(-lambda) * Math.pow(lambda, k) / factorial(k); }
@@ -460,6 +521,31 @@ async function refreshAll(env, { force = false } = {}) {
   const uncoveredComps = Object.keys(COMPS).map(Number).filter(id => !scrapedCompIds.includes(id) && !beCompIds.includes(id));
   if (uncoveredComps.length) {
     log.push(`Nog geen gratis scrape-bron gekoppeld voor: ${uncoveredComps.map(id => COMPS[id]?.name).join(', ')} — oude gecachete wedstrijden blijven staan maar worden niet ververst.`);
+  }
+
+  // Globale "vandaag"-scrape: ALLE wedstrijden wereldwijd, los van de vaste
+  // competitielijst hierboven. Alleen van vandaag (zie scrapeGlobalMatches).
+  // Skip wedstrijden die al via een van de bovenstaande specifieke scrapers
+  // binnen zijn gekomen (zelfde teams + datum), zodat er geen dubbele kaarten
+  // ontstaan.
+  try {
+    const globalMatches = await scrapeGlobalMatches();
+    for (const key of [...byId.keys()]) {
+      const m = byId.get(key);
+      if (m.source === 'betexplorer_global') byId.delete(key);
+    }
+    const snapshot = [...byId.entries()];
+    let addedGlobal = 0, skippedDup = 0;
+    for (const scraped of globalMatches) {
+      const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
+      const dup = snapshot.some(([, m]) => m.date === scraped.date && normTeam(m.h) === nH && normTeam(m.a) === nA);
+      if (dup) { skippedDup++; continue; }
+      byId.set(scraped.apiId, scraped);
+      addedGlobal++;
+    }
+    log.push(`Wereldwijd (betexplorer-homepage, alleen vandaag): ${globalMatches.length} wedstrijden gevonden, ${addedGlobal} toegevoegd, ${skippedDup} al aanwezig via specifieke scraper`);
+  } catch (e) {
+    log.push(`Globale scrape FAIL: ${e.message.slice(0, 150)}`);
   }
 
   const all = [...byId.values()];
