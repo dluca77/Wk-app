@@ -30,12 +30,17 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: Test /value-bet op een echte Eredivisie-wedstrijd
+      - name: Diagnose /matches en test /value-bet
         run: |
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug"
+          echo ""
           APIID=$(curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
           import json, sys
           d = json.load(sys.stdin)
           matches = d.get('matches', [])
+          print('TOTAL MATCHES:', len(matches), file=sys.stderr)
+          if matches:
+              print('SAMPLE compId types:', [(m.get('compId'), type(m.get('compId')).__name__) for m in matches[:3]], file=sys.stderr)
           m = next((x for x in matches if str(x.get('compId')) == '37' and 'Zwolle' in x.get('h','') and 'Ajax' in x.get('a','')), None)
           m = m or next((x for x in matches if str(x.get('compId')) == '37' and not x.get('finished')), None)
           print(m['apiId'] if m else '')
