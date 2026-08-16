@@ -36,19 +36,18 @@ jobs:
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
           curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/refresh?key=$CLEAN_SECRET"
-      - name: Inspecteer Understat-datastructuur v2
+      - name: Inspecteer Understat team-pagina
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          curl -sS -A "$UA" "https://understat.com/player/2097" -o /tmp/player.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
-          echo "=== alle 'var ... = JSON.parse' declaraties (naam + eerste 200 tekens) ==="
+          curl -sS -A "$UA" "https://understat.com/team/Liverpool/2025" -o /tmp/team.html -w "HTTP:%{http_code} SIZE:%{size_download}\n"
+          echo "=== var declaraties ==="
           python3 - << 'PYEOF'
           import re
-          content = open('/tmp/player.html', encoding='utf-8', errors='ignore').read()
-          for m in re.finditer(r"var\s+(\w+)\s*=\s*JSON\.parse\('(.{0,200})", content):
-              print(m.group(1), '->', m.group(2))
-          print('--- alle <script> tags kort ---')
-          for m in re.finditer(r'<script[^>]*>(.{0,150})', content):
-              snippet = m.group(1).strip()
-              if snippet:
-                  print(repr(snippet[:150]))
+          content = open('/tmp/team.html', encoding='utf-8', errors='ignore').read()
+          for m in re.finditer(r"var\s+(\w+)\s*=\s*JSON\.parse\('(.*?)'\);", content):
+              name, enc = m.group(1), m.group(2)
+              dec = enc.encode().decode('unicode_escape').encode('latin1').decode('utf8', errors='replace')
+              print(f'=== {name} (len {len(dec)}) ===')
+              print(dec[:1500])
+              print()
           PYEOF
