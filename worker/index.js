@@ -295,7 +295,7 @@ async function refreshAll(env, { force = false } = {}) {
         const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
         let existingKey = null;
         for (const [key, m] of byId) {
-          if (m.compId !== compId || m.date !== scraped.date) continue;
+          if (String(m.compId) !== String(compId) || m.date !== scraped.date) continue;
           if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
         }
         if (existingKey) {
