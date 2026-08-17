@@ -254,6 +254,10 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .pstat{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
 .pstatv{font-size:17px;font-weight:800;color:var(--text);letter-spacing:-.3px}
 .pstatl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px}
+.pstatlist{background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.prow{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)}
+.prow:last-child{border-bottom:none}
+.prow strong{color:var(--text);font-weight:700}
 
 /* ── SPINNER / LOADING ── */
 .ai-spinner{width:26px;height:26px;border:2.5px solid rgba(245,158,11,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
@@ -892,22 +896,57 @@ function renderPlayers(){
 function openPlayerModal(id){
   const p = ALL_PLAYERS.find(x => x.id === id);
   if(!p) return;
-  document.getElementById('ptitle').textContent = `${p.name} — ${p.team}`;
+  document.getElementById('ptitle').textContent = `${p.name}`;
   const stat = (label, val) => `<div class="pstat"><div class="pstatv">${val}</div><div class="pstatl">${label}</div></div>`;
+  const row = (label, val) => `<div class="prow"><span>${label}</span><strong>${val}</strong></div>`;
+
+  const per90Matches = p.min > 0 ? p.min/90 : 0;
+  const totalShots = per90Matches ? Math.round((p.sh90||0) * per90Matches) : 0;
+  const totalKp = per90Matches ? Math.round((p.kp90||0) * per90Matches) : 0;
+  const gPer90 = per90Matches ? p.g/per90Matches : 0;
+  const aPer90 = per90Matches ? p.a/per90Matches : 0;
+
+  // Kansschatting o.b.v. Understat seizoensgemiddelden (Poisson) — zelfde model als in de wedstrijdmodal
+  const pGoal = 1 - Math.exp(-(p.xg90 || 0));
+  const pAssist = 1 - Math.exp(-(p.xa90 || 0));
+  const pSot = 1 - Math.exp(-((p.sh90 || 0) * 0.45));
+
   document.getElementById('pmbody').innerHTML = `
-    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${p.pos||''} · ${p.league.replace('_',' ')} · seizoen ${p.season}</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="font-size:12px;font-weight:600;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px 9px">${p.team}</span>
+      <span style="font-size:11px;color:var(--muted)">${p.pos||'—'} · ${p.league.replace('_',' ')} · seizoen ${p.season}</span>
+    </div>
+
+    <div class="ghdr">Overzicht</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
       ${stat('Wedstrijden', p.apps)}
       ${stat('Minuten', p.min)}
       ${stat('Goals', p.g)}
       ${stat('Assists', p.a)}
-      ${stat('xG', nf(p.xg,2))}
-      ${stat('xA', nf(p.xa,2))}
-      ${stat('Sh/90', nf(p.sh90,2))}
-      ${stat('KP/90', nf(p.kp90,2))}
-      ${stat('xG/90', nf(p.xg90,2))}
     </div>
-    <div class="snote" style="margin-top:14px">Data: Understat.com · seizoen ${p.season}</div>`;
+
+    <div class="ghdr">Statistieken ${p.season}</div>
+    <div class="pstatlist">
+      ${row('Schoten (totaal, geschat)', totalShots)}
+      ${row('Key passes (totaal, geschat)', totalKp)}
+      ${row('xG (expected goals)', nf(p.xg,2))}
+      ${row('xA (expected assists)', nf(p.xa,2))}
+      ${row('Goals per 90 min', nf(gPer90,2))}
+      ${row('Assists per 90 min', nf(aPer90,2))}
+      ${row('Schoten per 90 min', nf(p.sh90,2))}
+      ${row('Key passes per 90 min', nf(p.kp90,2))}
+      ${row('xG per 90 min', nf(p.xg90,2))}
+      ${row('xA per 90 min', nf(p.xa90,2))}
+    </div>
+
+    <div class="ghdr" style="margin-top:16px">Kans per wedstrijd (seizoensgemiddelde)</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      ${stat('kans op goal', Math.round(pGoal*100)+'%')}
+      ${stat('kans op doel', Math.round(pSot*100)+'%')}
+      ${stat('kans op assist', Math.round(pAssist*100)+'%')}
+    </div>
+
+    <div class="snote" style="margin-top:14px">Data: Understat.com · seizoen ${p.season} · kansschatting is een ruwe Poisson-benadering, geen garantie</div>`;
   document.getElementById('player-overlay').classList.add('on');
 }
 function closePlayerModal(){
