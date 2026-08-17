@@ -1530,7 +1530,7 @@ Antwoord ALLEEN in dit JSON formaat (array van tips):
       body: JSON.stringify({ prompt })
     });
     const data = await res.json();
-    const text = data.content?.[0]?.text || '';
+    const text = String(data.content?.[0]?.text ?? '');
     if(!text){
       el.innerHTML = `<span style="color:var(--muted2);font-size:12px">Geen response van AI (${JSON.stringify(data).slice(0,100)})</span>`;
       return;
@@ -1554,12 +1554,14 @@ Antwoord ALLEEN in dit JSON formaat (array van tips):
         // Respons was afgekapt (token-limiet) middenin een tip — knip terug
         // tot het laatst volledig gesloten tip-object in de array en sluit
         // die netjes af, i.p.v. de hele respons als platte tekst te tonen.
+        let salvaged = false;
         if(useArr){
           const lastCompleteObj = clean.lastIndexOf('}');
           if(lastCompleteObj > -1){
-            parsed = JSON.parse(clean.slice(0, lastCompleteObj + 1) + ']');
-          } else throw e2;
-        } else throw e2;
+            try { parsed = JSON.parse(clean.slice(0, lastCompleteObj + 1) + ']'); salvaged = true; } catch(e3) { /* val terug op e2 */ }
+          }
+        }
+        if(!salvaged) throw e2;
       }
       bet = Array.isArray(parsed) ? parsed : [parsed];
       if(!bet.length) throw new Error('leeg');
@@ -2091,7 +2093,7 @@ Antwoord ALLEEN in dit JSON formaat:
       body: JSON.stringify({ prompt })
     });
     const data = await res.json();
-    const text = data.content?.[0]?.text || '';
+    const text = String(data.content?.[0]?.text ?? '');
     if(!text){ resultEl.innerHTML = `<div class="overall-bet-panel"><div style="color:var(--muted2)">Geen response ontvangen</div></div>`; return; }
 
     let bet;
