@@ -22,15 +22,15 @@ jobs:
           curl -sS -A "$UA" "https://site.web.api.espn.com/apis/common/v3/sports/soccer/ned.1/statistics/byathlete?region=us&lang=en&contentorigin=espn&category=offensive" -o espn_stats.json -w "HTTP %{http_code}\n"
           echo "size: $(wc -c < espn_stats.json)"
           python3 -c "
-import json
-try:
-  d = json.load(open('espn_stats.json'))
-  print('top keys:', list(d.keys())[:10])
-  print(json.dumps(d, indent=2)[:1500])
-except Exception as e:
-  print('parse error:', e)
-  print(open('espn_stats.json').read()[:500])
-"
+          import json
+          try:
+              d = json.load(open('espn_stats.json'))
+              print('top keys:', list(d.keys())[:10])
+              print(json.dumps(d, indent=2)[:1500])
+          except Exception as e:
+              print('parse error:', e)
+              print(open('espn_stats.json').read()[:500])
+          "
           echo "=== 2e/3e ESPN request direct erna (rate-limit check) ==="
           curl -sS -A "$UA" "https://site.web.api.espn.com/apis/common/v3/sports/soccer/eng.1/statistics/byathlete?region=us&lang=en&contentorigin=espn&category=offensive" -o espn_stats2.json -w "HTTP %{http_code}\n"
           curl -sS -A "$UA" "https://site.web.api.espn.com/apis/common/v3/sports/soccer/uefa.champions/statistics/byathlete?region=us&lang=en&contentorigin=espn&category=offensive" -o espn_stats3.json -w "HTTP %{http_code}\n"
