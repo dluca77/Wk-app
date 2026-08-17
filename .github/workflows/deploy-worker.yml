@@ -12,50 +12,66 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: DEBUG probe ESPN leaders + roster + athlete stats
+      - name: DEBUG probe ESPN core API (teams/roster/athlete stats)
         run: |
+          set +e
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          echo "=== ESPN leaders v2 (Eredivisie) ==="
-          curl -sS -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/ned.1/leaders?lang=en&region=us" -o leaders.json -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < leaders.json)"
-          head -c 1200 leaders.json
-          echo ""
-          echo "=== ESPN teams (Eredivisie) ==="
-          curl -sS -A "$UA" "https://site.api.espn.com/apis/site/v2/sports/soccer/ned.1/teams" -o teams.json -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < teams.json)"
-          python3 -c "
+          echo "=== core API teams lijst (Eredivisie) ==="
+          curl -sS -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/ned.1/teams?lang=en&region=us&limit=50" -o cteams.json -w "HTTP %{http_code}\n"
+          echo "size: $(wc -c < cteams.json)"
+          head -c 800 cteams.json; echo ""
+          FIRST_TEAM_URL=$(python3 -c "
           import json
           try:
-              d = json.load(open('teams.json'))
-              teams = d.get('sports',[{}])[0].get('leagues',[{}])[0].get('teams',[])
-              print('aantal teams:', len(teams))
-              if teams: print('eerste team:', teams[0].get('team',{}).get('displayName'), teams[0].get('team',{}).get('id'))
+              d = json.load(open('cteams.json'))
+              items = d.get('items',[])
+              print(items[0]['\$ref'] if items else '')
           except Exception as e:
-              print('parse error:', e)
-              print(open('teams.json').read()[:500])
-          "
-          echo "=== ESPN roster (1 team) ==="
-          TEAM_ID=$(python3 -c "
-          import json
-          d = json.load(open('teams.json'))
-          teams = d.get('sports',[{}])[0].get('leagues',[{}])[0].get('teams',[])
-          print(teams[0]['team']['id'] if teams else '')
+              print('')
           ")
-          echo "team id: $TEAM_ID"
-          curl -sS -A "$UA" "https://site.api.espn.com/apis/site/v2/sports/soccer/ned.1/teams/$TEAM_ID/roster" -o roster.json -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < roster.json)"
-          python3 -c "
+          echo "eerste team ref: $FIRST_TEAM_URL"
+          if [ -n "$FIRST_TEAM_URL" ]; then
+            curl -sS -A "$UA" "$FIRST_TEAM_URL" -o cteam1.json -w "HTTP %{http_code}\n"
+            echo "size: $(wc -c < cteam1.json)"
+            ATHLETES_URL=$(python3 -c "
           import json
           try:
-              d = json.load(open('roster.json'))
-              print('top keys:', list(d.keys())[:10])
-              ath = d.get('athletes',[])
-              print('aantal spelersgroepen/spelers:', len(ath))
-              print(json.dumps(ath, indent=2)[:1200])
+              d = json.load(open('cteam1.json'))
+              print(d.get('athletes',{}).get('\$ref',''))
+          except Exception as e:
+              print('')
+          ")
+            echo "athletes ref: $ATHLETES_URL"
+            if [ -n "$ATHLETES_URL" ]; then
+              curl -sS -A "$UA" "${ATHLETES_URL}&limit=50" -o cathletes.json -w "HTTP %{http_code}\n"
+              echo "size: $(wc -c < cathletes.json)"
+              head -c 600 cathletes.json; echo ""
+              FIRST_ATH_URL=$(python3 -c "
+          import json
+          try:
+              d = json.load(open('cathletes.json'))
+              items = d.get('items',[])
+              print(items[0]['\$ref'] if items else '')
+          except Exception as e:
+              print('')
+          ")
+              echo "eerste athlete ref: $FIRST_ATH_URL"
+              if [ -n "$FIRST_ATH_URL" ]; then
+                curl -sS -A "$UA" "$FIRST_ATH_URL" -o cath1.json -w "HTTP %{http_code}\n"
+                echo "size: $(wc -c < cath1.json)"
+                python3 -c "
+          import json
+          try:
+              d = json.load(open('cath1.json'))
+              print('naam:', d.get('displayName'))
+              print('stats ref:', d.get('statistics',{}).get('\$ref'))
           except Exception as e:
               print('parse error:', e)
-              print(open('roster.json').read()[:500])
+              print(open('cath1.json').read()[:400])
           "
+              fi
+            fi
+          fi
       - name: Sanitize Cloudflare secrets
         id: cf
         env:
