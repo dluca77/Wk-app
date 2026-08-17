@@ -84,7 +84,10 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .mc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
 .mc-league{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;font-weight:500;letter-spacing:.02em}
 .comp-group{margin-bottom:16px}
-.comp-group-hdr{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--text);padding:4px 2px 8px;letter-spacing:-.1px}
+.comp-group-hdr{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--text);padding:8px 10px;letter-spacing:-.1px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:12px;user-select:none}
+.comp-group-count{margin-left:auto;font-size:10px;font-weight:600;color:var(--muted);background:var(--surface3);border-radius:20px;padding:2px 7px}
+.comp-group-chevron{font-size:11px;color:var(--muted);transition:transform .2s}
+.comp-group-chevron.open{transform:rotate(180deg)}
 .mc-status{font-size:10px;font-weight:700}
 .status-live{color:var(--green);display:flex;align-items:center;gap:5px}
 .status-ft{color:var(--muted2);font-weight:600}
@@ -623,6 +626,11 @@ const COMP_CONFIG = {
   34:    { name: 'Ligue 1',            flag: '🇫🇷', short: 'FR' },
 };
 
+let groupOpenState = {}; // per competitie-key: true=open, false=dicht (persist tijdens sessie)
+function toggleGroup(key){
+  groupOpenState[key] = !groupOpenState[key];
+  render();
+}
 let selDate = TODAY;
 let dateAutoPicked = true; // blijft automatisch de beste datum kiezen tot de gebruiker zelf klikt
 let selFilter = 'all';
@@ -1203,12 +1211,18 @@ function renderMatchGroups(ms){
     const ia = COMP_PRIORITY.indexOf(a), ib = COMP_PRIORITY.indexOf(b);
     return (ia===-1?999:ia) - (ib===-1?999:ib);
   });
-  document.getElementById('mc').innerHTML = keys.map(key=>{
+  document.getElementById('mc').innerHTML = keys.map((key,idx)=>{
     const list = groups.get(key);
     const c = key==='wk' ? {name:'WK 2026', flag:'🌍'} : (COMP_CONFIG[key] || {name:list[0].compName||'Competitie', flag:list[0].compFlag||'⚽'});
+    if(!(key in groupOpenState)) groupOpenState[key] = idx < 10; // top 10 standaard open, rest dicht
+    const open = groupOpenState[key];
     return `<div class="comp-group">
-      <div class="comp-group-hdr"><span>${c.flag}</span><span>${c.name}</span></div>
-      ${list.map(cardHtml).join('')}
+      <div class="comp-group-hdr" onclick="toggleGroup('${key}')">
+        <span>${c.flag}</span><span>${c.name}</span>
+        <span class="comp-group-count">${list.length}</span>
+        <span class="comp-group-chevron ${open?'open':''}">▾</span>
+      </div>
+      ${open ? list.map(cardHtml).join('') : ''}
     </div>`;
   }).join('');
 }
