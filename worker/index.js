@@ -38,6 +38,20 @@ function json(obj, status = 200) {
   });
 }
 
+// Workers AI geeft normaal { response: "..." } terug, maar bij lange
+// JSON-antwoorden (5-tips prompt, max_tokens 2000) kwam response soms als
+// array van tekst-chunks terug i.p.v. één string — de frontend toonde dan
+// letterlijk "[object Object],[object Object]". Vangt alle vormen netjes op.
+function extractAiText(aiResult) {
+  const r = aiResult?.response;
+  if (typeof r === 'string') return r;
+  if (Array.isArray(r)) {
+    return r.map(p => (typeof p === 'string' ? p : (p?.response ?? p?.text ?? p?.generated_text ?? ''))).join('');
+  }
+  if (r && typeof r === 'object') return r.response ?? r.text ?? r.generated_text ?? '';
+  return '';
+}
+
 // Bekende competities. Alleen Eredivisie heeft momenteel een gekoppelde
 // gratis scrape-bron voor het wedstrijdschema — zie ODDS_SEEDS.
 const COMPS = {
@@ -652,7 +666,7 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
           messages: [{ role: 'user', content: body.prompt }],
           max_tokens: 2000,
         });
-        return json({ content: [{ text: aiResult.response || '' }] });
+        return json({ content: [{ text: extractAiText(aiResult) }] });
       } catch (e) {
         return json({ error: e.message }, 500);
       }
