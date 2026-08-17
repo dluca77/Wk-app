@@ -1547,8 +1547,22 @@ Antwoord ALLEEN in dit JSON formaat (array van tips):
       const first = useArr ? fi : fo;
       const last = useArr ? li : lo;
       if(first !== -1 && last !== -1) clean = clean.slice(first, last + 1);
-      const parsed = JSON.parse(clean);
+      let parsed;
+      try {
+        parsed = JSON.parse(clean);
+      } catch(e2) {
+        // Respons was afgekapt (token-limiet) middenin een tip — knip terug
+        // tot het laatst volledig gesloten tip-object in de array en sluit
+        // die netjes af, i.p.v. de hele respons als platte tekst te tonen.
+        if(useArr){
+          const lastCompleteObj = clean.lastIndexOf('}');
+          if(lastCompleteObj > -1){
+            parsed = JSON.parse(clean.slice(0, lastCompleteObj + 1) + ']');
+          } else throw e2;
+        } else throw e2;
+      }
       bet = Array.isArray(parsed) ? parsed : [parsed];
+      if(!bet.length) throw new Error('leeg');
     } catch(e) {
       el.innerHTML = `<div style="font-size:12px;line-height:1.6;color:var(--text)">${text.replace(/</g,"&lt;").slice(0,400)}</div>`;
       return;

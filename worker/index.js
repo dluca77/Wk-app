@@ -645,8 +645,12 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       if (req.method === 'GET') return json({ ok: true, backend: 'Cloudflare Workers AI' });
       try {
         const body = await req.json();
+        // Zonder max_tokens gebruikt Workers AI een lage default — de
+        // 5-tips JSON-respons werd daardoor midden in een tip afgekapt
+        // (ongeldige JSON, frontend viel terug op ruwe tekst tonen).
         const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
           messages: [{ role: 'user', content: body.prompt }],
+          max_tokens: 2000,
         });
         return json({ content: [{ text: aiResult.response || '' }] });
       } catch (e) {
