@@ -1,9 +1,21 @@
 // ESPN's onofficiële "core" API (sports.core.api.espn.com) blijkt — anders dan
 // site.api.espn.com, die Akamai/403 geeft vanaf GitHub Actions-IP's — gewoon
 // bereikbaar en niet rate-limited (getest: 20 verzoeken op rij, geen 429).
-// Geen xG, maar wel goals/assists/schoten/kaarten/minuten — dekt competities
-// die Understat niet heeft, te beginnen met de Eredivisie.
-const LEAGUES = { 'ned.1': 'Eredivisie' };
+// Geen xG, maar wel goals/assists/schoten/kaarten/minuten. Dekt zowel de
+// competities die Understat niet heeft (Eredivisie, UEFA-toernooien) als een
+// aanvulling op de 5 die Understat wel dekt (aparte espn_-id's, dus geen
+// conflict — /players in de Worker combineert beide bronnen).
+const LEAGUES = {
+  'ned.1': 'Eredivisie',
+  'uefa.champions': 'Champions League',
+  'uefa.europa': 'Europa League',
+  'uefa.europa.conf': 'Conference League',
+  'eng.1': 'Premier League',
+  'esp.1': 'La Liga',
+  'ger.1': 'Bundesliga',
+  'ita.1': 'Serie A',
+  'fra.1': 'Ligue 1',
+};
 const SEASON = '2026';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
