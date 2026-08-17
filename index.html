@@ -83,6 +83,8 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .mc-inner{padding:13px 15px}
 .mc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
 .mc-league{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;font-weight:500;letter-spacing:.02em}
+.comp-group{margin-bottom:16px}
+.comp-group-hdr{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--text);padding:4px 2px 8px;letter-spacing:-.1px}
 .mc-status{font-size:10px;font-weight:700}
 .status-live{color:var(--green);display:flex;align-items:center;gap:5px}
 .status-ft{color:var(--muted2);font-weight:600}
@@ -1114,6 +1116,14 @@ function render(){
     document.getElementById('overall-bet-container').innerHTML='';
     return;
   }
+  renderMatchGroups(ms);
+}
+
+// Grootste/populairste competities bovenaan, net als op Livescore. WK-landenwedstrijden
+// (geen compId) staan vast bovenaan omdat dit een WK-app is.
+const COMP_PRIORITY = ['wk', 17, 8, 7, 35, 23, 34, 37, 679, 17015];
+
+function renderMatchGroups(ms){
   // Overall bet knop — alleen bij 2+ aankomende wedstrijden
   const obContainer = document.getElementById('overall-bet-container');
   const upcoming = ms.filter(m => !isDone(m) && !isLive(m));
@@ -1129,7 +1139,7 @@ function render(){
   } else {
     obContainer.innerHTML = '';
   }
-  document.getElementById('mc').innerHTML=ms.map(m=>{
+  const cardHtml = m=>{
     try{
     const hf=TF(m,m.h),af=TF(m,m.a);
     const live=isLive(m),done=isDone(m)||m.result;
@@ -1180,6 +1190,26 @@ function render(){
       </div>
     </div>`;
     }catch(e){return '';}
+  };
+
+  // Groeperen per competitie, grootste/populairste bovenaan (Livescore-stijl)
+  const groups = new Map(); // key -> {label, matches}
+  for(const m of ms){
+    const key = m.compId ? m.compId : 'wk';
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+  const keys = [...groups.keys()].sort((a,b)=>{
+    const ia = COMP_PRIORITY.indexOf(a), ib = COMP_PRIORITY.indexOf(b);
+    return (ia===-1?999:ia) - (ib===-1?999:ib);
+  });
+  document.getElementById('mc').innerHTML = keys.map(key=>{
+    const list = groups.get(key);
+    const c = key==='wk' ? {name:'WK 2026', flag:'🌍'} : (COMP_CONFIG[key] || {name:list[0].compName||'Competitie', flag:list[0].compFlag||'⚽'});
+    return `<div class="comp-group">
+      <div class="comp-group-hdr"><span>${c.flag}</span><span>${c.name}</span></div>
+      ${list.map(cardHtml).join('')}
+    </div>`;
   }).join('');
 }
 
