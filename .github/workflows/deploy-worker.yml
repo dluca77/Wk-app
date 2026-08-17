@@ -12,21 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: DEBUG probe ESPN athlete statistics content + burst-rate-test
+      - name: DEBUG probe ESPN league-slugs (UEFA + overige)
         run: |
           set +e
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          echo "=== volledige statistics-response (1 speler) ==="
-          curl -sS -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/ned.1/seasons/2026/types/1/athletes/140740/statistics?lang=en&region=us" -o stats1.json -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < stats1.json)"
-          cat stats1.json
-          echo ""
-          echo "=== burst test: 20 snelle requests op rij (rate-limit check) ==="
-          for i in $(seq 140740 140759); do
-            CODE=$(curl -sS -o /dev/null -w "%{http_code}" -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/ned.1/seasons/2026/types/1/athletes/$i/statistics?lang=en&region=us")
-            echo -n "$CODE "
+          for slug in uefa.champions uefa.europa uefa.europa.conf eng.1 esp.1 ger.1 ita.1 fra.1 ned.1; do
+            CODE=$(curl -sS -o /tmp/x.json -w "%{http_code}" -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/$slug/teams?lang=en&region=us&limit=5")
+            COUNT=$(python3 -c "
+          import json
+          try:
+              d = json.load(open('/tmp/x.json'))
+              print(d.get('count', 'geen count-veld'))
+          except Exception as e:
+              print('parse error:', e)
+          " 2>/dev/null)
+            echo "$slug -> HTTP $CODE, teams count: $COUNT"
           done
-          echo ""
       - name: Sanitize Cloudflare secrets
         id: cf
         env:
