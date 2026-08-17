@@ -803,26 +803,40 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       }
     }
 
-    // Ontvangt spelersstatistieken (Understat), aangeleverd door de externe
-    // GitHub Actions cron-job (.github/workflows/scrape-players.yml) omdat
-    // Understat's tabellen client-side gerenderd worden en Playwright nodig
-    // hebben — dat draait niet in de Worker zelf.
+    // Ontvangt spelersstatistieken, aangeleverd door externe GitHub Actions
+    // cron-jobs (deze Worker kan zelf niet scrapen — zie de losse toelichting
+    // per bron). Twee losse bronnen/KV-keys zodat ze elkaar niet overschrijven:
+    // - scrape-players.yml (Understat, Playwright): xG/xA voor 6 competities
+    // - scrape-espn-players.yml (ESPN core API, plain fetch): geen xG, maar
+    //   wel goals/assists/schoten/kaarten voor competities die Understat niet
+    //   heeft (bv. Eredivisie) — optioneel ?source=espn in de query.
     if (url.pathname === '/ingest-players' && req.method === 'POST') {
       if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
       try {
         const body = await req.json();
         const players = Array.isArray(body.players) ? body.players : [];
-        await kvPut(env, 'players_all', { players, updatedAt: body.updatedAt || new Date().toISOString() });
-        return json({ ok: true, received: players.length });
+        const kvKey = url.searchParams.get('source') === 'espn' ? 'players_espn' : 'players_all';
+        await kvPut(env, kvKey, { players, updatedAt: body.updatedAt || new Date().toISOString() });
+        return json({ ok: true, received: players.length, source: kvKey });
       } catch (e) {
         return json({ error: e.message }, 500);
       }
     }
 
     // Spelerprofiel-endpoint: /players (lijst, met ?q=naam of ?team=naam
-    // filter) en /players?id=123 (één speler).
+    // filter) en /players?id=123 (één speler). Combineert Understat (xG) en
+    // ESPN (extra competities, geen xG) tot één lijst.
     if (url.pathname === '/players') {
-      const data = await kvGet(env, 'players_all') || { players: [], updatedAt: null };
+      const [understatRaw, espnRaw] = await Promise.all([
+        kvGet(env, 'players_all'),
+        kvGet(env, 'players_espn'),
+      ]);
+      const understat = understatRaw || { players: [], updatedAt: null };
+      const espn = espnRaw || { players: [], updatedAt: null };
+      const data = {
+        players: [...(understat.players || []), ...(espn.players || [])],
+        updatedAt: understat.updatedAt || espn.updatedAt,
+      };
       let players = data.players;
       const id = url.searchParams.get('id');
       if (id) {

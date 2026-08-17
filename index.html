@@ -930,10 +930,35 @@ function openPlayerModal(id){
   const gPer90 = per90Matches ? p.g/per90Matches : 0;
   const aPer90 = per90Matches ? p.a/per90Matches : 0;
 
-  // Kansschatting o.b.v. Understat seizoensgemiddelden (Poisson) — zelfde model als in de wedstrijdmodal
+  // ESPN-spelers (id begint met 'espn_') hebben geen xG-data — dan geen
+  // Poisson-kansschatting tonen (zou misleidend 0% zijn), wel de echte cijfers.
+  const isEspn = p.id.startsWith('espn_');
   const pGoal = 1 - Math.exp(-(p.xg90 || 0));
   const pAssist = 1 - Math.exp(-(p.xa90 || 0));
   const pSot = 1 - Math.exp(-((p.sh90 || 0) * 0.45));
+  const kansBlock = isEspn ? '' : `
+    <div class="ghdr" style="margin-top:16px">Kans per wedstrijd (seizoensgemiddelde)</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      ${stat('kans op goal', Math.round(pGoal*100)+'%')}
+      ${stat('kans op doel', Math.round(pSot*100)+'%')}
+      ${stat('kans op assist', Math.round(pAssist*100)+'%')}
+    </div>`;
+  const statList = isEspn ? `
+    ${row('Schoten (totaal)', totalShots)}
+    ${row('Schoten op doel (totaal)', Math.round((p.sot90||0) * per90Matches))}
+    ${row('Goals per 90 min', nf(gPer90,2))}
+    ${row('Assists per 90 min', nf(aPer90,2))}
+    ${row('Schoten per 90 min', nf(p.sh90,2))}` : `
+    ${row('Schoten (totaal, geschat)', totalShots)}
+    ${row('Key passes (totaal, geschat)', totalKp)}
+    ${row('xG (expected goals)', nf(p.xg,2))}
+    ${row('xA (expected assists)', nf(p.xa,2))}
+    ${row('Goals per 90 min', nf(gPer90,2))}
+    ${row('Assists per 90 min', nf(aPer90,2))}
+    ${row('Schoten per 90 min', nf(p.sh90,2))}
+    ${row('Key passes per 90 min', nf(p.kp90,2))}
+    ${row('xG per 90 min', nf(p.xg90,2))}
+    ${row('xA per 90 min', nf(p.xa90,2))}`;
 
   document.getElementById('pmbody').innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
@@ -950,27 +975,10 @@ function openPlayerModal(id){
     </div>
 
     <div class="ghdr">Statistieken ${p.season}</div>
-    <div class="pstatlist">
-      ${row('Schoten (totaal, geschat)', totalShots)}
-      ${row('Key passes (totaal, geschat)', totalKp)}
-      ${row('xG (expected goals)', nf(p.xg,2))}
-      ${row('xA (expected assists)', nf(p.xa,2))}
-      ${row('Goals per 90 min', nf(gPer90,2))}
-      ${row('Assists per 90 min', nf(aPer90,2))}
-      ${row('Schoten per 90 min', nf(p.sh90,2))}
-      ${row('Key passes per 90 min', nf(p.kp90,2))}
-      ${row('xG per 90 min', nf(p.xg90,2))}
-      ${row('xA per 90 min', nf(p.xa90,2))}
-    </div>
+    <div class="pstatlist">${statList}</div>
+    ${kansBlock}
 
-    <div class="ghdr" style="margin-top:16px">Kans per wedstrijd (seizoensgemiddelde)</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-      ${stat('kans op goal', Math.round(pGoal*100)+'%')}
-      ${stat('kans op doel', Math.round(pSot*100)+'%')}
-      ${stat('kans op assist', Math.round(pAssist*100)+'%')}
-    </div>
-
-    <div class="snote" style="margin-top:14px">Data: Understat.com · seizoen ${p.season} · kansschatting is een ruwe Poisson-benadering, geen garantie</div>`;
+    <div class="snote" style="margin-top:14px">Data: ${isEspn?'ESPN':'Understat.com'} · seizoen ${p.season}${isEspn?'':' · kansschatting is een ruwe Poisson-benadering, geen garantie'}</div>`;
   document.getElementById('player-overlay').classList.add('on');
 }
 function closePlayerModal(){
