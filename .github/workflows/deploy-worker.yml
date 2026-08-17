@@ -12,6 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: DEBUG probe betexplorer player data
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          echo "=== homepage: vind een match-href ==="
+          curl -sS -A "$UA" "https://www.betexplorer.com/" -o home.html
+          HREF=$(grep -oE 'href="/football/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+/[a-zA-Z0-9]+/"' home.html | head -1 | sed -E 's/href="//;s/"$//')
+          echo "gevonden match href: $HREF"
+          echo "=== matchpagina ophalen ==="
+          curl -sS -A "$UA" "https://www.betexplorer.com${HREF}" -o match.html
+          echo "size: $(wc -c < match.html)"
+          echo "=== zoek naar scorer/lineup/player-indicaties ==="
+          grep -oiE '(scorer|lineup|substitut|player|minute)[a-z0-9_-]*' match.html | sort | uniq -c | sort -rn | head -30
+          echo "=== competitie standings/stats pagina proberen ==="
+          curl -sS -A "$UA" "https://www.betexplorer.com/football/england/premier-league/standings/" -o standings.html -w "HTTP %{http_code}\n"
+          echo "size: $(wc -c < standings.html)"
+          grep -oiE '(top[- ]?scorer|goalscorer|player)[a-z0-9_ -]*' standings.html | sort | uniq -c | sort -rn | head -20
       - name: Sanitize Cloudflare secrets
         id: cf
         env:
