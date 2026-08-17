@@ -1278,9 +1278,13 @@ function renderMatchGroups(ms){
     if(!groups.has(key)) groups.set(key, []);
     groups.get(key).push(m);
   }
+  const compLabel = key => key==='wk' ? 'WK 2026' : (COMP_CONFIG[key]?.name || groups.get(key)[0]?.compName || 'Competitie');
   const keys = [...groups.keys()].sort((a,b)=>{
     const ia = COMP_PRIORITY.indexOf(a), ib = COMP_PRIORITY.indexOf(b);
-    return (ia===-1?999:ia) - (ib===-1?999:ib);
+    const pa = ia===-1?999:ia, pb = ib===-1?999:ib;
+    if(pa !== pb) return pa - pb;
+    // Buiten de vaste prioriteitslijst: alfabetisch op competitienaam
+    return compLabel(a).localeCompare(compLabel(b), 'nl');
   });
   document.getElementById('mc').innerHTML = keys.map((key,idx)=>{
     const list = groups.get(key);
