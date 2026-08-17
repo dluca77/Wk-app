@@ -680,6 +680,30 @@ function probs(h,d,a){const r1=1/(h||99),rx=1/(d||99),r2=1/(a||99),t=r1+rx+r2;co
 // 3) Beide teams scoren (groepsstand)
 // 4) Favoriet op odds
 function buildBestBet(m, _unused, odds){
+  // 0) Clubcompetitie + Understat-seizoensdata beschikbaar → betrouwbaarder
+  // dan de vaak schaarse per-wedstrijd WK-data hieronder (zie
+  // scrape-players.mjs, dagelijks ververst voor de 6 grote competities)
+  if(m.compId){
+    const norm = t => (t||'').toLowerCase().trim();
+    const understatPool = (ALL_PLAYERS||[])
+      .filter(p => (norm(p.team) === norm(m.h) || norm(p.team) === norm(m.a)) && p.min > 0)
+      .sort((a,b) => (b.xg90+b.xa90) - (a.xg90+a.xa90));
+    const up = understatPool[0];
+    if(up){
+      const pGoal = Math.round((1 - Math.exp(-(up.xg90||0))) * 100);
+      const pSot = Math.round((1 - Math.exp(-((up.sh90||0)*0.45))) * 100);
+      const teamFlag = norm(up.team)===norm(m.h) ? TF(m,m.h) : TF(m,m.a);
+      return {
+        label:'⭐ Beste Bet — Seizoensdreiging (Understat)',
+        title:`${teamFlag} ${up.name} — schot op doel`,
+        body:`Kans op schot op doel: <strong>${pSot}%</strong> · kans op goal: <strong>${pGoal}%</strong> per wedstrijd<br>
+          Seizoensgemiddelden: xG90 ${nf(up.xg90,2)} · Sh90 ${nf(up.sh90,2)} (${up.apps} wed., seizoen ${up.season})<br>
+          <span style="color:var(--muted2)">Schatting o.b.v. Understat — vergelijk zelf met de spelersmarkt-quote bij je boekmaker</span><br>
+          <span style="color:var(--gold)">→ Check quote op je boekmaker → Schot op doel / Anytime Goalscorer</span>`
+      };
+    }
+  }
+
   // 1) Spelersdata van vorige wedstrijd — meest betrouwbaar
   const hPlayers = (PLAYER_STATS[m.h] || []).filter(p => p.mins > 30);
   const aPlayers = (PLAYER_STATS[m.a] || []).filter(p => p.mins > 30);
@@ -1897,6 +1921,22 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
       const pShotOrGoal = Math.min(99, Math.round((1 - Math.exp(-(xg + sot*0.3))) * 100));
       bets.push({type:'Speler betrokken', bet:`${p.n} scoort of assist`, kans:Math.round((1-Math.exp(-(xg+(p.assists/Math.max(p.matches||1,1)*0.5))))*100), match:`${m.h} vs ${m.a}`});
     }
+  }
+
+  // ── Speler bets via Understat-seizoensdata (clubcompetities) ──
+  // Vult aan naast/i.p.v. de WK-only PLAYER_STATS hierboven — dekt de 6
+  // door de scraper ondersteunde clubcompetities (zie scrape-players.mjs).
+  const norm = t => (t||'').toLowerCase().trim();
+  const understatPlayers = (ALL_PLAYERS||[])
+    .filter(p => (norm(p.team) === norm(m.h) || norm(p.team) === norm(m.a)) && p.min > 0)
+    .sort((a,b) => (b.xg90+b.xa90) - (a.xg90+a.xa90)).slice(0,6);
+  for(const p of understatPlayers){
+    const pGoal = Math.round((1 - Math.exp(-(p.xg90||0))) * 100);
+    const pSot = Math.round((1 - Math.exp(-((p.sh90||0)*0.45))) * 100);
+    const pAssist = Math.round((1 - Math.exp(-(p.xa90||0))) * 100);
+    if(p.xg90 > 0) bets.push({type:'Speler scoort', bet:`${p.name} scoort`, kans:pGoal, match:`${m.h} vs ${m.a}`, detail:`xG90: ${nf(p.xg90,2)} · seizoen ${p.season}`});
+    if(p.sh90 > 0) bets.push({type:'Speler SoT', bet:`${p.name} 1+ schot op doel`, kans:pSot, match:`${m.h} vs ${m.a}`, detail:`Sh90: ${nf(p.sh90,2)} · seizoen ${p.season}`});
+    if(p.xa90 > 0) bets.push({type:'Speler assist', bet:`${p.name} geeft assist`, kans:pAssist, match:`${m.h} vs ${m.a}`, detail:`xA90: ${nf(p.xa90,2)} · seizoen ${p.season}`});
   }
 
   // Sorteer op kans (hoogste eerst)
