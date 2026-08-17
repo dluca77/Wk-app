@@ -12,66 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: DEBUG probe ESPN core API (teams/roster/athlete stats)
+      - name: DEBUG probe ESPN athlete statistics content + burst-rate-test
         run: |
           set +e
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          echo "=== core API teams lijst (Eredivisie) ==="
-          curl -sS -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/ned.1/teams?lang=en&region=us&limit=50" -o cteams.json -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < cteams.json)"
-          head -c 800 cteams.json; echo ""
-          FIRST_TEAM_URL=$(python3 -c "
-          import json
-          try:
-              d = json.load(open('cteams.json'))
-              items = d.get('items',[])
-              print(items[0]['\$ref'] if items else '')
-          except Exception as e:
-              print('')
-          ")
-          echo "eerste team ref: $FIRST_TEAM_URL"
-          if [ -n "$FIRST_TEAM_URL" ]; then
-            curl -sS -A "$UA" "$FIRST_TEAM_URL" -o cteam1.json -w "HTTP %{http_code}\n"
-            echo "size: $(wc -c < cteam1.json)"
-            ATHLETES_URL=$(python3 -c "
-          import json
-          try:
-              d = json.load(open('cteam1.json'))
-              print(d.get('athletes',{}).get('\$ref',''))
-          except Exception as e:
-              print('')
-          ")
-            echo "athletes ref: $ATHLETES_URL"
-            if [ -n "$ATHLETES_URL" ]; then
-              curl -sS -A "$UA" "${ATHLETES_URL}&limit=50" -o cathletes.json -w "HTTP %{http_code}\n"
-              echo "size: $(wc -c < cathletes.json)"
-              head -c 600 cathletes.json; echo ""
-              FIRST_ATH_URL=$(python3 -c "
-          import json
-          try:
-              d = json.load(open('cathletes.json'))
-              items = d.get('items',[])
-              print(items[0]['\$ref'] if items else '')
-          except Exception as e:
-              print('')
-          ")
-              echo "eerste athlete ref: $FIRST_ATH_URL"
-              if [ -n "$FIRST_ATH_URL" ]; then
-                curl -sS -A "$UA" "$FIRST_ATH_URL" -o cath1.json -w "HTTP %{http_code}\n"
-                echo "size: $(wc -c < cath1.json)"
-                python3 -c "
-          import json
-          try:
-              d = json.load(open('cath1.json'))
-              print('naam:', d.get('displayName'))
-              print('stats ref:', d.get('statistics',{}).get('\$ref'))
-          except Exception as e:
-              print('parse error:', e)
-              print(open('cath1.json').read()[:400])
-          "
-              fi
-            fi
-          fi
+          echo "=== volledige statistics-response (1 speler) ==="
+          curl -sS -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/ned.1/seasons/2026/types/1/athletes/140740/statistics?lang=en&region=us" -o stats1.json -w "HTTP %{http_code}\n"
+          echo "size: $(wc -c < stats1.json)"
+          cat stats1.json
+          echo ""
+          echo "=== burst test: 20 snelle requests op rij (rate-limit check) ==="
+          for i in $(seq 140740 140759); do
+            CODE=$(curl -sS -o /dev/null -w "%{http_code}" -A "$UA" "https://sports.core.api.espn.com/v2/sports/soccer/leagues/ned.1/seasons/2026/types/1/athletes/$i/statistics?lang=en&region=us")
+            echo -n "$CODE "
+          done
+          echo ""
       - name: Sanitize Cloudflare secrets
         id: cf
         env:
