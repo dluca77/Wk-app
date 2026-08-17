@@ -1532,7 +1532,7 @@ Antwoord ALLEEN in dit JSON formaat (array van tips):
     const data = await res.json();
     const text = String(data.content?.[0]?.text ?? '');
     if(!text){
-      el.innerHTML = `<span style="color:var(--muted2);font-size:12px">Geen response van AI (${JSON.stringify(data).slice(0,100)})</span>`;
+      el.innerHTML = `<span style="color:var(--muted2);font-size:12px">AI-analyse tijdelijk niet beschikbaar voor deze wedstrijd — probeer het zo nog eens.</span>`;
       return;
     }
     let bet;

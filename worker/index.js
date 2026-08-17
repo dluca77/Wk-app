@@ -661,12 +661,19 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
         const body = await req.json();
         // Zonder max_tokens gebruikt Workers AI een lage default — de
         // 5-tips JSON-respons werd daardoor midden in een tip afgekapt
-        // (ongeldige JSON, frontend viel terug op ruwe tekst tonen).
-        const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-          messages: [{ role: 'user', content: body.prompt }],
-          max_tokens: 2000,
-        });
-        return json({ content: [{ text: extractAiText(aiResult) }] });
+        // (ongeldige JSON, frontend viel terug op ruwe tekst tonen). Soms
+        // levert het model desondanks een lege respons — dan één keer
+        // opnieuw proberen voor we een nette foutmelding teruggeven.
+        let text = '';
+        for (let poging = 0; poging < 2 && !text; poging++) {
+          const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+            messages: [{ role: 'user', content: body.prompt }],
+            max_tokens: 2000,
+          });
+          text = extractAiText(aiResult).trim();
+        }
+        if (!text) return json({ error: 'Workers AI gaf een lege respons (ook na retry)' }, 502);
+        return json({ content: [{ text }] });
       } catch (e) {
         return json({ error: e.message }, 500);
       }
