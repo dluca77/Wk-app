@@ -12,6 +12,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: DEBUG probe live data sources
+        run: |
+          echo "=== Sofascore live ==="
+          curl -sS -A "Mozilla/5.0" "https://api.sofascore.com/api/v1/sport/football/events/live" -o live.json -w "HTTP %{http_code}\n"
+          wc -c live.json
+          python3 -c "
+import json
+try:
+  d = json.load(open('live.json'))
+  ev = d.get('events', [])
+  print('num events:', len(ev))
+  if ev: print(json.dumps(ev[0], indent=2)[:2500])
+except Exception as ex:
+  print('parse error:', ex)
+  print(open('live.json').read()[:1000])
+"
+          echo "=== Sofascore scheduled today ==="
+          curl -sS -A "Mozilla/5.0" "https://api.sofascore.com/api/v1/sport/football/scheduled-events/$(date +%F)" -o sched.json -w "HTTP %{http_code}\n"
+          wc -c sched.json
+          python3 -c "
+import json
+try:
+  d = json.load(open('sched.json'))
+  ev = d.get('events', [])
+  print('num scheduled:', len(ev))
+except Exception as ex:
+  print('parse error:', ex)
+  print(open('sched.json').read()[:500])
+"
       - name: Sanitize Cloudflare secrets
         id: cf
         env:
