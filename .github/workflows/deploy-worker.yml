@@ -12,22 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: DEBUG probe fbref.com
+      - name: DEBUG probe fbref.com via Playwright
         run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          echo "=== Eredivisie stats-pagina ==="
-          curl -sS -A "$UA" "https://fbref.com/en/comps/23/Eredivisie-Stats" -o ere.html -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < ere.html)"
-          echo "aantal <table>: $(grep -oc '<table' ere.html || true)"
-          grep -oE 'id="stats_standard[^"]*"' ere.html | head -5
-          echo "--- fragment rond eerste speler-rij (comment-embedded tabellen mogelijk) ---"
-          grep -o '<!--' ere.html | wc -l
-          echo "=== 2e verzoek direct erna (check rate-limit) ==="
-          curl -sS -A "$UA" "https://fbref.com/en/comps/8/La-Liga-Stats" -o laliga.html -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < laliga.html)"
-          echo "=== 3e verzoek direct erna ==="
-          curl -sS -A "$UA" "https://fbref.com/en/comps/8/Champions-League-Stats" -o cl.html -w "HTTP %{http_code}\n"
-          echo "size: $(wc -c < cl.html)"
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.48 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+          node scripts/probe-fbref.mjs
       - name: Sanitize Cloudflare secrets
         id: cf
         env:
