@@ -687,18 +687,20 @@ function buildBestBet(m, _unused, odds){
     const norm = t => (t||'').toLowerCase().trim();
     const understatPool = (ALL_PLAYERS||[])
       .filter(p => (norm(p.team) === norm(m.h) || norm(p.team) === norm(m.a)) && p.min > 0)
-      .sort((a,b) => (b.xg90+b.xa90) - (a.xg90+a.xa90));
+      .sort((a,b) => (blendedRate(b,'xg90')+blendedRate(b,'xa90')) - (blendedRate(a,'xg90')+blendedRate(a,'xa90')));
     const up = understatPool[0];
     if(up){
-      const pGoal = Math.round((1 - Math.exp(-(up.xg90||0))) * 100);
-      const pSot = Math.round((1 - Math.exp(-((up.sh90||0)*0.45))) * 100);
+      const bXg90 = blendedRate(up,'xg90'), bSh90 = blendedRate(up,'sh90');
+      const pGoal = Math.round((1 - Math.exp(-bXg90)) * 100);
+      const pSot = Math.round((1 - Math.exp(-(bSh90*0.45))) * 100);
       const teamFlag = norm(up.team)===norm(m.h) ? TF(m,m.h) : TF(m,m.a);
+      const hasPrev = !!findPrevSeason(up);
       return {
         label:'⭐ Beste Bet — Seizoensdreiging (Understat)',
         title:`${teamFlag} ${up.name} — schot op doel`,
         body:`Kans op schot op doel: <strong>${pSot}%</strong> · kans op goal: <strong>${pGoal}%</strong> per wedstrijd<br>
           Seizoensgemiddelden: xG90 ${nf(up.xg90,2)} · Sh90 ${nf(up.sh90,2)} (${up.apps} wed., seizoen ${up.season})<br>
-          <span style="color:var(--muted2)">Schatting o.b.v. Understat — vergelijk zelf met de spelersmarkt-quote bij je boekmaker</span><br>
+          <span style="color:var(--muted2)">Schatting o.b.v. Understat${hasPrev?' + vorig seizoen (meegewogen naarmate dit seizoen nog jong is)':''} — vergelijk zelf met de spelersmarkt-quote bij je boekmaker</span><br>
           <span style="color:var(--gold)">→ Check quote op je boekmaker → Schot op doel / Anytime Goalscorer</span>`
       };
     }
@@ -879,6 +881,7 @@ function setView(v,btn){
 
 // ── SPELERPROFIEL (Understat) ──
 let ALL_PLAYERS = [];
+let ALL_PLAYERS_PREV = []; // vorig seizoen (ESPN) — voor blending in bet-kansen
 let playersLoaded = false;
 
 async function loadPlayers(){
@@ -889,12 +892,33 @@ async function loadPlayers(){
     const res = await fetch(WORKER_URL+'/players');
     const data = await res.json();
     ALL_PLAYERS = data.players || [];
+    ALL_PLAYERS_PREV = data.playersPrev || [];
     playersLoaded = true;
   }catch(e){
     el.innerHTML = `<div class="empty">Kon spelers niet laden.</div>`;
     return;
   }
   renderPlayers();
+}
+
+// Zoekt de vorig-seizoen-versie van een ESPN-speler (zelfde athlete-id, ander
+// seizoen-voorvoegsel). Understat-spelers hebben geen backfill, dus null.
+function findPrevSeason(p){
+  if(!p.id || !p.id.startsWith('espn_')) return null;
+  const athId = p.id.split('_').pop();
+  return (ALL_PLAYERS_PREV||[]).find(x => x.id.endsWith('_'+athId)) || null;
+}
+
+// Blendt een per-90-stat van dit seizoen met vorig seizoen, gewogen naar
+// gespeelde minuten dit seizoen (vol gewicht na ~10 wedstrijden). Zo telt
+// vorig seizoen vroeg in een nieuw seizoen zwaarder mee, en huidig seizoen
+// wint vanzelf terrein naarmate er meer data binnenkomt.
+function blendedRate(p, field){
+  const cur = p[field] || 0;
+  const prev = findPrevSeason(p);
+  if(!prev) return cur;
+  const w = Math.min((p.min||0) / 900, 1);
+  return w*cur + (1-w)*(prev[field] || 0);
 }
 
 function renderPlayers(){
@@ -1984,11 +2008,12 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
   const norm = t => (t||'').toLowerCase().trim();
   const understatPlayers = (ALL_PLAYERS||[])
     .filter(p => (norm(p.team) === norm(m.h) || norm(p.team) === norm(m.a)) && p.min > 0)
-    .sort((a,b) => (b.xg90+b.xa90) - (a.xg90+a.xa90)).slice(0,6);
+    .sort((a,b) => (blendedRate(b,'xg90')+blendedRate(b,'xa90')) - (blendedRate(a,'xg90')+blendedRate(a,'xa90'))).slice(0,6);
   for(const p of understatPlayers){
-    const pGoal = Math.round((1 - Math.exp(-(p.xg90||0))) * 100);
-    const pSot = Math.round((1 - Math.exp(-((p.sh90||0)*0.45))) * 100);
-    const pAssist = Math.round((1 - Math.exp(-(p.xa90||0))) * 100);
+    const bXg90 = blendedRate(p,'xg90'), bXa90 = blendedRate(p,'xa90'), bSh90 = blendedRate(p,'sh90');
+    const pGoal = Math.round((1 - Math.exp(-bXg90)) * 100);
+    const pSot = Math.round((1 - Math.exp(-(bSh90*0.45))) * 100);
+    const pAssist = Math.round((1 - Math.exp(-bXa90)) * 100);
     if(p.xg90 > 0) bets.push({type:'Speler scoort', bet:`${p.name} scoort`, kans:pGoal, match:`${m.h} vs ${m.a}`, detail:`xG90: ${nf(p.xg90,2)} · seizoen ${p.season}`});
     if(p.sh90 > 0) bets.push({type:'Speler SoT', bet:`${p.name} 1+ schot op doel`, kans:pSot, match:`${m.h} vs ${m.a}`, detail:`Sh90: ${nf(p.sh90,2)} · seizoen ${p.season}`});
     if(p.xa90 > 0) bets.push({type:'Speler assist', bet:`${p.name} geeft assist`, kans:pAssist, match:`${m.h} vs ${m.a}`, detail:`xA90: ${nf(p.xa90,2)} · seizoen ${p.season}`});

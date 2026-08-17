@@ -861,7 +861,10 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       if (q) players = players.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
       const team = url.searchParams.get('team');
       if (team) players = players.filter(p => p.team.toLowerCase() === team.toLowerCase());
-      return json({ players, updatedAt: data.updatedAt });
+      // playersPrev (vorig seizoen, ESPN) meesturen zodat de frontend bet-kansen
+      // kan blenden met vorig seizoen — vooral nuttig vroeg in een nieuw seizoen
+      // wanneer de huidige-seizoen-sample nog klein is.
+      return json({ players, playersPrev: espnPrev.players || [], updatedAt: data.updatedAt });
     }
 
     return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/players', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/crest', '/ingest-global', '/ingest-players', '/debug'] }, 404);
