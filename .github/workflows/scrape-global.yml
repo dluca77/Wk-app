@@ -7,7 +7,7 @@ name: Scrape wereldwijde wedstrijden (BetExplorer)
 # de volledige pagina. Zie worker/index.js voor de uitgebreide toelichting.
 on:
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '*/5 * * * *' # elke 5 min i.p.v. elke 3 uur, voor live scores/status
   workflow_dispatch: {}
 
 jobs:
