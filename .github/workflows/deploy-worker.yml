@@ -12,6 +12,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: DEBUG probe ESPN + footystats + soccerstats
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          echo "=== ESPN scoreboard (bekend werkend endpoint, baseline) ==="
+          curl -sS -A "$UA" "https://site.api.espn.com/apis/site/v2/sports/soccer/ned.1/scoreboard" -o espn_sb.json -w "HTTP %{http_code}\n"
+          echo "size: $(wc -c < espn_sb.json)"
+          echo "=== ESPN player stats (offensive, Eredivisie) ==="
+          curl -sS -A "$UA" "https://site.web.api.espn.com/apis/common/v3/sports/soccer/ned.1/statistics/byathlete?region=us&lang=en&contentorigin=espn&category=offensive" -o espn_stats.json -w "HTTP %{http_code}\n"
+          echo "size: $(wc -c < espn_stats.json)"
+          python3 -c "
+import json
+try:
+  d = json.load(open('espn_stats.json'))
+  print('top keys:', list(d.keys())[:10])
+  print(json.dumps(d, indent=2)[:1500])
+except Exception as e:
+  print('parse error:', e)
+  print(open('espn_stats.json').read()[:500])
+"
+          echo "=== 2e/3e ESPN request direct erna (rate-limit check) ==="
+          curl -sS -A "$UA" "https://site.web.api.espn.com/apis/common/v3/sports/soccer/eng.1/statistics/byathlete?region=us&lang=en&contentorigin=espn&category=offensive" -o espn_stats2.json -w "HTTP %{http_code}\n"
+          curl -sS -A "$UA" "https://site.web.api.espn.com/apis/common/v3/sports/soccer/uefa.champions/statistics/byathlete?region=us&lang=en&contentorigin=espn&category=offensive" -o espn_stats3.json -w "HTTP %{http_code}\n"
+          echo "sizes: $(wc -c < espn_stats2.json) / $(wc -c < espn_stats3.json)"
+          echo "=== footystats.org publieke statspagina (geen API-key) ==="
+          curl -sS -A "$UA" "https://footystats.org/netherlands/eredivisie/top-scorers" -o fs.html -w "HTTP %{http_code}\n"
+          echo "size: $(wc -c < fs.html)"
+          echo "title: $(grep -oE '<title>[^<]*</title>' fs.html | head -1)"
       - name: Sanitize Cloudflare secrets
         id: cf
         env:
