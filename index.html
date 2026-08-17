@@ -978,8 +978,35 @@ function openPlayerModal(id){
     <div class="pstatlist">${statList}</div>
     ${kansBlock}
 
-    <div class="snote" style="margin-top:14px">Data: ${isEspn?'ESPN':'Understat.com'} · seizoen ${p.season}${isEspn?'':' · kansschatting is een ruwe Poisson-benadering, geen garantie'}</div>`;
+    <div class="snote" style="margin-top:14px">Data: ${isEspn?'ESPN':'Understat.com'} · seizoen ${p.season}${isEspn?'':' · kansschatting is een ruwe Poisson-benadering, geen garantie'}</div>
+    <div id="pmprev"></div>`;
   document.getElementById('player-overlay').classList.add('on');
+
+  // Vorig seizoen (indien beschikbaar) apart ophalen — niet in ALL_PLAYERS
+  // want dat zou de spelerslijst onnodig verdubbelen met oude seizoenen.
+  if(isEspn) loadPrevSeason(id);
+}
+async function loadPrevSeason(id){
+  const el = document.getElementById('pmprev');
+  try{
+    const res = await fetch(WORKER_URL+'/players?id='+encodeURIComponent(id));
+    const data = await res.json();
+    const prev = data.prevSeason;
+    if(!prev || !el) return;
+    const per90 = prev.min > 0 ? prev.min/90 : 0;
+    const row = (label, val) => `<div class="prow"><span>${label}</span><strong>${val}</strong></div>`;
+    el.innerHTML = `
+      <div class="ghdr" style="margin-top:16px">Vorig seizoen (${prev.season})</div>
+      <div class="pstatlist">
+        ${row('Team', prev.team)}
+        ${row('Wedstrijden', prev.apps)}
+        ${row('Minuten', prev.min)}
+        ${row('Goals', prev.g)}
+        ${row('Assists', prev.a)}
+        ${row('Goals per 90 min', nf(per90?prev.g/per90:0,2))}
+        ${row('Assists per 90 min', nf(per90?prev.a/per90:0,2))}
+      </div>`;
+  }catch(e){ /* stil negeren — geen data, geen probleem */ }
 }
 function closePlayerModal(){
   document.getElementById('player-overlay').classList.remove('on');

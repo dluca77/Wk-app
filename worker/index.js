@@ -805,17 +805,21 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
 
     // Ontvangt spelersstatistieken, aangeleverd door externe GitHub Actions
     // cron-jobs (deze Worker kan zelf niet scrapen — zie de losse toelichting
-    // per bron). Twee losse bronnen/KV-keys zodat ze elkaar niet overschrijven:
+    // per bron). Losse KV-keys per bron/seizoen zodat ze elkaar niet
+    // overschrijven:
     // - scrape-players.yml (Understat, Playwright): xG/xA voor 6 competities
-    // - scrape-espn-players.yml (ESPN core API, plain fetch): geen xG, maar
-    //   wel goals/assists/schoten/kaarten voor competities die Understat niet
-    //   heeft (bv. Eredivisie) — optioneel ?source=espn in de query.
+    // - scrape-espn-players.yml (ESPN core API, plain fetch, ?source=espn):
+    //   geen xG, wel goals/assists/schoten/kaarten, huidig seizoen, dagelijks
+    //   ververst — dekt ook competities die Understat niet heeft.
+    // - scrape-espn-players-backfill.yml (?source=espn_prev): eenmalige
+    //   momentopname van vorig seizoen, wordt nooit automatisch overschreven.
     if (url.pathname === '/ingest-players' && req.method === 'POST') {
       if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
       try {
         const body = await req.json();
         const players = Array.isArray(body.players) ? body.players : [];
-        const kvKey = url.searchParams.get('source') === 'espn' ? 'players_espn' : 'players_all';
+        const source = url.searchParams.get('source');
+        const kvKey = source === 'espn' ? 'players_espn' : source === 'espn_prev' ? 'players_espn_prev' : 'players_all';
         await kvPut(env, kvKey, { players, updatedAt: body.updatedAt || new Date().toISOString() });
         return json({ ok: true, received: players.length, source: kvKey });
       } catch (e) {
@@ -824,15 +828,19 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
     }
 
     // Spelerprofiel-endpoint: /players (lijst, met ?q=naam of ?team=naam
-    // filter) en /players?id=123 (één speler). Combineert Understat (xG) en
-    // ESPN (extra competities, geen xG) tot één lijst.
+    // filter) en /players?id=123 (één speler). De lijst combineert Understat
+    // (xG) en ESPN huidig seizoen; bij een losse ?id=-opvraag wordt er ook
+    // gezocht naar dezelfde ESPN-speler vorig seizoen (prevSeason-veld) als
+    // die er is, voor een "hoe presteerde hij vorig seizoen"-vergelijking.
     if (url.pathname === '/players') {
-      const [understatRaw, espnRaw] = await Promise.all([
+      const [understatRaw, espnRaw, espnPrevRaw] = await Promise.all([
         kvGet(env, 'players_all'),
         kvGet(env, 'players_espn'),
+        kvGet(env, 'players_espn_prev'),
       ]);
       const understat = understatRaw || { players: [], updatedAt: null };
       const espn = espnRaw || { players: [], updatedAt: null };
+      const espnPrev = espnPrevRaw || { players: [], updatedAt: null };
       const data = {
         players: [...(understat.players || []), ...(espn.players || [])],
         updatedAt: understat.updatedAt || espn.updatedAt,
@@ -841,7 +849,13 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       const id = url.searchParams.get('id');
       if (id) {
         const p = players.find(p => p.id === id);
-        return p ? json(p) : json({ error: 'not found' }, 404);
+        if (!p) return json({ error: 'not found' }, 404);
+        if (p.id.startsWith('espn_')) {
+          const athId = p.id.split('_').pop();
+          const prev = (espnPrev.players || []).find(x => x.id.endsWith(`_${athId}`));
+          if (prev) return json({ ...p, prevSeason: prev });
+        }
+        return json(p);
       }
       const q = url.searchParams.get('q');
       if (q) players = players.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));

@@ -16,7 +16,11 @@ const LEAGUES = {
   'ita.1': 'Serie A',
   'fra.1': 'Ligue 1',
 };
-const SEASON = '2026';
+// SEASON is instelbaar via env var — de dagelijkse cron gebruikt het huidige
+// seizoen (live bijgewerkt), een losse eenmalige backfill-run (zie
+// scrape-espn-players-backfill.yml) gebruikt vorig seizoen als vaste
+// momentopname (aparte KV-key in de Worker, wordt niet overschreven).
+const SEASON = process.env.SEASON || '2026';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
 async function getJson(url) {
@@ -48,7 +52,7 @@ async function main() {
   const players = [];
 
   for (const [slug, leagueName] of Object.entries(LEAGUES)) {
-    const teamsList = await getJson(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${slug}/teams?lang=en&region=us&limit=50`);
+    const teamsList = await getJson(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${slug}/seasons/${SEASON}/teams?lang=en&region=us&limit=50`);
     const teamRefs = (teamsList?.items || []).map(i => i.$ref);
     console.error(`${leagueName}: ${teamRefs.length} teams gevonden`);
 
@@ -79,7 +83,7 @@ async function main() {
         if (apps === 0 && min === 0) return null; // nog niet gespeeld dit seizoen
         const per90 = min > 0 ? min / 90 : 0;
         return {
-          id: `espn_${ath.id}`,
+          id: `espn_${SEASON}_${ath.id}`,
           name: ath.displayName || ath.fullName || '?',
           pos: ath.position?.abbreviation || '',
           apps, min, g, a,
