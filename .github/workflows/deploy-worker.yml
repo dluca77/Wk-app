@@ -30,27 +30,6 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: DEBUG probe /ai-bet met echte prompt
-        run: |
-          cat > /tmp/prompt.txt << 'PROMPT_EOF'
-          Je bent een sportsbetting analist voor Champions League. Alle kansen zijn wiskundig berekend met Poisson - gebruik deze EXACT.
-          WEDSTRIJD: Fenerbahce vs Lyon (Champions League, 2026-08-18 21:00 NL)
-          PRE-BEREKENDE KANSEN (gebruik deze exact, verzin niets):
-          1X2 | Fenerbahce wint | 55%
-          BTTS | Beide teams scoren: JA | 62%
-          OPDRACHT: Geef 3 tips voor deze wedstrijd, elk een aparte bet-combinatie.
-          Antwoord ALLEEN in dit JSON formaat (array van tips):
-          [{"label":"Tip 1","tip":"<concrete tip>","onderdelen":[{"bet":"<bet>","kans":60}],"gecombineerde_kans":60,"onderbouwing":"<1-2 zinnen>","risico":"laag|middel"}]
-          PROMPT_EOF
-          for MODEL in "@cf/meta/llama-3.1-8b-instruct" "@cf/meta/llama-3.3-70b-instruct-fp8-fast" "@cf/qwen/qwen1.5-14b-chat-awq" "@cf/mistralai/mistral-small-3.1-24b-instruct"; do
-            echo "=== $MODEL ==="
-            jq -Rs --arg m "$MODEL" '{prompt: ., model: $m}' /tmp/prompt.txt > /tmp/payload.json
-            curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ai-bet" \
-              -H "Content-Type: application/json" \
-              --data @/tmp/payload.json \
-              -w '\nHTTP_STATUS:%{http_code}\n' | head -c 500
-            echo
-          done
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}

@@ -700,7 +700,7 @@ ${odds && !odds.error ? `Bookmaker-odds (beste gevonden prijs): thuis ${odds.hom
 Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelkans duidelijk hoger dan wat de odds impliceren)? Wees kritisch en nuchter — het model is simpel (Poisson op vorm) en geen garantie.`;
 
       try {
-        const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+        const aiResult = await env.AI.run('@cf/mistralai/mistral-small-3.1-24b-instruct', {
           messages: [{ role: 'user', content: prompt }],
         });
         return json({
@@ -718,17 +718,6 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
     // index.html). Gebruikt Workers AI (env.AI) i.p.v. de vroegere,
     // betaalde Anthropic-API — response-vorm blijft compatibel
     // ({content:[{text}]}) zodat de bestaande frontend-code ongewijzigd werkt.
-    if (url.pathname === '/debug-ai') {
-      try {
-        const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-          messages: [{ role: 'user', content: 'Zeg alleen het woord: hallo' }],
-        });
-        return json({ ok: true, raw: aiResult, type: typeof aiResult?.response });
-      } catch (e) {
-        return json({ ok: false, error: e.message, stack: e.stack }, 500);
-      }
-    }
-
     if (url.pathname === '/ai-bet') {
       if (req.method === 'GET') return json({ ok: true, backend: 'Cloudflare Workers AI' });
       try {
@@ -738,7 +727,11 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
         // (ongeldige JSON, frontend viel terug op ruwe tekst tonen). Soms
         // levert het model desondanks een lege respons — dan één keer
         // opnieuw proberen voor we een nette foutmelding teruggeven.
-        const model = body.model || '@cf/meta/llama-3.3-70b-instruct-fp8-fast'; // DEBUG: tijdelijk overschrijfbaar voor model-vergelijking
+        // llama-3.3-70b-instruct-fp8-fast (en het kleinere llama-3.1-8b-instruct)
+        // gaven op Workers AI consistent een lege respons terug bij deze
+        // JSON-tips-prompt (getest, ook na retry) — mistral-small-3.1-24b-instruct
+        // volgt dezelfde JSON-instructie wel betrouwbaar op.
+        const model = '@cf/mistralai/mistral-small-3.1-24b-instruct';
         let text = '';
         for (let poging = 0; poging < 2 && !text; poging++) {
           const aiResult = await env.AI.run(model, {
