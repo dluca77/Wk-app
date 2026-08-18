@@ -127,6 +127,27 @@ function normTeam(s) {
     .trim();
 }
 
+// De wereldwijde BetExplorer-scrape (parse-global-matches.mjs) kent geen
+// vaste compId's — die worden ter plekke verzonnen als `be_<land>_<competitie>`.
+// Voor competities die we al via een eigen scraper volgen (zie COMPS hierboven)
+// zorgt dat voor een 2e, ongekoppelde groep in de app (bv. "Champions League"
+// verschijnt dan 2x). Namen als "Premier League"/"Bundesliga"/"Serie A" bestaan
+// in meerdere landen, dus toetsen we bij die generieke namen ook het land.
+function canonicalCompId(league, country) {
+  const l = (league || '').toLowerCase();
+  const c = (country || '').toLowerCase();
+  if (l.includes('champions league')) return 7;
+  if (l.includes('conference league')) return 17015;
+  if (l.includes('europa league')) return 679;
+  if (l.includes('eredivisie')) return 37;
+  if (c === 'england' && l.includes('premier league')) return 17;
+  if (c === 'spain' && /(la ?liga|primera divisi[oó]n)/.test(l)) return 8;
+  if (c === 'germany' && l.includes('bundesliga')) return 35;
+  if (c === 'italy' && l.includes('serie a')) return 23;
+  if (c === 'france' && l.includes('ligue 1')) return 34;
+  return null;
+}
+
 // Verschillende bronnen spellen dezelfde club soms anders (accenten, clubprefix
 // als "GNK", of een verkorte naam als "Lyon" i.p.v. "Olympique Lyonnais") —
 // exacte gelijkheid na normTeam() mist die gevallen, dus ook substring-bevat
@@ -535,6 +556,15 @@ async function refreshAll(env, { force = false } = {}) {
     const snapshot = [...byId.entries()];
     let addedGlobal = 0, skippedDup = 0;
     for (const scraped of globalCache.matches) {
+      // Val terug op de vaste compId (zie COMPS) als deze wedstrijd bij een
+      // al bekende competitie hoort, zodat 'm niet als losse "be_..."-groep
+      // naast bv. de specifiek gescrapete Champions League-groep verschijnt.
+      const canon = canonicalCompId(scraped.compName, scraped.country);
+      if (canon && COMPS[canon]) {
+        scraped.compId = canon;
+        scraped.compName = COMPS[canon].name;
+        scraped.compFlag = COMPS[canon].flag;
+      }
       const dup = snapshot.some(([, m]) => m.date === scraped.date && teamsMatch(m.h, scraped.h) && teamsMatch(m.a, scraped.a));
       if (dup) { skippedDup++; continue; }
       byId.set(scraped.apiId, scraped);

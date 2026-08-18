@@ -78,6 +78,7 @@ function parseGlobalMatches(html) {
       compId: hdr ? `be_${hdr.country}_${hdr.league}` : 'be_onbekend',
       compName: hdr ? hdr.league : 'Onbekend',
       compFlag: hdr ? countryFlag(hdr.country) : '🌍',
+      country: hdr ? hdr.country : '', // voor canonicalCompId() in de Worker — matcht deze wedstrijd tegen een vaste competitie (CL/EL/Eredivisie/...) i.p.v. een losse be_-groep
       h: homeM[1].trim(), a: awayM[1].trim(),
       date, time, result, live, finished,
       oddsH, oddsD, oddsA,
