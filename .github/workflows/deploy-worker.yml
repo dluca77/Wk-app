@@ -30,12 +30,8 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: DEBUG probe /ai-bet
-        run: |
-          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ai-bet" \
-            -H "Content-Type: application/json" \
-            --data '{"prompt":"Antwoord ALLEEN met dit exacte JSON: [{\"label\":\"Test\",\"tip\":\"test\",\"onderdelen\":[{\"bet\":\"test\",\"kans\":60}],\"gecombineerde_kans\":60,\"onderbouwing\":\"test\",\"risico\":\"laag\"}]"}' \
-            -w '\nHTTP_STATUS:%{http_code}\n'
+      - name: DEBUG probe /debug-ai
+        run: curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-ai" -w '\nHTTP_STATUS:%{http_code}\n'
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}

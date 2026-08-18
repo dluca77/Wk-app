@@ -718,6 +718,17 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
     // index.html). Gebruikt Workers AI (env.AI) i.p.v. de vroegere,
     // betaalde Anthropic-API — response-vorm blijft compatibel
     // ({content:[{text}]}) zodat de bestaande frontend-code ongewijzigd werkt.
+    if (url.pathname === '/debug-ai') {
+      try {
+        const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+          messages: [{ role: 'user', content: 'Zeg alleen het woord: hallo' }],
+        });
+        return json({ ok: true, raw: aiResult, type: typeof aiResult?.response });
+      } catch (e) {
+        return json({ ok: false, error: e.message, stack: e.stack }, 500);
+      }
+    }
+
     if (url.pathname === '/ai-bet') {
       if (req.method === 'GET') return json({ ok: true, backend: 'Cloudflare Workers AI' });
       try {
