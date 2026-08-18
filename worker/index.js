@@ -738,9 +738,10 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
         // (ongeldige JSON, frontend viel terug op ruwe tekst tonen). Soms
         // levert het model desondanks een lege respons — dan één keer
         // opnieuw proberen voor we een nette foutmelding teruggeven.
+        const model = body.model || '@cf/meta/llama-3.3-70b-instruct-fp8-fast'; // DEBUG: tijdelijk overschrijfbaar voor model-vergelijking
         let text = '';
         for (let poging = 0; poging < 2 && !text; poging++) {
-          const aiResult = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+          const aiResult = await env.AI.run(model, {
             messages: [{ role: 'user', content: body.prompt }],
             max_tokens: 2000,
           });
