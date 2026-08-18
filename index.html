@@ -1470,10 +1470,8 @@ function openModal(id){
     </div>
     ${bbHtml}
     ${propHtml}
-    ${shdrH}
-    ${pc(hs, hLinup, m.h)}
-    ${shdrA}
-    ${pc(as, aLinup, m.a)}
+    ${hLinup.length || (hs&&hs.length) ? shdrH + pc(hs, hLinup, m.h) : ''}
+    ${aLinup.length || (as&&as.length) ? shdrA + pc(as, aLinup, m.a) : ''}
     <div style="font-size:11px;color:var(--muted2);text-align:center;margin-top:12px;line-height:1.6">Check de actuele quote bij je eigen boekmaker voor je inzet</div>`;
   document.getElementById('overlay').classList.add('on');
   document.body.style.overflow='hidden';
