@@ -216,6 +216,11 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 }
 .overall-bet-btn:hover{background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(249,115,22,.1));transform:translateY(-1px)}
 .overall-bet-btn:active{transform:scale(.98);opacity:.9}
+/* Zodra er wedstrijden geselecteerd zijn voor de dagtip, blijft de knop
+   onderin het scherm zichtbaar (boven de bottom-nav) i.p.v. onderaan een
+   mogelijk lange, deels ingeklapte competitielijst te staan. */
+#overall-bet-container.ob-sticky{position:fixed;left:0;right:0;bottom:66px;z-index:55;max-width:600px;margin:0 auto;padding:0 14px;animation:fadeSlideIn .2s ease both}
+#overall-bet-container.ob-sticky .overall-bet-btn{margin-bottom:0;background:var(--surface);box-shadow:0 8px 28px rgba(0,0,0,.18)}
 .overall-bet-panel{background:var(--surface);border:1px solid rgba(245,158,11,.25);border-radius:16px;padding:16px;margin-bottom:14px}
 .ob-leg{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px}
 .ob-leg:last-of-type{border-bottom:none}
@@ -1333,8 +1338,10 @@ function renderMatchGroups(ms){
     ? `🎯 Beste Dagtip — ${selCount} geselecteerde wedstrijden`
     : `🎯 Beste Dagtip — ${totalUpcoming} wedstrijden (vandaag + morgen)`;
   if(totalUpcoming >= 2){
+    obContainer.classList.toggle('ob-sticky', selCount > 0);
     obContainer.innerHTML = `<button class="overall-bet-btn" onclick="generateOverallBet()">${btnLabel}</button><div id="overall-bet-result"></div>`;
   } else {
+    obContainer.classList.remove('ob-sticky');
     obContainer.innerHTML = '';
   }
   const cardHtml = m=>{
