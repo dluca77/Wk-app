@@ -575,6 +575,23 @@ async function refreshAll(env, { force = false } = {}) {
     log.push('Wereldwijd: nog geen data ontvangen van de GitHub-cron (eerste run moet nog lopen)');
   }
 
+  // Normaliseer compId voor ALLE wedstrijden (ook oudere, al gecachete
+  // entries) — niet alleen de net binnengekomen globale data hierboven.
+  // Vangt ook oude/verweesde entries op die met een verouderd of
+  // inconsistent compId (bv. als string i.p.v. getal) zijn opgeslagen, wat
+  // anders een 2e, ongekoppelde competitiegroep in de app veroorzaakt.
+  for (const m of byId.values()) {
+    const canon = canonicalCompId(m.compName, m.country) ?? (COMPS[m.compId] ? Number(m.compId) : null);
+    if (canon != null && COMPS[canon]) {
+      m.compId = canon;
+      m.compName = COMPS[canon].name;
+      m.compFlag = COMPS[canon].flag;
+      // "Speelronde 636"-achtige onzin komt van verouderde/verweesde entries
+      // (geen van onze huidige scrapers vult round zo) — opschonen.
+      if (m.round && /^\d{3,}$/.test(m.round)) m.round = '';
+    }
+  }
+
   const all = [...byId.values()];
   await kvPut(env, 'matches_all', { matches: all, updatedAt: now.toISOString() });
   const form = computeForm(all);
