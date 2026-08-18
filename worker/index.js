@@ -119,11 +119,28 @@ const SCRAPE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 
 function normTeam(s) {
   return (s || '')
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '') // diacritics weg (ç→c, é→e, ...)
     .toLowerCase()
     .replace(/\./g, '')
-    .replace(/\b(fc|sc|afc|cf|vv|ud|cd|ac)\b/g, '')
+    .replace(/\b(fc|sc|afc|cf|vv|ud|cd|ac|sk|nk|fk|gnk|ol|if|bk|ik|ca|sd|kf|as|ss|us|cs|ssc|ssd)\b/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+// Verschillende bronnen spellen dezelfde club soms anders (accenten, clubprefix
+// als "GNK", of een verkorte naam als "Lyon" i.p.v. "Olympique Lyonnais") —
+// exacte gelijkheid na normTeam() mist die gevallen, dus ook substring-bevat
+// toestaan als allebei de namen substantieel zijn (voorkomt valse hits bij
+// korte namen als "AS" of "US").
+function teamsMatch(a, b) {
+  const na = normTeam(a), nb = normTeam(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.length > 3 && nb.length > 3 && (na.includes(nb) || nb.includes(na))) return true;
+  // Woord-voor-woord met afkortingen toestaan, bv. "Din. Zagreb" vs "Dinamo Zagreb"
+  const ta = na.split(' '), tb = nb.split(' ');
+  if (ta.length !== tb.length) return false;
+  return ta.every((t, i) => t === tb[i] || (t.length >= 3 && tb[i].startsWith(t)) || (tb[i].length >= 3 && t.startsWith(tb[i])));
 }
 
 async function fetchOddsPage(path) {
@@ -518,8 +535,7 @@ async function refreshAll(env, { force = false } = {}) {
     const snapshot = [...byId.entries()];
     let addedGlobal = 0, skippedDup = 0;
     for (const scraped of globalCache.matches) {
-      const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
-      const dup = snapshot.some(([, m]) => m.date === scraped.date && normTeam(m.h) === nH && normTeam(m.a) === nA);
+      const dup = snapshot.some(([, m]) => m.date === scraped.date && teamsMatch(m.h, scraped.h) && teamsMatch(m.a, scraped.a));
       if (dup) { skippedDup++; continue; }
       byId.set(scraped.apiId, scraped);
       addedGlobal++;
