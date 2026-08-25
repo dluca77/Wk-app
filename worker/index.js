@@ -471,6 +471,54 @@ async function refreshAll(env, { force = false } = {}) {
   const cleanedExisting = (existing.matches || []).filter(m => !(m.compId != null && COMPS[m.compId] && !m.source));
   const byId = new Map(cleanedExisting.map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
 
+  // Cloudflare Workers (free tier) staat maar een beperkt aantal subrequests
+  // toe per invocation. odds1x2-scrapes zijn duur (1 fetch per WEDSTRIJD,
+  // dus 20+ requests voor een competitie met 20 wedstrijden) — als die als
+  // eerste draaien is het subrequest-budget vaak al op voordat de
+  // betexplorer-competities (Serie A/Ligue 1/Bundesliga/Europa League/
+  // Conference League) aan de beurt komen, en falen die dan STRUCTUREEL met
+  // "Too many subrequests" (geconstateerd: Conference League had hierdoor
+  // 0 wedstrijden). Betexplorer kost maar 1 request per competitie (5 totaal)
+  // dus die draaien we eerst, zodat ze altijd binnen het budget vallen.
+  const beCompIds = Object.keys(BETEXPLORER_COMPS).map(Number);
+  for (const compId of beCompIds) {
+    try {
+      const compMatches = await scrapeBetExplorerFixtures(env, compId);
+      for (const key of [...byId.keys()]) {
+        const m = byId.get(key);
+        if (m.compId === compId && m.source === 'betexplorer') byId.delete(key);
+      }
+      let mergedCount = 0, newCount = 0;
+      const snapshot = [...byId.entries()];
+      for (const scraped of compMatches) {
+        const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
+        let existingKey = null;
+        for (const [key, m] of snapshot) {
+          if (String(m.compId) !== String(compId) || m.date !== scraped.date) continue;
+          if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
+        }
+        if (existingKey && byId.has(existingKey)) {
+          const old = byId.get(existingKey);
+          byId.set(existingKey, {
+            ...scraped,
+            apiId: old.apiId,
+            source: old.source,
+            live: old.live || scraped.live,
+            finished: old.finished || scraped.finished,
+            result: old.result || scraped.result,
+          });
+          mergedCount++;
+        } else {
+          byId.set(scraped.apiId, scraped);
+          newCount++;
+        }
+      }
+      log.push(`${COMPS[compId]?.name} (betexplorer-scrape): ${compMatches.length} wedstrijden (${mergedCount} gemerged met bestaande data, ${newCount} nieuw)`);
+    } catch (e) {
+      log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
+    }
+  }
+
   const scrapedCompIds = Object.keys(ODDS_SEEDS).map(Number);
   for (const compId of scrapedCompIds) {
     try {
@@ -518,45 +566,6 @@ async function refreshAll(env, { force = false } = {}) {
         }
       }
       log.push(`${COMPS[compId]?.name} (odds1x2-scrape): ${compMatches.length} wedstrijden van de huidige speelronde (${mergedCount} gemerged met bestaande data, ${newCount} nieuw)`);
-    } catch (e) {
-      log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
-    }
-  }
-
-  const beCompIds = Object.keys(BETEXPLORER_COMPS).map(Number);
-  for (const compId of beCompIds) {
-    try {
-      const compMatches = await scrapeBetExplorerFixtures(env, compId);
-      for (const key of [...byId.keys()]) {
-        const m = byId.get(key);
-        if (m.compId === compId && m.source === 'betexplorer') byId.delete(key);
-      }
-      let mergedCount = 0, newCount = 0;
-      const snapshot = [...byId.entries()];
-      for (const scraped of compMatches) {
-        const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
-        let existingKey = null;
-        for (const [key, m] of snapshot) {
-          if (String(m.compId) !== String(compId) || m.date !== scraped.date) continue;
-          if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
-        }
-        if (existingKey && byId.has(existingKey)) {
-          const old = byId.get(existingKey);
-          byId.set(existingKey, {
-            ...scraped,
-            apiId: old.apiId,
-            source: old.source,
-            live: old.live || scraped.live,
-            finished: old.finished || scraped.finished,
-            result: old.result || scraped.result,
-          });
-          mergedCount++;
-        } else {
-          byId.set(scraped.apiId, scraped);
-          newCount++;
-        }
-      }
-      log.push(`${COMPS[compId]?.name} (betexplorer-scrape): ${compMatches.length} wedstrijden (${mergedCount} gemerged met bestaande data, ${newCount} nieuw)`);
     } catch (e) {
       log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
     }
