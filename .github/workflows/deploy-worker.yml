@@ -30,12 +30,3 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: Ververs live data
-        env:
-          RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
-        run: |
-          CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
-          node scripts/scrape-opta.mjs > opta-data.json
-          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ingest-opta?key=$CLEAN_SECRET" \
-            -H "Content-Type: application/json" \
-            --data @opta-data.json

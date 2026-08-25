@@ -2,9 +2,9 @@ name: Scrape wedstrijden + spelerstats (Opta)
 
 # Enige databron van de app: de publieke backend van Stats Perform's
 # "Betting Showcase"-widget (optaplayerstats.statsperform.com). Geen
-# API-key nodig. Draait in GitHub Actions (niet in de Cloudflare Worker) —
-# nooit getest of Cloudflare-IP's hier geblokkeerd worden, dus voor de
-# zekerheid dezelfde ingest-aanpak als eerdere databronnen in dit project.
+# API-key nodig, maar wel Akamai-botdetectie die kale HTTP-clients vanaf
+# datacenter-IP's blokkeert (HTTP 403) — vandaar Playwright + headless
+# Chromium hier, zie scripts/scrape-opta.mjs voor de toelichting.
 on:
   schedule:
     - cron: '*/5 * * * *'
@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Installeer Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.48 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
       - name: Scrape Opta wedstrijden + spelerstats
         run: node scripts/scrape-opta.mjs > opta-data.json
       - name: Stuur naar Worker

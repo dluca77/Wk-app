@@ -1,8 +1,14 @@
 // Scrapet de publieke "Betting Showcase" backend van Stats Perform
 // (optaplayerstats.statsperform.com) — een widget bedoeld om naast een
-// bookmaker-odds-widget te embedden. De backend-API zelf vereist geen
-// API-key en levert écht Opta-datakwaliteit: xG, schoten (binnen/buiten
-// het strafschopgebied), per speler per wedstrijd.
+// bookmaker-odds-widget te embedden. Levert écht Opta-datakwaliteit: xG,
+// schoten (binnen/buiten het strafschopgebied), per speler per wedstrijd.
+//
+// De backend staat achter Akamai-botdetectie: een kale curl/fetch vanaf een
+// datacenter-IP (getest vanuit GitHub Actions én Cloudflare Workers) krijgt
+// altijd HTTP 403 "Access Denied", ongeacht User-Agent. Alleen verzoeken die
+// écht uit een browserproces komen (juiste TLS/HTTP2-fingerprint) komen
+// erdoor — vandaar Playwright + headless Chromium hier, net als de vorige
+// Understat-spelersscraper deed voor hetzelfde soort blokkade.
 //
 // Twee endpoints:
 // - /api/en_GB/soccer/livescores?offset=-120  → alle wedstrijden in het
@@ -10,34 +16,23 @@
 //   widget, geen volledige wereldwijde dekking).
 // - /api/en_GB/soccer/playerprops/match/{id}  → per-speler matchstats
 //   (alleen beschikbaar zodra de wedstrijd bezig is/afgelopen is).
-//
-// Draait in GitHub Actions, niet in de Cloudflare Worker — nooit getest of
-// Cloudflare-IP's hier geblokkeerd worden (zoals bij betexplorer.com), dus
-// voor de zekerheid dezelfde ingest-aanpak als de vorige databronnen.
+import { chromium } from 'playwright';
+
 const SOURCE = 'https://optaplayerstats.statsperform.com';
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
-
-async function getJson(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) return null;
-  try { return await res.json(); } catch { return null; }
-}
-
-async function pool(items, limit, fn) {
-  const results = [];
-  let i = 0;
-  async function worker() {
-    while (i < items.length) {
-      const idx = i++;
-      results[idx] = await fn(items[idx], idx);
-    }
-  }
-  await Promise.all(Array.from({ length: limit }, worker));
-  return results;
-}
 
 async function main() {
-  const live = await getJson(`${SOURCE}/api/en_GB/soccer/livescores?offset=-120`);
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  // Eerst de gewone pagina bezoeken zodat de sessie/cookies die Akamai
+  // verwacht al bestaan voordat we de API zelf aanroepen.
+  await page.goto(`${SOURCE}/en_GB/soccer`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+  const live = await page.evaluate(async () => {
+    const res = await fetch('/api/en_GB/soccer/livescores?offset=-120');
+    if (!res.ok) return null;
+    return res.json();
+  });
   const rawMatches = live?.matches || [];
 
   const matches = rawMatches.map(m => ({
@@ -63,11 +58,17 @@ async function main() {
   const needProps = matches.filter(m => m.status === 'played' || m.status === 'live');
   console.error(`${matches.length} wedstrijden gevonden, ${needProps.length} met spelerdata op te halen`);
 
-  const propsResults = await pool(needProps, 6, async (m) => {
-    const data = await getJson(`${SOURCE}/api/en_GB/soccer/playerprops/match/${m.optaId}`);
-    return { optaId: m.optaId, data };
-  });
-  const propsByMatch = new Map(propsResults.filter(r => r.data).map(r => [r.optaId, r.data]));
+  const propsByMatch = new Map();
+  for (const m of needProps) {
+    const data = await page.evaluate(async (optaId) => {
+      const res = await fetch(`/api/en_GB/soccer/playerprops/match/${optaId}`);
+      if (!res.ok) return null;
+      return res.json();
+    }, m.optaId);
+    if (data) propsByMatch.set(m.optaId, data);
+  }
+
+  await browser.close();
 
   // Platte lijst van speler-matchstats (voor season-aggregatie in de Worker,
   // die dit over meerdere runs heen opstapelt net zoals computeForm() dat nu
