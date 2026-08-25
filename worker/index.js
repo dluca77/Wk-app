@@ -94,6 +94,46 @@ function matchProbabilities(homeStats, awayStats, leagueAvgGoals = 1.35) {
   return { pHome, pDraw, pAway, lambdaHome, lambdaAway };
 }
 
+// ---------- Gedeelde opbouw voor /predict en /predict-multi ----------
+function buildMatchBase(match, standings, players) {
+  const homeStats = standings.find(t => t.team === match.h);
+  const awayStats = standings.find(t => t.team === match.a);
+  const model = matchProbabilities(homeStats, awayStats);
+
+  const topFor = team => (players || [])
+    .filter(p => p.team === team && p.apps >= 2)
+    .sort((a, b) => b.shots90 - a.shots90)
+    .slice(0, 5)
+    .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, sot90: p.sot90, goals: p.goals, assists: p.assists, apps: p.apps }));
+
+  return {
+    matchInfo: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
+    model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
+    homePlayers: topFor(match.h),
+    awayPlayers: topFor(match.a),
+  };
+}
+
+function singleMatchPromptBlock(b) {
+  const m = b.matchInfo;
+  return `Wedstrijd: ${m.h} vs ${m.a} (${m.compName || ''}, ${m.date} ${m.time}).
+Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(b.model.pHome * 100).toFixed(1)}%, gelijk ${(b.model.pDraw * 100).toFixed(1)}%, uit ${(b.model.pAway * 100).toFixed(1)}%.
+Spelers met de meeste schoten per 90 min bij ${m.h}: ${b.homePlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.
+Spelers met de meeste schoten per 90 min bij ${m.a}: ${b.awayPlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.`;
+}
+
+async function runAi(env, prompt) {
+  try {
+    const aiResult = await env.AI.run('@cf/mistralai/mistral-small-3.1-24b-instruct', {
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 800,
+    });
+    return extractAiText(aiResult).trim();
+  } catch (e) {
+    return '';
+  }
+}
+
 // ---------- Refresh: nieuwe scrape-data mergen met opgebouwde geschiedenis ----------
 async function ingestEspn(env, body) {
   const now = new Date();
@@ -176,45 +216,55 @@ export default {
     // odds — deze databron levert die niet.
     if (url.pathname === '/predict') {
       const apiId = url.searchParams.get('apiId');
-      const d = await kvGet(env, 'espn_matches', { matches: [] });
-      const match = (d.matches || []).find(m => String(m.apiId) === String(apiId));
+      const [matchesData, standingsData, playersData] = await Promise.all([
+        kvGet(env, 'espn_matches', { matches: [] }),
+        kvGet(env, 'espn_standings', { standings: [] }),
+        kvGet(env, 'espn_players', { players: [] }),
+      ]);
+      const match = (matchesData.matches || []).find(m => String(m.apiId) === String(apiId));
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
 
-      const s = await kvGet(env, 'espn_standings', { standings: [] });
-      const homeStats = s.standings.find(t => t.team === match.h);
-      const awayStats = s.standings.find(t => t.team === match.a);
-      const model = matchProbabilities(homeStats, awayStats);
-
-      const pd = await kvGet(env, 'espn_players', { players: [] });
-      const topFor = team => (pd.players || [])
-        .filter(p => p.team === team && p.apps >= 2)
-        .sort((a, b) => b.shots90 - a.shots90)
-        .slice(0, 5)
-        .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, sot90: p.sot90, goals: p.goals, assists: p.assists, apps: p.apps }));
-
-      const homePlayers = topFor(match.h);
-      const awayPlayers = topFor(match.a);
-
-      const prompt = `Je bent een nuchtere voetbalanalist. Wedstrijd: ${match.h} vs ${match.a} (${match.compName || ''}, ${match.date} ${match.time}).
-Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(model.pHome * 100).toFixed(1)}%, gelijk ${(model.pDraw * 100).toFixed(1)}%, uit ${(model.pAway * 100).toFixed(1)}%.
-Spelers met de meeste schoten per 90 min bij ${match.h}: ${homePlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.
-Spelers met de meeste schoten per 90 min bij ${match.a}: ${awayPlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.
+      const base = buildMatchBase(match, standingsData.standings, playersData.players);
+      const prompt = `Je bent een nuchtere voetbalanalist. ${singleMatchPromptBlock(base)}
 Geef in maximaal 4 zinnen Nederlandstalige analyse: wie is favoriet, en welke 1-2 spelers zijn interessant om op te letten voor schoten/doelpunten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
-
-      let analysis = '';
-      try {
-        const aiResult = await env.AI.run('@cf/mistralai/mistral-small-3.1-24b-instruct', {
-          messages: [{ role: 'user', content: prompt }],
-        });
-        analysis = extractAiText(aiResult).trim();
-      } catch (e) {
-        analysis = '';
-      }
+      const analysis = await runAi(env, prompt);
 
       return json({
-        match: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
-        model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
-        players: { home: homePlayers, away: awayPlayers },
+        match: base.matchInfo,
+        model: base.model,
+        players: { home: base.homePlayers, away: base.awayPlayers },
+        analysis,
+      });
+    }
+
+    // Zelfde als /predict maar voor meerdere wedstrijden tegelijk (bv. "wat
+    // is mijn beste kans vandaag" over een geselecteerde set) — één
+    // gecombineerde AI-analyse die de wedstrijden tegen elkaar afweegt,
+    // i.p.v. los per wedstrijd een los verhaaltje.
+    if (url.pathname === '/predict-multi') {
+      const ids = (url.searchParams.get('ids') || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!ids.length) return json({ error: 'geen apiId\'s opgegeven (?ids=a,b,c)' }, 400);
+
+      const [matchesData, standingsData, playersData] = await Promise.all([
+        kvGet(env, 'espn_matches', { matches: [] }),
+        kvGet(env, 'espn_standings', { standings: [] }),
+        kvGet(env, 'espn_players', { players: [] }),
+      ]);
+
+      const bases = ids
+        .map(id => (matchesData.matches || []).find(m => String(m.apiId) === String(id)))
+        .filter(Boolean)
+        .map(match => buildMatchBase(match, standingsData.standings, playersData.players));
+
+      if (!bases.length) return json({ error: 'geen van de opgegeven wedstrijden gevonden' }, 404);
+
+      const prompt = `Je bent een nuchtere voetbalanalist. Hieronder staan ${bases.length} wedstrijden met modelkansen en topschutters.
+${bases.map((b, i) => `${i + 1}. ${singleMatchPromptBlock(b)}`).join('\n')}
+Geef een Nederlandstalige analyse (max 6 zinnen): welke 1-2 wedstrijden uit dit lijstje hebben de duidelijkste favoriet, en welke 1-2 spelers uit het geheel zijn het interessantst om op te letten voor schoten/doelpunten. Wees kritisch — het model is simpel en geen garantie.`;
+      const analysis = await runAi(env, prompt);
+
+      return json({
+        matches: bases.map(b => ({ match: b.matchInfo, model: b.model, players: { home: b.homePlayers, away: b.awayPlayers } })),
         analysis,
       });
     }
@@ -270,6 +320,6 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: wie is favoriet, en welke 1-
       }
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/standings', '/players', '/predict', '/check-pin', '/visitors', '/crest', '/ingest', '/debug'] }, 404);
+    return json({ error: 'not found', routes: ['/matches', '/standings', '/players', '/predict', '/predict-multi', '/check-pin', '/visitors', '/crest', '/ingest', '/debug'] }, 404);
   },
 };

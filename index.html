@@ -6,75 +6,113 @@
 <title>Match Insights</title>
 <style>
 :root{
-  --bg:#0b0f14; --card:#121821; --card2:#171f2b; --border:#232d3b;
-  --text:#eef2f7; --muted:#8a97a8; --muted2:#5c6879;
-  --mint:#22d3a8; --red:#ef4444; --amber:#f5a623; --blue:#3b82f6;
+  --bg:#0a0e14; --bg2:#0d1219; --card:#131a24; --card2:#1a2330; --border:#242f3f;
+  --text:#f1f5fa; --muted:#8a97ab; --muted2:#576174;
+  --mint:#2ee6ae; --mint2:#17c497; --red:#ff5c6c; --amber:#ffb648; --blue:#4d9fff;
+  --grad:linear-gradient(135deg,#2ee6ae,#4d9fff);
+  --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:70px}
-.top{position:sticky;top:0;z-index:10;background:rgba(11,15,20,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:12px 14px}
-.top h1{font-size:17px;margin:0 0 10px;font-weight:700}
-.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
-.tab{flex:none;padding:6px 14px;border-radius:20px;background:var(--card2);color:var(--muted);font-size:13px;border:1px solid var(--border);cursor:pointer;white-space:nowrap}
-.tab.on{background:var(--mint);color:#04231b;border-color:var(--mint);font-weight:600}
-.wrap{padding:12px 14px;max-width:720px;margin:0 auto}
-.empty{color:var(--muted);text-align:center;padding:40px 0;font-size:14px}
-.comp-group{margin-bottom:10px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--card)}
-.comp-hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:calc(64px + var(--safe-b));overflow-x:hidden;-webkit-font-smoothing:antialiased}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+@keyframes popIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+@keyframes barGrow{from{width:0}}
+
+.top{position:sticky;top:0;z-index:10;background:rgba(10,14,20,.85);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border-bottom:1px solid var(--border);padding:calc(12px + var(--safe-t)) 14px 10px}
+.top-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.top h1{font-size:18px;margin:0;font-weight:800;letter-spacing:-.02em;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.selbtn{font-size:12px;font-weight:600;color:var(--muted);background:var(--card2);border:1px solid var(--border);padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .15s ease;user-select:none}
+.selbtn:active{transform:scale(.94)}
+.selbtn.on{background:var(--grad);color:#04231b;border-color:transparent}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;padding:7px 15px;border-radius:20px;background:var(--card2);color:var(--muted);font-size:13px;font-weight:500;border:1px solid var(--border);cursor:pointer;white-space:nowrap;transition:all .18s cubic-bezier(.34,1.56,.64,1)}
+.tab:active{transform:scale(.92)}
+.tab.on{background:var(--grad);color:#04231b;border-color:transparent;font-weight:700;box-shadow:0 2px 12px -2px rgba(46,230,174,.5)}
+.wrap{padding:14px;max-width:720px;margin:0 auto}
+.empty{color:var(--muted);text-align:center;padding:48px 20px;font-size:14px;animation:fadeIn .3s ease}
+.empty .big{font-size:32px;display:block;margin-bottom:10px;opacity:.5}
+
+.comp-group{margin-bottom:12px;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--card);animation:fadeInUp .35s cubic-bezier(.16,1,.3,1) backwards}
+.comp-hdr{display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer;transition:background .15s}
+.comp-hdr:active{background:var(--card2)}
 .comp-hdr .flag{font-size:18px}
-.comp-hdr .name{flex:1;font-weight:600;font-size:14px}
-.comp-hdr .count{color:var(--muted);font-size:12px;background:var(--card2);padding:2px 8px;border-radius:10px}
-.comp-hdr .chev{color:var(--muted2);transition:transform .15s}
+.comp-hdr .name{flex:1;font-weight:700;font-size:14px;letter-spacing:-.01em}
+.comp-hdr .count{color:var(--muted);font-size:11px;font-weight:600;background:var(--card2);padding:3px 9px;border-radius:10px}
+.comp-hdr .chev{color:var(--muted2);transition:transform .25s cubic-bezier(.34,1.56,.64,1);font-size:16px}
 .comp-hdr .chev.open{transform:rotate(90deg)}
-.card{padding:12px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px}
-.card:active{background:var(--card2)}
+.group-body{animation:fadeIn .25s ease}
+.card{padding:13px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .15s,transform .12s ease;position:relative}
+.card:active{background:var(--card2);transform:scale(.99)}
+.card.sel-mode{padding-left:44px}
+.card .checkbox{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:20px;height:20px;border-radius:50%;border:2px solid var(--muted2);transition:all .2s cubic-bezier(.34,1.56,.64,1);display:flex;align-items:center;justify-content:center;font-size:11px}
+.card .checkbox.checked{background:var(--grad);border-color:transparent;color:#04231b;font-weight:900;transform:translateY(-50%) scale(1.1)}
 .card .teams{flex:1;min-width:0}
 .trow{display:flex;justify-content:space-between;gap:8px;font-size:14px;padding:2px 0}
 .trow .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .trow .n.w{font-weight:700;color:#fff}
-.status{font-size:11px;color:var(--muted);text-align:right;min-width:52px}
-.status.live{color:var(--red);font-weight:700}
+.status{font-size:11px;color:var(--muted);text-align:right;min-width:52px;font-weight:500}
+.status.live{color:var(--red);font-weight:700;display:flex;align-items:center;gap:4px;justify-content:flex-end}
+.status.live .dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:pulseDot 1.2s ease-in-out infinite}
 .status.ft{color:var(--muted2)}
-.score{font-size:15px;font-weight:700;text-align:right;min-width:24px}
-.pbar{display:flex;height:5px;border-radius:3px;overflow:hidden;margin-top:6px}
-.pbar div{height:100%}
+.score{font-size:16px;font-weight:800;text-align:right;min-width:26px;line-height:1.25}
+.pbar{display:flex;height:5px;border-radius:3px;overflow:hidden;margin-top:6px;background:var(--card2)}
+.pbar div{height:100%;transition:width .6s cubic-bezier(.16,1,.3,1)}
 .p1{background:var(--mint)} .px{background:var(--muted2)} .p2{background:var(--blue)}
 
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:none;align-items:flex-end}
+.overlay{position:fixed;inset:0;background:rgba(4,6,10,.7);backdrop-filter:blur(2px);z-index:50;display:none;align-items:flex-end;animation:fadeIn .2s ease}
 .overlay.on{display:flex}
-.modal{background:var(--bg);width:100%;max-height:88vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:18px}
-.modal h2{margin:0 0 4px;font-size:18px}
-.modal .sub{color:var(--muted);font-size:12px;margin-bottom:16px}
-.close{position:absolute;top:14px;right:18px;font-size:22px;color:var(--muted);cursor:pointer}
-.section{margin-bottom:18px}
-.section h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
-.probrow{display:flex;gap:8px;margin-bottom:6px}
-.probchip{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center}
-.probchip .l{font-size:11px;color:var(--muted)}
-.probchip .v{font-size:18px;font-weight:700;margin-top:2px}
+.modal{background:var(--bg2);width:100%;max-height:90vh;overflow-y:auto;border-radius:22px 22px 0 0;padding:20px 18px calc(20px + var(--safe-b));position:relative;animation:slideUp .32s cubic-bezier(.16,1,.3,1);border-top:1px solid var(--border)}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.modal .handle{width:36px;height:4px;background:var(--border);border-radius:3px;margin:0 auto 14px}
+.modal h2{margin:0 0 4px;font-size:19px;font-weight:800;letter-spacing:-.02em}
+.modal .sub{color:var(--muted);font-size:12px;margin-bottom:18px;font-weight:500}
+.close{position:absolute;top:18px;right:18px;font-size:20px;color:var(--muted);cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--card2);transition:transform .15s}
+.close:active{transform:scale(.85)}
+.section{margin-bottom:20px;animation:fadeInUp .3s cubic-bezier(.16,1,.3,1) backwards}
+.section h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px;font-weight:700}
+.probrow{display:flex;gap:8px;margin-bottom:8px}
+.probchip{flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 8px;text-align:center;transition:transform .15s}
+.probchip.fav{border-color:var(--mint);box-shadow:0 0 0 1px var(--mint) inset}
+.probchip .l{font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.probchip .v{font-size:20px;font-weight:800;margin-top:3px;letter-spacing:-.02em}
 .plist{display:flex;flex-direction:column;gap:6px}
-.prow{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
-.prow .pn{flex:1;font-size:13px}
-.prow .pp{font-size:11px;color:var(--muted2)}
-.prow .stat{font-size:13px;font-weight:700;color:var(--mint);min-width:44px;text-align:right}
-.ai{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;font-size:13px;line-height:1.5;color:#dbe3ee}
+.prow{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px;animation:fadeInUp .3s cubic-bezier(.16,1,.3,1) backwards}
+.prow .pn{flex:1;font-size:13px;font-weight:600}
+.prow .pp{font-size:11px;color:var(--muted2);font-weight:500;margin-top:1px}
+.prow .stat{font-size:14px;font-weight:800;color:var(--mint);min-width:48px;text-align:right}
+.ai{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:14px;padding:14px;font-size:13.5px;line-height:1.6;color:#dbe3ee;position:relative}
 .ai.loading{color:var(--muted)}
-.bottomnav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);display:flex;z-index:20}
-.bnbtn{flex:1;text-align:center;padding:10px 0 8px;color:var(--muted);font-size:11px;cursor:pointer}
+.skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--card2) 37%,var(--card) 63%);background-size:400% 100%;animation:shimmer 1.4s ease infinite;border-radius:12px}
+.bottomnav{position:fixed;bottom:0;left:0;right:0;background:rgba(19,26,36,.9);backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;z-index:20;padding-bottom:var(--safe-b)}
+.bnbtn{flex:1;text-align:center;padding:9px 0 8px;color:var(--muted);font-size:11px;cursor:pointer;font-weight:600;transition:color .15s}
 .bnbtn.on{color:var(--mint)}
-.bnbtn .ic{font-size:18px;display:block;margin-bottom:2px}
-.search{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:14px;margin-bottom:10px}
+.bnbtn .ic{font-size:19px;display:block;margin-bottom:2px;transition:transform .2s cubic-bezier(.34,1.56,.64,1)}
+.bnbtn.on .ic{transform:translateY(-2px) scale(1.1)}
+.search{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:15px;margin-bottom:12px;transition:border-color .15s}
 .search:focus{outline:none;border-color:var(--mint)}
+.fab-wrap{position:fixed;left:0;right:0;bottom:calc(64px + var(--safe-b) + 10px);display:flex;justify-content:center;z-index:15;pointer-events:none}
+.fab{pointer-events:auto;background:var(--grad);color:#04231b;font-weight:800;font-size:14px;padding:14px 26px;border-radius:30px;box-shadow:0 8px 24px -6px rgba(46,230,174,.5);cursor:pointer;animation:popIn .25s cubic-bezier(.34,1.56,.64,1);display:flex;align-items:center;gap:8px}
+.fab:active{transform:scale(.95)}
 </style>
 </head>
 <body>
 
 <div class="top">
-  <h1>⚽ Match Insights</h1>
+  <div class="top-row">
+    <h1>⚽ Match Insights</h1>
+    <div class="selbtn" id="selToggle" onclick="toggleSelectMode()">Select</div>
+  </div>
   <div class="tabs" id="dayTabs"></div>
 </div>
 
 <div class="wrap" id="view"></div>
+
+<div class="fab-wrap" id="fabWrap"></div>
 
 <div class="bottomnav">
   <div class="bnbtn on" id="nav-matches" onclick="setPage('matches')"><span class="ic">⚽</span>Matches</div>
@@ -82,17 +120,17 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 </div>
 
 <div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
-  <div class="modal" id="modal" style="position:relative"></div>
+  <div class="modal" id="modal" style="position:relative"><div class="handle"></div></div>
 </div>
 
 <script>
 const API = 'https://wk2026-proxy.isaak-elia.workers.dev';
 let MATCHES = [], PLAYERS = [], page = 'matches', selDate = null;
 let groupOpen = {};
+let selectMode = false, selectedIds = new Set();
 
 function isLive(m){ return m.live || m.status === 'live'; }
 function isDone(m){ return m.finished || m.status === 'played'; }
-
 function fmtTime(t){ return t || ''; }
 
 async function loadMatches(){
@@ -135,17 +173,38 @@ function buildDayTabs(){
   document.querySelector('#dayTabs .tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
-function probs(m){
-  // Model-kansen komen via /predict per wedstrijd; voor de lijst-kaart tonen
-  // we alleen wat we al hebben (geen aparte fetch per kaart).
-  return m._probs || null;
+function toggleSelectMode(){
+  selectMode = !selectMode;
+  if(!selectMode) selectedIds.clear();
+  document.getElementById('selToggle').classList.toggle('on', selectMode);
+  document.getElementById('selToggle').textContent = selectMode ? 'Cancel' : 'Select';
+  render();
+  renderFab();
+}
+
+function toggleSelected(apiId){
+  if(selectedIds.has(apiId)) selectedIds.delete(apiId);
+  else selectedIds.add(apiId);
+  render();
+  renderFab();
+}
+
+function renderFab(){
+  const wrap = document.getElementById('fabWrap');
+  if(selectMode && selectedIds.size >= 2){
+    wrap.innerHTML = `<div class="fab" onclick="openMultiAnalysis()">✨ Analyze ${selectedIds.size} matches</div>`;
+  } else if(selectMode && selectedIds.size === 1){
+    wrap.innerHTML = `<div class="fab" style="opacity:.6">Pick at least 1 more</div>`;
+  } else {
+    wrap.innerHTML = '';
+  }
 }
 
 function render(){
   if(page !== 'matches') return;
   const ms = MATCHES.filter(m=>m.date===selDate).sort((a,b)=>a.time.localeCompare(b.time));
   const el = document.getElementById('view');
-  if(!ms.length){ el.innerHTML = '<div class="empty">No matches for this day.</div>'; return; }
+  if(!ms.length){ el.innerHTML = '<div class="empty"><span class="big">📭</span>No matches for this day.</div>'; return; }
 
   const groups = new Map();
   for(const m of ms){
@@ -161,7 +220,7 @@ function render(){
     const cards = list.map(m=>{
       const live = isLive(m), done = isDone(m);
       let statusHtml, scoreHtml;
-      if(live){ statusHtml = '<div class="status live">● LIVE</div>'; }
+      if(live){ statusHtml = '<div class="status live"><span class="dot"></span>LIVE</div>'; }
       else if(done){ statusHtml = '<div class="status ft">FT</div>'; }
       else { statusHtml = `<div class="status">${fmtTime(m.time)}</div>`; }
       if(m.result){
@@ -172,7 +231,10 @@ function render(){
       }
       const hW = m.result && +m.result.split('-')[0] > +m.result.split('-')[1];
       const aW = m.result && +m.result.split('-')[1] > +m.result.split('-')[0];
-      return `<div class="card" onclick="openMatch('${m.apiId}')">
+      const checked = selectedIds.has(m.apiId);
+      const clickAction = selectMode ? `toggleSelected('${m.apiId}')` : `openMatch('${m.apiId}')`;
+      return `<div class="card ${selectMode?'sel-mode':''}" onclick="${clickAction}">
+        ${selectMode ? `<div class="checkbox ${checked?'checked':''}">${checked?'✓':''}</div>` : ''}
         <div class="teams">
           <div class="trow"><span class="n ${hW?'w':''}">${m.h}</span></div>
           <div class="trow"><span class="n ${aW?'w':''}">${m.a}</span></div>
@@ -181,16 +243,45 @@ function render(){
         ${scoreHtml}
       </div>`;
     }).join('');
-    return `<div class="comp-group">
+    return `<div class="comp-group" style="animation-delay:${idx*40}ms">
       <div class="comp-hdr" onclick="groupOpen['${key}']=!groupOpen['${key}'];render()">
         <span class="flag">⚽</span>
         <span class="name">${key}</span>
         <span class="count">${list.length}</span>
         <span class="chev ${open?'open':''}">›</span>
       </div>
-      ${open ? cards : ''}
+      ${open ? `<div class="group-body">${cards}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+function probChip(label, pct, isFav){
+  return `<div class="probchip ${isFav?'fav':''}"><div class="l">${label}</div><div class="v">${pct}%</div></div>`;
+}
+
+function renderPredictionBlock(target, m, d){
+  const p1 = Math.round(d.model.pHome*100), px = Math.round(d.model.pDraw*100), p2 = 100-p1-px;
+  const favIdx = [p1,px,p2].indexOf(Math.max(p1,px,p2));
+  const playerRow = (p,i) => `<div class="prow" style="animation-delay:${i*35}ms"><div class="pn">${p.name}<div class="pp">${p.pos||''} · ${p.apps} apps · ${p.goals} goals, ${p.assists} assists</div></div><div class="stat">${p.shots90}<div class="pp">${p.sot90} on target</div></div></div>`;
+  let html = `
+    <h3>Win probability</h3>
+    <div class="probrow">
+      ${probChip(m.h, p1, favIdx===0)}
+      ${probChip('Draw', px, favIdx===1)}
+      ${probChip(m.a, p2, favIdx===2)}
+    </div>
+    <div class="pbar"><div class="p1" style="width:0" data-w="${p1}"></div><div class="px" style="width:0" data-w="${px}"></div><div class="p2" style="width:0" data-w="${p2}"></div></div>
+  `;
+  target.innerHTML = html;
+  requestAnimationFrame(()=>{
+    target.querySelectorAll('.pbar div').forEach(el=>{ el.style.width = el.dataset.w + '%'; });
+  });
+  let extra = '';
+  if(d.players.home.length || d.players.away.length){
+    extra += `<div class="section"><h3>${m.h} — shots per 90</h3><div class="plist">${d.players.home.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">No player data yet</div>'}</div></div>`;
+    extra += `<div class="section"><h3>${m.a} — shots per 90</h3><div class="plist">${d.players.away.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">No player data yet</div>'}</div></div>`;
+  }
+  return extra;
 }
 
 async function openMatch(apiId){
@@ -198,12 +289,13 @@ async function openMatch(apiId){
   if(!m) return;
   const modal = document.getElementById('modal');
   modal.innerHTML = `
+    <div class="handle"></div>
     <span class="close" onclick="closeModal()">✕</span>
     <h2>${m.h} vs ${m.a}</h2>
     <div class="sub">${m.compName || ''} · ${m.date} ${m.time}</div>
     <div class="section" id="predict-section">
       <h3>Win probability</h3>
-      <div class="probrow"><div class="probchip"><div class="l">Loading…</div></div></div>
+      <div class="skeleton" style="height:60px"></div>
     </div>
   `;
   document.getElementById('overlay').classList.add('on');
@@ -215,28 +307,56 @@ async function openMatch(apiId){
       document.getElementById('predict-section').innerHTML = `<h3>Win probability</h3><div class="empty" style="padding:12px 0">${d.error}</div>`;
       return;
     }
-    const p1 = Math.round(d.model.pHome*100), px = Math.round(d.model.pDraw*100), p2 = 100-p1-px;
-    const playerRow = p => `<div class="prow"><div class="pn">${p.name}<div class="pp">${p.pos||''} · ${p.apps} apps · ${p.goals} goals, ${p.assists} assists</div></div><div class="stat">${p.shots90}<div class="pp">${p.sot90} on target</div></div></div>`;
-    document.getElementById('predict-section').innerHTML = `
-      <h3>Win probability</h3>
-      <div class="probrow">
-        <div class="probchip"><div class="l">${m.h}</div><div class="v">${p1}%</div></div>
-        <div class="probchip"><div class="l">Draw</div><div class="v">${px}%</div></div>
-        <div class="probchip"><div class="l">${m.a}</div><div class="v">${p2}%</div></div>
-      </div>
-      <div class="pbar"><div class="p1" style="width:${p1}%"></div><div class="px" style="width:${px}%"></div><div class="p2" style="width:${p2}%"></div></div>
-    `;
-    let extra = '';
-    if(d.players.home.length || d.players.away.length){
-      extra += `<div class="section"><h3>${m.h} — shots per 90</h3><div class="plist">${d.players.home.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">No player data yet</div>'}</div></div>`;
-      extra += `<div class="section"><h3>${m.a} — shots per 90</h3><div class="plist">${d.players.away.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">No player data yet</div>'}</div></div>`;
-    }
+    const extra = renderPredictionBlock(document.getElementById('predict-section'), m, d);
+    let html = extra;
     if(d.analysis){
-      extra += `<div class="section"><h3>Analysis</h3><div class="ai">${d.analysis}</div></div>`;
+      html += `<div class="section"><h3>Analysis</h3><div class="ai">${d.analysis}</div></div>`;
     }
-    modal.insertAdjacentHTML('beforeend', extra);
+    modal.insertAdjacentHTML('beforeend', html);
   }catch(e){
     document.getElementById('predict-section').innerHTML = `<h3>Win probability</h3><div class="empty" style="padding:12px 0">Could not load prediction.</div>`;
+  }
+}
+
+async function openMultiAnalysis(){
+  const ids = [...selectedIds];
+  const modal = document.getElementById('modal');
+  modal.innerHTML = `
+    <div class="handle"></div>
+    <span class="close" onclick="closeModal()">✕</span>
+    <h2>✨ ${ids.length} matches compared</h2>
+    <div class="sub">Combined AI analysis across your selection</div>
+    <div id="multi-section">
+      <div class="skeleton" style="height:80px;margin-bottom:12px"></div>
+      <div class="skeleton" style="height:60px"></div>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('on');
+
+  try{
+    const res = await fetch(`${API}/predict-multi?ids=${ids.map(encodeURIComponent).join(',')}`);
+    const d = await res.json();
+    const section = document.getElementById('multi-section');
+    if(d.error){ section.innerHTML = `<div class="empty" style="padding:12px 0">${d.error}</div>`; return; }
+    let html = '';
+    if(d.analysis){
+      html += `<div class="section"><h3>Analysis</h3><div class="ai">${d.analysis}</div></div>`;
+    }
+    html += d.matches.map((entry,i) => {
+      const p1 = Math.round(entry.model.pHome*100), px = Math.round(entry.model.pDraw*100), p2 = 100-p1-px;
+      const favIdx = [p1,px,p2].indexOf(Math.max(p1,px,p2));
+      return `<div class="section" style="animation-delay:${i*50}ms">
+        <h3>${entry.match.h} vs ${entry.match.a}</h3>
+        <div class="probrow">
+          ${probChip(entry.match.h, p1, favIdx===0)}
+          ${probChip('Draw', px, favIdx===1)}
+          ${probChip(entry.match.a, p2, favIdx===2)}
+        </div>
+      </div>`;
+    }).join('');
+    section.innerHTML = html;
+  }catch(e){
+    document.getElementById('multi-section').innerHTML = `<div class="empty" style="padding:12px 0">Could not load analysis.</div>`;
   }
 }
 
@@ -253,12 +373,12 @@ async function renderPlayers(){
 function filterPlayers(q){
   q = (q||'').toLowerCase();
   const list = PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).sort((a,b)=>b.shots90-a.shots90).slice(0,100);
-  document.getElementById('playerList').innerHTML = list.length ? list.map(p=>`
-    <div class="prow">
+  document.getElementById('playerList').innerHTML = list.length ? list.map((p,i)=>`
+    <div class="prow" style="animation-delay:${Math.min(i,12)*30}ms">
       <div class="pn">${p.name}<div class="pp">${p.team} · ${p.compName||''} · ${p.goals}g ${p.assists}a in ${p.apps} apps</div></div>
       <div class="stat">${p.shots90}<div class="pp">sh/90 (${p.sot90} on target)</div></div>
     </div>
-  `).join('') : '<div class="empty">No players found.</div>';
+  `).join('') : '<div class="empty"><span class="big">🔍</span>No players found.</div>';
 }
 
 function setPage(p){
@@ -266,8 +386,11 @@ function setPage(p){
   document.getElementById('nav-matches').classList.toggle('on', p==='matches');
   document.getElementById('nav-players').classList.toggle('on', p==='players');
   document.getElementById('dayTabs').style.display = p==='matches' ? 'flex' : 'none';
+  document.getElementById('selToggle').style.display = p==='matches' ? 'block' : 'none';
+  if(p!=='matches' && selectMode) toggleSelectMode();
   if(p==='matches') render();
   else renderPlayers();
+  renderFab();
 }
 
 loadMatches();
