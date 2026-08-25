@@ -168,12 +168,18 @@ async function scrapePlayers(leagueName, teams) {
       const cats = statsData?.splits?.categories || [];
       const gen = cats.find(c => c.name === 'general')?.stats || [];
       const off = cats.find(c => c.name === 'offensive')?.stats || [];
+      const def = cats.find(c => c.name === 'defensive')?.stats || [];
       const apps = statVal(gen, 'appearances');
       const min = statVal(gen, 'minutes');
       const g = statVal(off, 'totalGoals');
       const a = statVal(off, 'goalAssists');
       const shots = statVal(off, 'totalShots');
       const sot = statVal(off, 'shotsOnTarget');
+      const yellow = statVal(gen, 'yellowCards');
+      const red = statVal(gen, 'redCards');
+      const fouls = statVal(gen, 'foulsCommitted');
+      const corners = statVal(gen, 'wonCorners');
+      const tackles = statVal(def, 'totalTackles');
       if (apps === 0 && min === 0) return null;
       const per90 = min > 0 ? min / 90 : 0;
       return {
@@ -183,6 +189,7 @@ async function scrapePlayers(leagueName, teams) {
         apps, mins: min, goals: g, assists: a,
         shots90: per90 ? +(shots / per90).toFixed(2) : 0,
         sot90: per90 ? +(sot / per90).toFixed(2) : 0,
+        yellowCards: yellow, redCards: red, fouls, corners, tackles,
         team: team.displayName || team.name, compName: leagueName,
       };
     });

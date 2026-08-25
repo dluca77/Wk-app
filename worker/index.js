@@ -104,7 +104,7 @@ function buildMatchBase(match, standings, players) {
     .filter(p => p.team === team && p.apps >= 1 && p.mins >= 20)
     .sort((a, b) => b.shots90 - a.shots90)
     .slice(0, 5)
-    .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, sot90: p.sot90, goals: p.goals, assists: p.assists, apps: p.apps }));
+    .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, sot90: p.sot90, goals: p.goals, assists: p.assists, apps: p.apps, yellowCards: p.yellowCards, redCards: p.redCards, fouls: p.fouls, corners: p.corners }));
 
   return {
     matchInfo: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
@@ -118,8 +118,8 @@ function singleMatchPromptBlock(b) {
   const m = b.matchInfo;
   return `Wedstrijd: ${m.h} vs ${m.a} (${m.compName || ''}, ${m.date} ${m.time}).
 Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(b.model.pHome * 100).toFixed(1)}%, gelijk ${(b.model.pDraw * 100).toFixed(1)}%, uit ${(b.model.pAway * 100).toFixed(1)}%.
-Spelers met de meeste schoten per 90 min bij ${m.h}: ${b.homePlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.
-Spelers met de meeste schoten per 90 min bij ${m.a}: ${b.awayPlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.`;
+Spelers met de meeste schoten per 90 min bij ${m.h}: ${b.homePlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen)`).join(', ') || 'nog geen data'}.
+Spelers met de meeste schoten per 90 min bij ${m.a}: ${b.awayPlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen)`).join(', ') || 'nog geen data'}.`;
 }
 
 async function runAi(env, prompt) {
@@ -226,7 +226,7 @@ export default {
 
       const base = buildMatchBase(match, standingsData.standings, playersData.players);
       const prompt = `Je bent een nuchtere voetbalanalist. ${singleMatchPromptBlock(base)}
-Geef in maximaal 4 zinnen Nederlandstalige analyse: wie is favoriet, en welke 1-2 spelers zijn interessant om op te letten voor schoten/doelpunten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
+Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten (geel/rood/overtredingen). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
       const analysis = await runAi(env, prompt);
 
       return json({
