@@ -15,6 +15,17 @@ const LEAGUES = {
   'ger.1': 'Bundesliga',
   'ita.1': 'Serie A',
   'fra.1': 'Ligue 1',
+  // Bredere dekking zodat er op meer dagen daadwerkelijk iets te zien is
+  // (net als op Livescore) — niet alleen de "grote 5" + Europese bekers.
+  'eng.2': 'Championship',
+  'ned.2': 'Eerste Divisie',
+  'por.1': 'Primeira Liga',
+  'bel.1': 'Pro League',
+  'tur.1': 'Süper Lig',
+  'sco.1': 'Scottish Premiership',
+  'usa.1': 'MLS',
+  'mex.1': 'Liga MX',
+  'bra.1': 'Brasileirão',
 };
 const SEASON = process.env.SEASON || '2026';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
@@ -154,17 +165,21 @@ async function scrapeLeague(slug, leagueName) {
 }
 
 async function main() {
-  const allMatches = [];
-  const allPlayers = [];
-  for (const [slug, name] of Object.entries(LEAGUES)) {
+  // Competities parallel verwerken (i.p.v. één voor één) — bij 18 competities
+  // scheelt dat een veelvoud aan wall-clock tijd. Concurrency-limiet van 4
+  // om ESPN niet met te veel gelijktijdige requests te bestoken.
+  const entries = Object.entries(LEAGUES);
+  const results = await pool(entries, 4, async ([slug, name]) => {
     try {
-      const { matches, players } = await scrapeLeague(slug, name);
-      allMatches.push(...matches);
-      allPlayers.push(...players);
+      return await scrapeLeague(slug, name);
     } catch (e) {
       console.error(`${name} FOUT: ${e.message}`);
+      return { matches: [], players: [] };
     }
-  }
+  });
+
+  const allMatches = results.flatMap(r => r.matches);
+  const allPlayers = results.flatMap(r => r.players);
   process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, updatedAt: new Date().toISOString() }));
 }
 

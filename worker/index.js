@@ -8,7 +8,7 @@
 // - Winkans per team (eigen Poisson-model op basis van opgebouwde vorm)
 // - Spelersvoorspellingen: schoten/schoten-op-doel per 90 min, dit seizoen
 //
-// Beperking: dekt 9 vaste competities; Europa League/Conference League
+// Beperking: dekt 18 vaste competities; Europa League/Conference League
 // tonen (nog) geen teams zolang ESPN de groepsfase niet heeft opgezet, en
 // spelersstats van een net gestarte competitie kunnen leeg zijn totdat er
 // wedstrijden gespeeld zijn — vult zichzelf organisch aan.

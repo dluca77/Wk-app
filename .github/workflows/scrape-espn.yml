@@ -6,7 +6,7 @@ name: Scrape wedstrijden + spelerstats (ESPN)
 # vanuit GitHub Actions. Zie scripts/scrape-espn.mjs voor de toelichting.
 on:
   schedule:
-    - cron: '*/15 * * * *' # elke 15 min i.p.v. 5 — het spelersgedeelte doet veel requests (team → athletes → stats per speler)
+    - cron: '*/20 * * * *' # elke 20 min — 18 competities × team/athlete/stats-requests kost tijd
   workflow_dispatch: {}
 
 jobs:
