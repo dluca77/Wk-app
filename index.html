@@ -12,9 +12,14 @@
   --grad:linear-gradient(135deg,#2ee6ae,#4d9fff);
   --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
 }
+html.light-theme{
+  --bg:#f4f6f9; --bg2:#ffffff; --card:#ffffff; --card2:#eef1f6; --border:#dfe4ec;
+  --text:#111826; --muted:#5b6576; --muted2:#8993a3;
+  --mint:#0fae7f; --mint2:#0c9068; --red:#e0384a; --amber:#c8790e; --blue:#2c6fd6;
+}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:calc(64px + var(--safe-b));overflow-x:hidden;-webkit-font-smoothing:antialiased;min-height:100vh;position:relative}
+html{-webkit-text-size-adjust:100%;transition:background .2s ease}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding-bottom:calc(64px + var(--safe-b));overflow-x:hidden;-webkit-font-smoothing:antialiased;min-height:100vh;position:relative;transition:background .2s ease,color .2s ease}
 @keyframes fadeInUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
@@ -29,14 +34,59 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .bg-blobs{display:none}
 
 .top{position:sticky;top:0;z-index:10;background:rgba(10,14,20,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:calc(10px + var(--safe-t)) 14px 8px;box-shadow:0 4px 14px -8px rgba(0,0,0,.45)}
-.top-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;max-width:760px;margin-left:auto;margin-right:auto;width:100%}
-.top h1{font-size:16px;margin:0;font-weight:800;letter-spacing:-.01em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;display:flex;align-items:center;gap:7px}
-.top h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px 1px rgba(46,230,174,.7);animation:pulseDot 2s ease-in-out infinite}
-.selbtn{font-size:13px;font-weight:700;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:7px 14px;border-radius:7px;cursor:pointer;transition:all .15s cubic-bezier(.2,.8,.3,1);user-select:none}
+.top-row{display:flex;align-items:center;gap:16px;margin-bottom:10px;max-width:min(1500px,96vw);margin-left:auto;margin-right:auto;width:100%}
+.brand{display:flex;align-items:center;gap:9px;flex:none}
+.brand .logo{width:28px;height:28px;border-radius:8px;background:var(--grad);color:#04231b;font-weight:900;font-size:15px;display:flex;align-items:center;justify-content:center;flex:none}
+.top h1{font-size:16px;margin:0;font-weight:800;letter-spacing:-.01em;color:var(--text);white-space:nowrap}
+.toptabs{display:none}
+.top-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none}
+.top-search-wrap{position:relative;display:none}
+.top-search{width:220px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;transition:all .15s ease}
+.top-search:focus{outline:none;border-color:var(--mint2);width:280px}
+.search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card2);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 30px -10px rgba(0,0,0,.6);max-height:360px;overflow-y:auto;display:none;z-index:30}
+.search-results.on{display:block}
+.sr-item{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;font-size:13px;color:#dbe4f0;transition:background .1s}
+.sr-item:hover{background:var(--card)}
+.sr-item .sr-sub{color:var(--muted2);font-size:11px;margin-left:auto}
+.sr-empty{padding:14px;text-align:center;color:var(--muted);font-size:12.5px}
+.iconbtn{width:34px;height:34px;border-radius:8px;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--muted);transition:all .15s ease;position:relative;flex:none}
+.iconbtn:hover{border-color:var(--mint2);color:var(--text)}
+.iconbtn:active{transform:scale(.92)}
+.cal-btn{overflow:hidden}
+.cal-btn input[type=date]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.selbtn{font-size:13px;font-weight:700;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:7px 14px;border-radius:7px;cursor:pointer;transition:all .15s cubic-bezier(.2,.8,.3,1);user-select:none;flex:none}
 .selbtn:hover{border-color:var(--mint2);color:var(--text)}
 .selbtn:active{transform:scale(.94)}
 .selbtn.on{background:var(--mint);color:#04231b;border-color:var(--mint);box-shadow:0 3px 12px -3px rgba(46,230,174,.5)}
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;max-width:760px;margin:0 auto}
+.settings-pop{position:absolute;top:100%;right:14px;margin-top:8px;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:6px;box-shadow:0 14px 34px -12px rgba(0,0,0,.6);display:none;z-index:30;min-width:180px}
+.settings-pop.on{display:block;animation:popIn .18s cubic-bezier(.34,1.56,.64,1)}
+.sp-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:#dbe4f0}
+.sp-row:hover{background:var(--card)}
+.switch{width:36px;height:20px;border-radius:20px;background:var(--border);position:relative;transition:background .2s ease;flex:none}
+.switch .knob{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:transform .2s cubic-bezier(.34,1.56,.64,1);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.switch.on{background:var(--mint)}
+.switch.on .knob{transform:translateX(16px)}
+@media (min-width:640px){
+  .top-search-wrap{display:block}
+}
+@media (min-width:900px){
+  .toptabs{display:flex;gap:4px;flex:none}
+  .ttab{padding:8px 14px;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s ease;display:flex;align-items:center;gap:6px}
+  .ttab:hover{color:var(--text)}
+  .ttab.on{color:var(--text);background:var(--card)}
+  .ttab .beta{font-size:8.5px;font-weight:800;background:var(--mint);color:#04231b;padding:1px 5px;border-radius:5px;letter-spacing:.03em}
+}
+.tabs-row{display:flex;align-items:center;gap:8px;max-width:min(1500px,96vw);margin:0 auto}
+.filter-wrap{position:relative;flex:none}
+.filter-btn{position:relative}
+.fbadge{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--mint);border:2px solid var(--bg)}
+.filter-pop{position:absolute;top:calc(100% + 8px);right:0;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:6px;box-shadow:0 14px 34px -12px rgba(0,0,0,.6);display:none;z-index:30;min-width:160px}
+.filter-pop.on{display:block;animation:popIn .18s cubic-bezier(.34,1.56,.64,1)}
+.fp-h{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2);font-weight:700;padding:6px 10px 4px}
+.fp-opt{padding:8px 10px;border-radius:8px;font-size:13px;color:#dbe4f0;cursor:pointer;transition:background .1s}
+.fp-opt:hover{background:var(--card)}
+.fp-opt.on{background:var(--mint);color:#04231b;font-weight:700}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;flex:1;min-width:0}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:none;padding:7px 15px;border-radius:7px;background:var(--card);color:var(--muted);font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer;white-space:nowrap;transition:all .15s cubic-bezier(.2,.8,.3,1)}
 .tab:active{transform:scale(.94)}
@@ -49,7 +99,6 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
   .sidebar{display:block;width:260px;flex:none;position:sticky;top:96px;padding:14px 10px 40px;border-right:1px solid var(--border);max-height:calc(100vh - 96px);overflow-y:auto;mask-image:linear-gradient(180deg,#000 0%,#000 calc(100% - 32px),transparent 100%);-webkit-mask-image:linear-gradient(180deg,#000 0%,#000 calc(100% - 32px),transparent 100%)}
   .wrap{flex:1;max-width:none;margin:0;padding:14px 24px 48px}
   .matchgrid{max-width:1040px}
-  .top-row,.tabs{max-width:min(1500px,96vw)}
 }
 @media (min-width:1400px){
   .sidebar{width:280px}
@@ -59,10 +108,20 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .sb-search:focus{outline:none;border-color:var(--mint)}
 .sb-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2);font-weight:700;margin:0 0 8px;padding:0 4px}
 .sb-list{display:flex;flex-direction:column;margin-bottom:20px}
-.sb-item{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:7px;font-size:14px;color:#c7d0dd;cursor:pointer;transition:background .15s ease,padding-left .15s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid transparent}
+.sb-item{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:7px;font-size:14px;color:#c7d0dd;cursor:pointer;transition:background .15s ease,padding-left .15s ease;white-space:nowrap;border-left:2px solid transparent}
 .sb-item:hover{background:var(--card);border-left-color:var(--mint)}
+.sb-item span:not(.cnt):not(.pin){overflow:hidden;text-overflow:ellipsis}
 .sb-item .ico{font-size:13px;flex:none;opacity:.85}
-.sb-item .cnt{margin-left:auto;color:var(--muted2);font-size:10.5px;font-weight:600}
+.sb-item .cnt{margin-left:auto;color:var(--muted2);font-size:10.5px;font-weight:600;flex:none}
+.sb-item .pin{flex:none;font-size:13px;color:var(--muted2);opacity:0;transition:opacity .12s ease,color .12s ease;padding-left:2px}
+.sb-item:hover .pin{opacity:1}
+.sb-item .pin.on{opacity:1;color:var(--mint)}
+.sb-more{padding:9px 5px;font-size:12px;font-weight:700;color:var(--mint2);cursor:pointer;letter-spacing:.02em;margin-top:2px}
+.sb-more:hover{color:var(--mint)}
+.sb-promo{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;margin-top:8px}
+.sb-promo-ico{width:36px;height:36px;border-radius:50%;background:rgba(46,230,174,.12);color:var(--mint);font-size:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 10px}
+.sb-promo-t{font-size:13px;font-weight:700;color:#dbe4f0;margin-bottom:4px}
+.sb-promo-s{font-size:11.5px;color:var(--muted);line-height:1.5}
 .matchgrid{display:flex;flex-direction:column;gap:12px}
 .empty{color:var(--muted);text-align:center;padding:64px 20px;font-size:14px;animation:fadeIn .3s ease}
 .empty .big{font-size:36px;display:block;margin-bottom:12px;opacity:.6}
@@ -105,6 +164,9 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .score-col{display:flex;flex-direction:column;gap:8px;align-items:flex-end;min-width:22px}
 .score-col .s{font-size:17px;font-weight:800;line-height:1;color:var(--muted);transition:color .15s ease}
 .score-col .s.w{color:var(--mint)}
+.fav-star{flex:none;font-size:17px;color:var(--muted2);cursor:pointer;transition:transform .15s cubic-bezier(.34,1.56,.64,1),color .15s ease;padding:2px}
+.fav-star:hover{transform:scale(1.2)}
+.fav-star.on{color:#ffcc33}
 .pbar{display:flex;height:4px;border-radius:3px;overflow:hidden;margin-top:6px;background:var(--card2)}
 .pbar div{height:100%;transition:width .6s cubic-bezier(.16,1,.3,1)}
 .p1{background:var(--mint)} .px{background:var(--muted2)} .p2{background:var(--blue)}
@@ -157,10 +219,44 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 
 <div class="top">
   <div class="top-row">
-    <h1><span class="dot"></span>Match Insights</h1>
-    <div class="selbtn" id="selToggle" onclick="toggleSelectMode()">Select</div>
+    <div class="brand">
+      <span class="logo">M</span>
+      <h1>Match Insights</h1>
+    </div>
+    <div class="toptabs" id="topTabs">
+      <div class="ttab on" data-page="matches" onclick="setPage('matches')">Matches</div>
+      <div class="ttab" data-page="players" onclick="setPage('players')">Insights <span class="beta">BETA</span></div>
+      <div class="ttab" data-page="favorites" onclick="setPage('favorites')">Favorites</div>
+    </div>
+    <div class="top-actions">
+      <div class="top-search-wrap">
+        <input class="top-search" id="topSearch" placeholder="Search teams or competitions…" oninput="onTopSearch(this.value)" onfocus="onTopSearch(this.value)">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+      <div class="iconbtn cal-btn" id="calBtn" title="Jump to date" onclick="toggleCalPicker()">📅<input type="date" id="calInput" onchange="jumpToDate(this.value)"></div>
+      <div class="selbtn" id="selToggle" onclick="toggleSelectMode()">Select</div>
+      <div class="iconbtn" id="gearBtn" onclick="toggleSettings()">⚙</div>
+    </div>
   </div>
-  <div class="tabs" id="dayTabs"></div>
+  <div class="tabs-row" id="tabsRow">
+    <div class="tabs" id="dayTabs"></div>
+    <div class="filter-wrap">
+      <div class="iconbtn filter-btn" id="filterBtn" onclick="toggleFilterPop()">⚏<span id="filterBadge" class="fbadge" style="display:none"></span></div>
+      <div class="filter-pop" id="filterPop">
+        <div class="fp-h">Status</div>
+        <div class="fp-opt" data-v="all" onclick="setStatusFilter('all')">All matches</div>
+        <div class="fp-opt" data-v="live" onclick="setStatusFilter('live')">🔴 Live now</div>
+        <div class="fp-opt" data-v="upcoming" onclick="setStatusFilter('upcoming')">Upcoming</div>
+        <div class="fp-opt" data-v="done" onclick="setStatusFilter('done')">Finished</div>
+      </div>
+    </div>
+  </div>
+  <div class="settings-pop" id="settingsPop">
+    <div class="sp-row" onclick="toggleTheme()">
+      <span>Light mode</span>
+      <div class="switch" id="themeSwitch"><div class="knob"></div></div>
+    </div>
+  </div>
 </div>
 
 <div class="layout">
@@ -172,7 +268,8 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 
 <div class="bottomnav">
   <div class="bnbtn on" id="nav-matches" onclick="setPage('matches')"><span class="ic">⚽</span>Matches</div>
-  <div class="bnbtn" id="nav-players" onclick="setPage('players')"><span class="ic">👤</span>Players</div>
+  <div class="bnbtn" id="nav-players" onclick="setPage('players')"><span class="ic">📊</span>Insights</div>
+  <div class="bnbtn" id="nav-favorites" onclick="setPage('favorites')"><span class="ic">⭐</span>Favorites</div>
 </div>
 
 <div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
@@ -184,6 +281,35 @@ const API = 'https://wk2026-proxy.isaak-elia.workers.dev';
 let MATCHES = [], PLAYERS = [], page = 'matches', selDate = null;
 let groupOpen = {};
 let selectMode = false, selectedIds = new Set();
+let statusFilter = 'all';
+let sidebarExpanded = false;
+const store = {
+  get(k, fb){ try{ return JSON.parse(localStorage.getItem(k)) ?? fb; }catch{ return fb; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} },
+};
+let pinnedComps = new Set(store.get('pinnedComps', []));
+let favMatches = new Set(store.get('favMatches', []));
+
+const FLAG_BY_COUNTRY = {
+  England:'🏴', Spain:'🇪🇸', Germany:'🇩🇪', Italy:'🇮🇹', France:'🇫🇷', Netherlands:'🇳🇱',
+  Belgium:'🇧🇪', Portugal:'🇵🇹', Turkey:'🇹🇷', Scotland:'🏴', 'United States':'🇺🇸', Mexico:'🇲🇽',
+  Brazil:'🇧🇷', Argentina:'🇦🇷', 'Saudi Arabia':'🇸🇦', Wales:'🏴', Ireland:'🇮🇪', Denmark:'🇩🇰',
+  Sweden:'🇸🇪', Norway:'🇳🇴', Finland:'🇫🇮', Poland:'🇵🇱', Czechia:'🇨🇿', Slovakia:'🇸🇰',
+  Hungary:'🇭🇺', Romania:'🇷🇴', Bulgaria:'🇧🇬', Greece:'🇬🇷', Croatia:'🇭🇷', Serbia:'🇷🇸',
+  Austria:'🇦🇹', Switzerland:'🇨🇭', Ukraine:'🇺🇦', Israel:'🇮🇱', Japan:'🇯🇵', 'South Korea':'🇰🇷',
+  China:'🇨🇳', Australia:'🇦🇺', 'South Africa':'🇿🇦', Egypt:'🇪🇬', Morocco:'🇲🇦', Nigeria:'🇳🇬',
+  Canada:'🇨🇦', Chile:'🇨🇱', Colombia:'🇨🇴', Peru:'🇵🇪', Ecuador:'🇪🇨', Paraguay:'🇵🇾',
+  Uruguay:'🇺🇾', Venezuela:'🇻🇪', Bolivia:'🇧🇴', 'Costa Rica':'🇨🇷', 'Ivory Coast':'🇨🇮', Algeria:'🇩🇿',
+  Tunisia:'🇹🇳', Qatar:'🇶🇦', 'United Arab Emirates':'🇦🇪', India:'🇮🇳',
+};
+function compFlag(compName, compId){
+  const n = (compName||'').toLowerCase();
+  if(/women'?s?\b|\bfrauen\b|\bdames\b/.test(n)) return '👩';
+  if(/champions league|europa league|conference league|world cup|european championship|nations league/.test(n)) return '🌍';
+  const prefix = (compId||'').split('.')[0];
+  const country = COUNTRY_BY_PREFIX[prefix];
+  return (country && FLAG_BY_COUNTRY[country]) || '🌐';
+}
 
 function nlToday(){
   // Wedstrijddata staat al in NL-tijd (server-side omgerekend) — "vandaag"
@@ -265,29 +391,70 @@ function renderFab(){
 
 function buildSidebar(){
   const sb = document.getElementById('sidebar');
-  const comps = new Map(); // name -> {count, logo}
+  const comps = new Map(); // name -> {count, logo, compId}
   for(const m of MATCHES){
     const key = m.compName || 'Other';
-    if(!comps.has(key)) comps.set(key, {count:0, logo:m.compLogo});
+    if(!comps.has(key)) comps.set(key, {count:0, logo:m.compLogo, compId:m.compId});
     comps.get(key).count++;
   }
-  const names = [...comps.keys()].sort();
+  const sortedNames = [...comps.keys()].sort((a,b)=>compSortKey(a,comps.get(a).compId).localeCompare(compSortKey(b,comps.get(b).compId)));
+  const pinned = sortedNames.filter(n=>pinnedComps.has(n));
+  const curated = sortedNames.filter(n=>!pinnedComps.has(n)).slice(0,6);
+  const rest = sortedNames.filter(n=>!pinnedComps.has(n) && !curated.includes(n));
+
+  const item = n => {
+    const c = comps.get(n);
+    const ico = c.logo ? `<img class="crest" src="${c.logo}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ico',textContent:'${compFlag(n,c.compId)}'}))">` : `<span class="ico">${compFlag(n,c.compId)}</span>`;
+    const isPinned = pinnedComps.has(n);
+    const safe = n.replace(/'/g,"\\'");
+    return `<div class="sb-item" onclick="jumpToComp('${safe}')">${ico}<span>${n}</span><span class="cnt">${c.count}</span><span class="pin ${isPinned?'on':''}" onclick="event.stopPropagation();togglePinComp('${safe}')">${isPinned?'★':'☆'}</span></div>`;
+  };
+
+  const showPromo = pinnedComps.size === 0 && favMatches.size === 0;
   sb.innerHTML = `
     <input class="sb-search" id="sbSearch" placeholder="Search competition…" oninput="filterSidebar(this.value)">
-    <div class="sb-h">Competitions</div>
-    <div class="sb-list" id="sbList">${names.map(n=>{
-      const c = comps.get(n);
-      const ico = c.logo ? `<img class="crest" src="${c.logo}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ico',textContent:'🌐'}))">` : `<span class="ico">🌐</span>`;
-      return `<div class="sb-item" onclick="jumpToComp('${n.replace(/'/g,"\\'")}')">${ico}<span>${n}</span><span class="cnt">${c.count}</span></div>`;
-    }).join('')}</div>
+    <div class="sb-list" id="sbList">
+      ${pinned.length ? `<div class="sb-h">Pinned</div>${pinned.map(item).join('')}` : ''}
+      <div class="sb-h">Competitions</div>
+      ${curated.map(item).join('')}
+      ${rest.length ? `
+        <div class="sb-more" onclick="sidebarExpanded=!sidebarExpanded;buildSidebar()">
+          ${sidebarExpanded ? '▲ Show less' : `▼ All competitions (${rest.length})`}
+        </div>
+        ${sidebarExpanded ? rest.map(item).join('') : ''}
+      ` : ''}
+    </div>
+    ${showPromo ? `
+      <div class="sb-promo">
+        <div class="sb-promo-ico">★</div>
+        <div class="sb-promo-t">Pin your favorites</div>
+        <div class="sb-promo-s">Star a competition or match for quick access.</div>
+      </div>
+    ` : ''}
   `;
 }
 
+function togglePinComp(name){
+  if(pinnedComps.has(name)) pinnedComps.delete(name); else pinnedComps.add(name);
+  store.set('pinnedComps', [...pinnedComps]);
+  buildSidebar();
+  if(page==='favorites') render();
+}
+
 function filterSidebar(q){
-  q = (q||'').toLowerCase();
+  q = (q||'').trim().toLowerCase();
+  if(q && !sidebarExpanded){
+    sidebarExpanded = true;
+    buildSidebar();
+    document.getElementById('sbSearch').value = q;
+    document.getElementById('sbSearch').focus();
+  }
   document.querySelectorAll('#sbList .sb-item').forEach(el=>{
     const name = el.textContent.toLowerCase();
-    el.style.display = name.includes(q) ? '' : 'none';
+    el.style.display = !q || name.includes(q) ? '' : 'none';
+  });
+  document.querySelectorAll('#sbList .sb-h, #sbList .sb-more').forEach(el=>{
+    el.style.display = q ? 'none' : '';
   });
 }
 
@@ -353,12 +520,15 @@ function compSortKey(compName, compId){
   return `3_${country}_${compName}`;
 }
 
-function render(){
-  if(page !== 'matches') return;
-  const ms = MATCHES.filter(m=>m.date===selDate).sort((a,b)=>a.time.localeCompare(b.time));
-  const el = document.getElementById('view');
-  if(!ms.length){ el.innerHTML = '<div class="empty"><span class="big">📭</span>No matches for this day.</div>'; return; }
+function matchesStatusFilter(m){
+  if(statusFilter==='all') return true;
+  if(statusFilter==='live') return isLive(m);
+  if(statusFilter==='done') return isDone(m);
+  if(statusFilter==='upcoming') return !isLive(m) && !isDone(m);
+  return true;
+}
 
+function renderCardGroup(ms){
   const groups = new Map();
   for(const m of ms){
     const key = m.compName || 'Other';
@@ -369,7 +539,7 @@ function render(){
     const ca = groups.get(a)[0]?.compId, cb = groups.get(b)[0]?.compId;
     return compSortKey(a,ca).localeCompare(compSortKey(b,cb));
   });
-  const groupsHtml = keys.map((key, idx)=>{
+  return keys.map((key, idx)=>{
     const list = groups.get(key);
     if(!(key in groupOpen)) groupOpen[key] = true;
     const open = groupOpen[key];
@@ -383,6 +553,7 @@ function render(){
       const hW = m.result && +hs > +as;
       const aW = m.result && +as > +hs;
       const checked = selectedIds.has(m.apiId);
+      const isFav = favMatches.has(m.apiId);
       const clickAction = selectMode ? `toggleSelected('${m.apiId}')` : `openMatch('${m.apiId}')`;
       return `<div class="card ${statusClass} ${selectMode?'sel-mode':''}" style="animation-delay:${Math.min(ci,10)*25}ms" onclick="${clickAction}">
         ${selectMode ? `<div class="checkbox ${checked?'checked':''}">${checked?'✓':''}</div>` : ''}
@@ -395,6 +566,7 @@ function render(){
           <div class="s ${hW?'w':''}">${hs ?? ''}</div>
           <div class="s ${aW?'w':''}">${as ?? ''}</div>
         </div>
+        ${!selectMode ? `<span class="fav-star ${isFav?'on':''}" onclick="event.stopPropagation();toggleFavMatch('${m.apiId}')">${isFav?'★':'☆'}</span>` : ''}
       </div>`;
     }).join('');
     const compLogo = list[0]?.compLogo;
@@ -403,7 +575,7 @@ function render(){
       : `<span class="flag">🌐</span>`;
     const accent = compAccent(key);
     return `<div class="comp-group" style="animation-delay:${Math.min(idx,14)*30}ms">
-      <div class="comp-hdr" style="--comp-accent:${accent}" onclick="groupOpen['${key}']=!groupOpen['${key}'];render()">
+      <div class="comp-hdr" style="--comp-accent:${accent}" onclick="groupOpen['${key}']=!groupOpen['${key}'];${page==='favorites'?'renderFavorites':'render'}()">
         ${compIcon}
         <span class="name">${key}</span>
         <span class="count">${list.length}</span>
@@ -412,7 +584,14 @@ function render(){
       ${open ? `<div class="group-body">${cards}</div>` : ''}
     </div>`;
   }).join('');
-  el.innerHTML = `<div class="matchgrid">${groupsHtml}</div>`;
+}
+
+function render(){
+  if(page !== 'matches') return;
+  const ms = MATCHES.filter(m=>m.date===selDate && matchesStatusFilter(m)).sort((a,b)=>a.time.localeCompare(b.time));
+  const el = document.getElementById('view');
+  if(!ms.length){ el.innerHTML = '<div class="empty"><span class="big">📭</span>No matches for this day.</div>'; return; }
+  el.innerHTML = `<div class="matchgrid">${renderCardGroup(ms)}</div>`;
 }
 
 function teamInitials(name){
@@ -674,12 +853,85 @@ function setPage(p){
   page = p;
   document.getElementById('nav-matches').classList.toggle('on', p==='matches');
   document.getElementById('nav-players').classList.toggle('on', p==='players');
-  document.getElementById('dayTabs').style.display = p==='matches' ? 'flex' : 'none';
+  document.getElementById('nav-favorites')?.classList.toggle('on', p==='favorites');
+  document.querySelectorAll('.ttab').forEach(el=>el.classList.toggle('on', el.dataset.page===p));
+  document.getElementById('tabsRow').style.display = (p==='matches'||p==='favorites') ? 'flex' : 'none';
   document.getElementById('selToggle').style.display = p==='matches' ? 'block' : 'none';
   if(p!=='matches' && selectMode) toggleSelectMode();
   if(p==='matches') render();
+  else if(p==='favorites') renderFavorites();
   else renderPlayers();
   renderFab();
+}
+
+function toggleTheme(){
+  const light = document.documentElement.classList.toggle('light-theme');
+  store.set('theme', light ? 'light' : 'dark');
+  document.getElementById('themeSwitch').classList.toggle('on', light);
+}
+(function initTheme(){
+  if(store.get('theme','dark') === 'light') document.documentElement.classList.add('light-theme');
+})();
+
+function toggleSettings(){
+  document.getElementById('settingsPop').classList.toggle('on');
+  document.getElementById('themeSwitch').classList.toggle('on', document.documentElement.classList.contains('light-theme'));
+}
+function toggleFilterPop(){ document.getElementById('filterPop').classList.toggle('on'); }
+function setStatusFilter(v){
+  statusFilter = v;
+  document.querySelectorAll('.fp-opt').forEach(el=>el.classList.toggle('on', el.dataset.v===v));
+  document.getElementById('filterBadge').style.display = v==='all' ? 'none' : 'block';
+  document.getElementById('filterPop').classList.remove('on');
+  render();
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#settingsPop') && !e.target.closest('#gearBtn')) document.getElementById('settingsPop')?.classList.remove('on');
+  if(!e.target.closest('#filterPop') && !e.target.closest('#filterBtn')) document.getElementById('filterPop')?.classList.remove('on');
+  if(!e.target.closest('.top-search-wrap')) document.getElementById('searchResults')?.classList.remove('on');
+});
+
+function toggleCalPicker(){ document.getElementById('calInput').showPicker?.() ?? document.getElementById('calInput').click(); }
+function jumpToDate(d){
+  if(!d || !MATCHES.some(m=>m.date===d)) return;
+  selDate = d;
+  buildDayTabs();
+  if(page==='matches') render(); else if(page==='favorites') renderFavorites();
+}
+
+function onTopSearch(q){
+  const box = document.getElementById('searchResults');
+  q = (q||'').trim().toLowerCase();
+  if(!q){ box.classList.remove('on'); box.innerHTML=''; return; }
+  const compNames = [...new Set(MATCHES.map(m=>m.compName).filter(Boolean))].filter(n=>n.toLowerCase().includes(q)).slice(0,5);
+  const teamMatches = MATCHES.filter(m=>m.h.toLowerCase().includes(q) || m.a.toLowerCase().includes(q)).slice(0,8);
+  let html = '';
+  if(compNames.length){
+    html += compNames.map(n=>`<div class="sr-item" onclick="jumpToComp('${n.replace(/'/g,"\\'")}');document.getElementById('topSearch').value='';document.getElementById('searchResults').classList.remove('on')"><span>🏆 ${n}</span></div>`).join('');
+  }
+  if(teamMatches.length){
+    html += teamMatches.map(m=>`<div class="sr-item" onclick="document.getElementById('searchResults').classList.remove('on');openMatch('${m.apiId}')"><span>${m.h} vs ${m.a}</span><span class="sr-sub">${m.compName||''}</span></div>`).join('');
+  }
+  box.innerHTML = html || '<div class="sr-empty">No matches or competitions found</div>';
+  box.classList.add('on');
+}
+
+function toggleFavMatch(apiId){
+  if(favMatches.has(apiId)) favMatches.delete(apiId); else favMatches.add(apiId);
+  store.set('favMatches', [...favMatches]);
+  if(page==='matches') render(); else if(page==='favorites') renderFavorites();
+  buildSidebar();
+}
+
+function renderFavorites(){
+  const el = document.getElementById('view');
+  const ms = MATCHES.filter(m => m.date===selDate && (favMatches.has(m.apiId) || pinnedComps.has(m.compName)))
+    .sort((a,b)=>a.time.localeCompare(b.time));
+  if(!ms.length){
+    el.innerHTML = `<div class="empty"><span class="big">⭐</span>No favorites for this day yet.<br><span style="font-size:12px;opacity:.7">Star a match or pin a competition to see it here.</span></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="matchgrid">${renderCardGroup(ms)}</div>`;
 }
 
 loadMatches();
