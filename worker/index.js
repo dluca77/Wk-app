@@ -166,12 +166,38 @@ async function runAi(env, prompt) {
   }
 }
 
+// Namen met diacritics (ø, é, ñ, ...) komen soms dubbel-gecodeerd binnen via
+// de GitHub Actions-scrape-pipeline (bv. "Jørgen" -> "JÃ¸rgen") — klassiek
+// symptoom van UTF-8-bytes die ergens onderweg als Latin-1 gelezen zijn.
+// Round-trip (Latin-1 terug naar bytes, dan als UTF-8 decoderen) herstelt
+// dit; strings die al correct waren blijven ongewijzigd (round-trip levert
+// dan ongeldige UTF-8 op, dus we vallen terug op het origineel).
+function fixMojibake(s) {
+  if (typeof s !== 'string' || !/[Â-Ã][-¿]/.test(s)) return s;
+  try {
+    const repaired = Buffer.from(s, 'latin1').toString('utf8');
+    return repaired.includes('�') ? s : repaired;
+  } catch {
+    return s;
+  }
+}
+function fixMojibakeDeep(val) {
+  if (typeof val === 'string') return fixMojibake(val);
+  if (Array.isArray(val)) return val.map(fixMojibakeDeep);
+  if (val && typeof val === 'object') {
+    const out = {};
+    for (const k of Object.keys(val)) out[k] = fixMojibakeDeep(val[k]);
+    return out;
+  }
+  return val;
+}
+
 // ---------- Refresh: nieuwe scrape-data mergen met opgebouwde geschiedenis ----------
 async function ingestEspn(env, body) {
   const now = new Date();
-  const incomingMatches = Array.isArray(body.matches) ? body.matches : [];
-  const incomingPlayers = Array.isArray(body.players) ? body.players : [];
-  const incomingStandings = Array.isArray(body.standings) ? body.standings : [];
+  const incomingMatches = fixMojibakeDeep(Array.isArray(body.matches) ? body.matches : []);
+  const incomingPlayers = fixMojibakeDeep(Array.isArray(body.players) ? body.players : []);
+  const incomingStandings = fixMojibakeDeep(Array.isArray(body.standings) ? body.standings : []);
 
   // Wedstrijden mergen op apiId zodat oudere, inmiddels buiten het scrape-
   // venster gevallen wedstrijden (voor vormberekening) bewaard blijven.

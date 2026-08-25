@@ -319,6 +319,10 @@ const NL_LEAGUES = ['eredivisie', 'eerste divisie', 'keuken kampioen divisie'];
 
 function compSortKey(compName, compId){
   const n = (compName||'').toLowerCase();
+  // Vrouwenvoetbal altijd helemaal onderaan, ongeacht welke competitie —
+  // overruled alle andere tiers hierboven (ook Champions League etc.).
+  const isWomen = /women'?s?\b|\bfeminine|\bfrauen\b|\bdames\b|\(w\)$|\bw$/.test(n);
+  if(isWomen) return `9_${n}`;
   const tier0Idx = TIER0_ORDER.findIndex(t => n.includes(t));
   if(tier0Idx !== -1) return `0${tier0Idx}_${n.includes('qualif') ? 1 : 0}_${n}`;
   const isIntlTournament = /world cup|european championship|euro qualifying|nations league/.test(n)
