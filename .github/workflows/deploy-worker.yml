@@ -30,6 +30,16 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
+      - name: DEBUG probe telling per competitie
+        run: |
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
+          import json,sys,collections
+          d = json.load(sys.stdin)
+          c = collections.Counter(m.get('compId') for m in d['matches'])
+          names = {7:'CL',679:'EL',17015:'ECL',37:'Eredivisie',17:'PL',8:'La Liga',35:'Bundesliga',23:'Serie A',34:'Ligue 1'}
+          for cid,label in names.items():
+              print(label, ':', c.get(cid,0))
+          "
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
