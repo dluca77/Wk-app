@@ -460,7 +460,16 @@ async function refreshAll(env, { force = false } = {}) {
   // verwijderde Sofascore-bron, of andere competities zonder scraper)
   // niet verloren gaan.
   const existing = await kvGet(env, 'matches_all', { matches: [] });
-  const byId = new Map((existing.matches || []).map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
+  // Verweesde entries zonder 'source'-veld voor een competitie die WEL een
+  // actieve scraper heeft (COMPS hierboven) zijn gegarandeerd stale — die
+  // scraper levert elke refresh verse, source-getagde data. Zulke oude
+  // resten (uit vroegere scraper-versies, met soms verkeerde datums/namen)
+  // bleven eerder eindeloos hangen en dook telkens als "extra" wedstrijd op
+  // ondanks de fuzzy-dedup hieronder — dus nu gewoon weggooien i.p.v.
+  // proberen te matchen. Entries zonder source voor NIET-gedekte competities
+  // (bv. Australia Cup) blijven wel staan — dat is daar de enige databron.
+  const cleanedExisting = (existing.matches || []).filter(m => !(m.compId != null && COMPS[m.compId] && !m.source));
+  const byId = new Map(cleanedExisting.map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
 
   const scrapedCompIds = Object.keys(ODDS_SEEDS).map(Number);
   for (const compId of scrapedCompIds) {
