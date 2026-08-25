@@ -843,15 +843,17 @@ async function openMultiAnalysis(){
       if(p.redCards) s += `<span style="color:#ff5c6c">${p.redCards}R</span>`;
       return s;
     };
-    const playerRow = p => `<div class="prow">
-      <div class="pn">${p.name}<div class="pp">${POS_NAMES[p.pos]||p.pos||''} · ${p.apps} wedstrijden · ${p.goals}g ${p.assists}a ${cardsBadge(p)}</div></div>
+    const playerRow = (p,team) => `<div class="prow">
+      <div class="pn">${p.name} <span style="color:var(--mint2);font-weight:700">· ${team}</span><div class="pp">${POS_NAMES[p.pos]||p.pos||''} · ${p.apps} wedstrijden · ${p.goals}g ${p.assists}a ${cardsBadge(p)}</div></div>
       <div class="stat">${p.shots90}<div class="pp">schoten/90</div><div class="pp">${p.sot90} op doel/90</div></div>
     </div>`;
     html += d.matches.map((entry,i) => {
       const p1 = Math.round(entry.model.pHome*100), px = Math.round(entry.model.pDraw*100), p2 = 100-p1-px;
       const favIdx = [p1,px,p2].indexOf(Math.max(p1,px,p2));
-      const topPlayers = [...(entry.players?.home||[]), ...(entry.players?.away||[])]
-        .sort((a,b)=>b.shots90-a.shots90).slice(0,4);
+      const topPlayers = [
+        ...(entry.players?.home||[]).map(p=>({...p, team: entry.match.h})),
+        ...(entry.players?.away||[]).map(p=>({...p, team: entry.match.a})),
+      ].sort((a,b)=>b.shots90-a.shots90).slice(0,4);
       return `<div class="section" style="animation-delay:${i*50}ms">
         <h3>${entry.match.h} vs ${entry.match.a}</h3>
         <div class="probrow">
@@ -859,7 +861,7 @@ async function openMultiAnalysis(){
           ${probChip('Draw', px, favIdx===1)}
           ${probChip(entry.match.a, p2, favIdx===2)}
         </div>
-        ${topPlayers.length ? `<div class="plist" style="margin-top:8px">${topPlayers.map(playerRow).join('')}</div>` : ''}
+        ${topPlayers.length ? `<div class="plist" style="margin-top:8px">${topPlayers.map(p=>playerRow(p,p.team)).join('')}</div>` : ''}
       </div>`;
     }).join('');
     section.innerHTML = html;
