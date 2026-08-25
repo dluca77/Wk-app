@@ -146,6 +146,37 @@ async function fetchReferee(env, apiId, compId) {
   }
 }
 
+// Odds: op aanvraag bij ESPN opgehaald (Bet 365 als voorkeur, DraftKings als
+// terugval) — niet meegescraped omdat odds continu veranderen en dit alleen
+// zinvol is voor de wedstrijd die je daadwerkelijk bekijkt. Kort gecachet
+// (10 min) i.p.v. permanent, want de prijs verandert tot de aftrap.
+async function fetchOdds(env, apiId, compId) {
+  const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
+  if (!eventId || !compId) return null;
+  const cacheKey = `odds_${eventId}`;
+  const cached = await kvGet(env, cacheKey, null);
+  if (cached && (Date.now() - cached.fetchedAt) < 10 * 60 * 1000) return cached.odds;
+  try {
+    const res = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);
+    const data = await res.json();
+    const items = data?.items || [];
+    const pick = items.find(i => /bet ?365/i.test(i.provider?.name || '')) || items.find(i => i.provider?.name === 'DraftKings') || items[0];
+    let odds = null;
+    if (pick?.homeTeamOdds?.odds?.value && pick?.awayTeamOdds?.odds?.value && pick?.drawOdds?.value) {
+      odds = {
+        provider: pick.provider?.name || 'onbekend',
+        home: pick.homeTeamOdds.odds.value,
+        draw: pick.drawOdds.value,
+        away: pick.awayTeamOdds.odds.value,
+      };
+    }
+    await kvPut(env, cacheKey, { odds, fetchedAt: Date.now() });
+    return odds;
+  } catch {
+    return null;
+  }
+}
+
 function singleMatchPromptBlock(b) {
   const m = b.matchInfo;
   return `Wedstrijd: ${m.h} vs ${m.a} (${m.compName || ''}, ${m.date} ${m.time}).
@@ -291,15 +322,20 @@ export default {
 
       const base = buildMatchBase(match, standingsData.standings, playersData.players);
       const h2h = computeH2H(matchesData.matches || [], match.h, match.a);
-      const referee = await fetchReferee(env, match.apiId, match.compId);
+      const [referee, odds] = await Promise.all([
+        fetchReferee(env, match.apiId, match.compId),
+        fetchOdds(env, match.apiId, match.compId),
+      ]);
 
       const standingLine = s => s ? `${s.team}: ${s.pts} pt uit ${s.played} (${s.win}-${s.draw}-${s.loss}), doelsaldo ${s.gd >= 0 ? '+' : ''}${s.gd}${s.position ? `, positie ${s.position}` : ''}` : null;
       const h2hLine = h2h.length ? h2h.map(m => `${m.date}: ${m.h} ${m.result} ${m.a}`).join('; ') : 'geen eerdere ontmoetingen bekend';
+      const oddsLine = odds ? `Bookmaker-odds (${odds.provider}): thuis ${odds.home}, gelijk ${odds.draw}, uit ${odds.away} (decimaal — lager = grotere favoriet).` : '';
       const prompt = `Je bent een nuchtere voetbalanalist. ${singleMatchPromptBlock(base)}
 ${[standingLine(base.homeStanding), standingLine(base.awayStanding)].filter(Boolean).join('\n') || 'Geen officiële standdata beschikbaar.'}
 Laatste onderlinge duels: ${h2hLine}.
 ${referee ? `Scheidsrechter: ${referee}.` : ''}
-Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand en het onderlinge duel-verleden), welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten (geel/rood/overtredingen). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
+${oddsLine}
+Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten (geel/rood/overtredingen). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
       const analysis = await runAi(env, prompt);
 
       return json({
@@ -309,6 +345,7 @@ Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
         standings: { home: base.homeStanding, away: base.awayStanding },
         h2h,
         referee,
+        odds,
         analysis,
       });
     }

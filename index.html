@@ -477,6 +477,22 @@ async function openMatch(apiId){
     }
     const extra = renderPredictionBlock(document.getElementById('predict-section'), m, d);
     let html = extra;
+    if(d.odds){
+      const imp = v => Math.round(100/v);
+      const edgeChip = (label, decOdds, modelP) => {
+        const impliedPct = imp(decOdds);
+        const edge = Math.round(modelP*100) - impliedPct;
+        const val = edge >= 5 ? ' style="border-color:var(--mint);box-shadow:0 0 0 1px var(--mint) inset"' : '';
+        return `<div class="probchip"${val}><div class="l">${label}</div><div class="v">${decOdds}</div><div class="pp" style="margin-top:2px">${impliedPct}% impl.${edge>=5?` · +${edge}%`:''}</div></div>`;
+      };
+      html += `<div class="section"><h3>Odds (${d.odds.provider})</h3>
+        <div class="probrow">
+          ${edgeChip(m.h, d.odds.home, d.model.pHome)}
+          ${edgeChip('Draw', d.odds.draw, d.model.pDraw)}
+          ${edgeChip(m.a, d.odds.away, d.model.pAway)}
+        </div>
+      </div>`;
+    }
     if(d.analysis){
       html += `<div class="section"><h3>Analysis</h3><div class="ai">${d.analysis}</div></div>`;
     }
