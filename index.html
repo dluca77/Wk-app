@@ -290,6 +290,37 @@ function jumpToComp(name){
   }, 30);
 }
 
+// Vaste competitievolgorde, net als Livescore: 1) grote internationale
+// toernooien (CL/EL/ECL + hun kwalificatie, WK/EK-kwalificatie), 2) de
+// Europese topcompetities, 3) Eredivisie (lokale relevantie, NL-app), 4)
+// de rest alfabetisch op land. Landnaam wordt afgeleid uit de ESPN-
+// competitiecode (compId, bv. "eng.1" → "England") — internationale codes
+// (uefa./fifa./concacaf./conmebol.) horen al bij tier 0.
+const COUNTRY_BY_PREFIX = {
+  eng:'England', esp:'Spain', ger:'Germany', ita:'Italy', fra:'France', ned:'Netherlands',
+  bel:'Belgium', por:'Portugal', tur:'Turkey', sco:'Scotland', usa:'United States', mex:'Mexico',
+  bra:'Brazil', arg:'Argentina', ksa:'Saudi Arabia', wal:'Wales', irl:'Ireland', den:'Denmark',
+  swe:'Sweden', nor:'Norway', fin:'Finland', pol:'Poland', cze:'Czechia', svk:'Slovakia',
+  hun:'Hungary', rou:'Romania', bul:'Bulgaria', gre:'Greece', cro:'Croatia', srb:'Serbia',
+  aut:'Austria', sui:'Switzerland', ukr:'Ukraine', isr:'Israel', jpn:'Japan', kor:'South Korea',
+  chn:'China', aus:'Australia', rsa:'South Africa', egy:'Egypt', mar:'Morocco', nga:'Nigeria',
+  can:'Canada', chi:'Chile', col:'Colombia', per:'Peru', ecu:'Ecuador', par:'Paraguay',
+  uru:'Uruguay', ven:'Venezuela', bol:'Bolivia', crc:'Costa Rica', civ:'Ivory Coast', alg:'Algeria',
+  tun:'Tunisia', qat:'Qatar', uae:'United Arab Emirates', ind:'India', chn2:'China',
+};
+const TOP5 = ['premier league','laliga','la liga','serie a','bundesliga','ligue 1'];
+function compSortKey(compName, compId){
+  const n = (compName||'').toLowerCase();
+  const isIntl = /champions league|europa league|conference league|world cup|european championship|euro qualifying|nations league/.test(n)
+    || /^uefa\.|^fifa\.|^concacaf\.|^conmebol\./.test(compId||'');
+  if(isIntl) return `0_${n}`;
+  if(TOP5.includes(n)) return `1_${TOP5.indexOf(n)}`;
+  if(n === 'eredivisie') return `2_`;
+  const prefix = (compId||'').split('.')[0];
+  const country = COUNTRY_BY_PREFIX[prefix] || compName || 'zzz';
+  return `3_${country}_${compName}`;
+}
+
 function render(){
   if(page !== 'matches') return;
   const ms = MATCHES.filter(m=>m.date===selDate).sort((a,b)=>a.time.localeCompare(b.time));
@@ -302,7 +333,10 @@ function render(){
     if(!groups.has(key)) groups.set(key, []);
     groups.get(key).push(m);
   }
-  const keys = [...groups.keys()].sort();
+  const keys = [...groups.keys()].sort((a,b)=>{
+    const ca = groups.get(a)[0]?.compId, cb = groups.get(b)[0]?.compId;
+    return compSortKey(a,ca).localeCompare(compSortKey(b,cb));
+  });
   const groupsHtml = keys.map((key, idx)=>{
     const list = groups.get(key);
     if(!(key in groupOpen)) groupOpen[key] = true;
