@@ -181,14 +181,17 @@ async function scrapePlayers(leagueName, teams) {
       const corners = statVal(gen, 'wonCorners');
       const tackles = statVal(def, 'totalTackles');
       if (apps === 0 && min === 0) return null;
-      const per90 = min > 0 ? min / 90 : 0;
+      // Gemiddelde per gespeelde wedstrijd (niet per-90-minuten-extrapolatie
+      // — die blies het cijfer enorm op bij korte invalbeurten, bv. iemand
+      // met 4 schoten in 28 minuten leek dan "12,86 schoten per 90 min").
       return {
         playerId: `espn_${SEASON}_${ath.id}`,
         name: ath.displayName || ath.fullName || '?',
         pos: ath.position?.abbreviation || '',
         apps, mins: min, goals: g, assists: a,
-        shots90: per90 ? +(shots / per90).toFixed(2) : 0,
-        sot90: per90 ? +(sot / per90).toFixed(2) : 0,
+        shots: shots, sot: sot,
+        shotsAvg: apps ? +(shots / apps).toFixed(2) : 0,
+        sotAvg: apps ? +(sot / apps).toFixed(2) : 0,
         yellowCards: yellow, redCards: red, fouls, corners, tackles,
         team: team.displayName || team.name, compName: leagueName,
       };

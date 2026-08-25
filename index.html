@@ -674,7 +674,7 @@ function renderPredictionBlock(target, m, d){
   const POS_NAMES = {G:'Keeper',D:'Verdediger',M:'Middenvelder',F:'Aanvaller'};
   const playerRow = (p,i) => `<div class="prow" style="animation-delay:${i*35}ms">
     <div class="pn">${p.name}<div class="pp">${POS_NAMES[p.pos]||p.pos||''} · ${p.apps} wedstrijden gespeeld · ${p.goals} goals, ${p.assists} assists dit seizoen · ${p.corners||0} corners veroorzaakt ${cardsBadge(p)}</div></div>
-    <div class="stat">${p.shots90}<div class="pp">schoten/90 min</div><div class="pp" style="margin-top:2px">${p.sot90} op doel/90 min</div></div>
+    <div class="stat">${p.shotsAvg}<div class="pp">schoten/wedstrijd</div><div class="pp" style="margin-top:2px">${p.sotAvg} op doel/wedstrijd</div></div>
   </div>`;
   let html = `
     <h3>Win probability</h3>
@@ -691,7 +691,7 @@ function renderPredictionBlock(target, m, d){
   });
   let extra = '';
   if(d.players.home.length || d.players.away.length){
-    const legend = `<div class="pp" style="padding:0 0 8px;color:var(--muted2)">Schoten per 90 min = gemiddeld aantal schoten per volle wedstrijd dit seizoen. Top 5 spelers per team, gesorteerd op schoten/90.</div>`;
+    const legend = `<div class="pp" style="padding:0 0 8px;color:var(--muted2)">Schoten/wedstrijd = gemiddeld aantal schoten per gespeelde wedstrijd dit seizoen (bij weinig gespeelde wedstrijden nog een kleine steekproef). Top 5 spelers per team.</div>`;
     extra += `<div class="section"><h3>${m.h} — meeste schoten</h3>${legend}<div class="plist">${d.players.home.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">Nog geen spelersdata</div>'}</div></div>`;
     extra += `<div class="section"><h3>${m.a} — meeste schoten</h3>${legend}<div class="plist">${d.players.away.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">Nog geen spelersdata</div>'}</div></div>`;
   }
@@ -845,7 +845,7 @@ async function openMultiAnalysis(){
     };
     const playerRow = (p,team) => `<div class="prow">
       <div class="pn">${p.name} <span style="color:var(--mint2);font-weight:700">· ${team}</span><div class="pp">${POS_NAMES[p.pos]||p.pos||''} · ${p.apps} wedstrijden · ${p.goals}g ${p.assists}a ${cardsBadge(p)}</div></div>
-      <div class="stat">${p.shots90}<div class="pp">schoten/90</div><div class="pp">${p.sot90} op doel/90</div></div>
+      <div class="stat">${p.shotsAvg}<div class="pp">schoten/wedstrijd</div><div class="pp">${p.sotAvg} op doel/wedstrijd</div></div>
     </div>`;
     html += d.matches.map((entry,i) => {
       const p1 = Math.round(entry.model.pHome*100), px = Math.round(entry.model.pDraw*100), p2 = 100-p1-px;
@@ -853,7 +853,7 @@ async function openMultiAnalysis(){
       const topPlayers = [
         ...(entry.players?.home||[]).map(p=>({...p, team: entry.match.h})),
         ...(entry.players?.away||[]).map(p=>({...p, team: entry.match.a})),
-      ].sort((a,b)=>b.shots90-a.shots90).slice(0,4);
+      ].sort((a,b)=>b.shotsAvg-a.shotsAvg).slice(0,4);
       return `<div class="section" style="animation-delay:${i*50}ms">
         <h3>${entry.match.h} vs ${entry.match.a}</h3>
         <div class="probrow">
@@ -882,15 +882,15 @@ async function renderPlayers(){
 
 function filterPlayers(q){
   q = (q||'').toLowerCase();
-  const list = PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).sort((a,b)=>b.shots90-a.shots90).slice(0,100);
+  const list = PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).sort((a,b)=>b.shotsAvg-a.shotsAvg).slice(0,100);
   document.getElementById('playerList').innerHTML = list.length ? list.map((p,i)=>{
     let cards = '';
     if(p.yellowCards) cards += ` <span style="color:#ffcc33">${p.yellowCards}Y</span>`;
     if(p.redCards) cards += ` <span style="color:#ff5c6c">${p.redCards}R</span>`;
     return `
     <div class="prow" style="animation-delay:${Math.min(i,12)*30}ms">
-      <div class="pn">${p.name}<div class="pp">${p.team} · ${p.compName||''} · ${p.goals}g ${p.assists}a · ${p.corners||0} corners${cards} · ${p.apps} apps</div></div>
-      <div class="stat">${p.shots90}<div class="pp">sh/90 (${p.sot90} on target)</div></div>
+      <div class="pn">${p.name}<div class="pp">${p.team} · ${p.compName||''} · ${p.goals}g ${p.assists}a · ${p.corners||0} corners${cards} · ${p.apps} wedstrijden</div></div>
+      <div class="stat">${p.shotsAvg}<div class="pp">sch/wedstrijd (${p.sotAvg} op doel)</div></div>
     </div>
   `;
   }).join('') : '<div class="empty"><span class="big">🔍</span>No players found.</div>';

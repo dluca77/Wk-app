@@ -107,9 +107,9 @@ function buildMatchBase(match, standings, players) {
 
   const topFor = team => (players || [])
     .filter(p => p.team === team && p.apps >= 1 && p.mins >= 20)
-    .sort((a, b) => b.shots90 - a.shots90)
+    .sort((a, b) => b.shotsAvg - a.shotsAvg)
     .slice(0, 5)
-    .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, sot90: p.sot90, goals: p.goals, assists: p.assists, apps: p.apps, yellowCards: p.yellowCards, redCards: p.redCards, fouls: p.fouls, corners: p.corners }));
+    .map(p => ({ name: p.name, pos: p.pos, shotsAvg: p.shotsAvg, sotAvg: p.sotAvg, goals: p.goals, assists: p.assists, apps: p.apps, yellowCards: p.yellowCards, redCards: p.redCards, fouls: p.fouls, corners: p.corners }));
 
   return {
     matchInfo: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
@@ -272,8 +272,8 @@ function singleMatchPromptBlock(b) {
   const m = b.matchInfo;
   return `Wedstrijd: ${m.h} vs ${m.a} (${m.compName || ''}, ${m.date} ${m.time}).
 Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(b.model.pHome * 100).toFixed(1)}%, gelijk ${(b.model.pDraw * 100).toFixed(1)}%, uit ${(b.model.pAway * 100).toFixed(1)}%.
-Spelers met de meeste schoten per 90 min bij ${m.h}: ${b.homePlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen)`).join(', ') || 'nog geen data'}.
-Spelers met de meeste schoten per 90 min bij ${m.a}: ${b.awayPlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen)`).join(', ') || 'nog geen data'}.`;
+Spelers met de meeste schoten per wedstrijd bij ${m.h}: ${b.homePlayers.map(p => `${p.name} (${p.shotsAvg}/wedstrijd, ${p.sotAvg} op doel/wedstrijd, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen, ${p.apps} wedstrijden gespeeld)`).join(', ') || 'nog geen data'}.
+Spelers met de meeste schoten per wedstrijd bij ${m.a}: ${b.awayPlayers.map(p => `${p.name} (${p.shotsAvg}/wedstrijd, ${p.sotAvg} op doel/wedstrijd, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen, ${p.apps} wedstrijden gespeeld)`).join(', ') || 'nog geen data'}.`;
 }
 
 async function runAi(env, prompt) {
