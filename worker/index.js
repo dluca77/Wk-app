@@ -99,13 +99,42 @@ function matchProbabilities(homeStats, awayStats, leagueAvgGoals = 1.35) {
   return { pHome, pDraw, pAway, lambdaHome, lambdaAway };
 }
 
+// Eén speler kan meerdere keren in de gescrapete data voorkomen (bv.
+// hoofdcompetitie + Europees kwalificatietoernooi) — dit voegt ze samen tot
+// één regel per speler (op playerId, want die is stabiel over competities),
+// met opgetelde seizoentotalen, zodat niemand dubbel in een lijst staat.
+function mergePlayersByName(players) {
+  const byId = new Map();
+  for (const p of (players || [])) {
+    const key = p.playerId || `${p.name}|${p.team}`;
+    if (!byId.has(key)) {
+      byId.set(key, { playerId: p.playerId, name: p.name, pos: p.pos, team: p.team, apps: 0, mins: 0, goals: 0, assists: 0, shots: 0, sot: 0, yellowCards: 0, redCards: 0, fouls: 0, corners: 0, tackles: 0, compNames: new Set() });
+    }
+    const m = byId.get(key);
+    m.apps += p.apps || 0; m.mins += p.mins || 0; m.goals += p.goals || 0; m.assists += p.assists || 0;
+    m.shots += p.shots || 0; m.sot += p.sot || 0; m.yellowCards += p.yellowCards || 0; m.redCards += p.redCards || 0;
+    m.fouls += p.fouls || 0; m.corners += p.corners || 0; m.tackles += p.tackles || 0;
+    if (p.compName) m.compNames.add(p.compName);
+  }
+  return [...byId.values()].map(m => ({
+    playerId: m.playerId, name: m.name, pos: m.pos, team: m.team,
+    apps: m.apps, mins: m.mins, goals: m.goals, assists: m.assists,
+    shots: m.shots, sot: m.sot,
+    shotsAvg: m.apps ? +(m.shots / m.apps).toFixed(2) : 0,
+    sotAvg: m.apps ? +(m.sot / m.apps).toFixed(2) : 0,
+    yellowCards: m.yellowCards, redCards: m.redCards, fouls: m.fouls, corners: m.corners, tackles: m.tackles,
+    compName: [...m.compNames].join(' + '),
+  }));
+}
+
 // ---------- Gedeelde opbouw voor /predict en /predict-multi ----------
 function buildMatchBase(match, standings, players) {
   const homeStats = standings.find(t => t.team === match.h);
   const awayStats = standings.find(t => t.team === match.a);
   const model = matchProbabilities(homeStats, awayStats);
 
-  const topFor = team => (players || [])
+  const merged = mergePlayersByName(players);
+  const topFor = team => merged
     .filter(p => p.team === team && p.apps >= 1 && p.mins >= 20)
     .sort((a, b) => b.shotsAvg - a.shotsAvg)
     .slice(0, 5)
@@ -384,7 +413,7 @@ export default {
 
     if (url.pathname === '/players') {
       const d = await kvGet(env, 'espn_players', { players: [] });
-      let players = d.players || [];
+      let players = mergePlayersByName(d.players || []);
       const q = url.searchParams.get('q');
       if (q) players = players.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
       const team = url.searchParams.get('team');
