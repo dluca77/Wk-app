@@ -1,0 +1,27 @@
+name: Scrape wedstrijden + spelerstats (Opta)
+
+# Enige databron van de app: de publieke backend van Stats Perform's
+# "Betting Showcase"-widget (optaplayerstats.statsperform.com). Geen
+# API-key nodig. Draait in GitHub Actions (niet in de Cloudflare Worker) —
+# nooit getest of Cloudflare-IP's hier geblokkeerd worden, dus voor de
+# zekerheid dezelfde ingest-aanpak als eerdere databronnen in dit project.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scrape Opta wedstrijden + spelerstats
+        run: node scripts/scrape-opta.mjs > opta-data.json
+      - name: Stuur naar Worker
+        env:
+          RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
+        run: |
+          CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
+          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ingest-opta?key=$CLEAN_SECRET" \
+            -H "Content-Type: application/json" \
+            --data @opta-data.json

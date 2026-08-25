@@ -1,29 +1,21 @@
 // Football Proxy — Cloudflare Worker
-// Databron: GEEN betaalde/rate-limited API's meer. Alles hieronder is
-// zelfgebouwd binnen het Worker-platform:
-// - Wedstrijdschema: scraping van odds1x2.com (Eredivisie, Premier League,
-//   La Liga, Champions League-kwalificatie — zie scrapeCompFixtures() en
-//   ODDS_SEEDS) + betexplorer.com (Bundesliga, Serie A, Ligue 1, Europa
-//   League, Conference League — zie scrapeBetExplorerFixtures() en
-//   BETEXPLORER_COMPS) + wereldwijde "vandaag"-data van ALLE competities
-//   samen, aangeleverd via POST /ingest-global door een externe GitHub
-//   Actions cron-job (scrape-global.yml) omdat betexplorer.com verzoeken
-//   vanaf Cloudflare's eigen IP-adressen anders/leeg beantwoordt. Alles
-//   gratis, geen API-key, geen quotum.
-// - Odds: scraping van odds1x2.com (zelfde bron, dezelfde pagina's).
-// - AI-analyse: Cloudflare Workers AI binding (env.AI), ingebouwd in het
-//   Workers-platform met een gratis dagelijkse toewijzing — geen losse
-//   API-key of abonnement.
+// Databron: uitsluitend de publieke backend van Stats Perform's "Betting
+// Showcase"-widget (optaplayerstats.statsperform.com/api/en_GB/soccer/...).
+// Geen API-key, geen quotum — maar ook geen odds (dat is een widget die
+// naast een bookmaker's eigen odds-widget hoort te draaien, ze leveren zelf
+// geen prijzen). De app toont daarom geen odds/value-bets meer, alleen:
+// - Winkans per team (eigen Poisson-model op basis van opgebouwde vorm)
+// - Spelersvoorspellingen: schoten or verwachte goals (xG), op basis van
+//   season-gemiddeldes die over meerdere scrape-runs heen opgebouwd worden.
 //
-// Eerdere bronnen die zijn VERWIJDERD omdat ze een betaald/rate-limited
-// quotum hadden dat kan opraken: Sofascore via RapidAPI (500 calls/maand,
-// geraakt HTTP 429 na een dag testen), the-odds-api.com, en de
-// Anthropic API (api.anthropic.com) voor /ai-bet.
+// Beperking: de livescores-feed van deze widget toont maar een curated
+// subset (~9 competities, vandaag+morgen) — geen volledige wereldwijde
+// dekking. Groeit vanzelf mee als Stats Perform de widget-selectie uitbreidt.
 //
-// Beperking: geen van beide bronnen geeft wedstrijduitslagen, alleen
-// aankomend schema. Team-vorm (computeForm) werkt dus pas zodra er zelf
-// verzamelde uitslagen zijn — dat groeit vanzelf naarmate het seizoen
-// vordert.
+// Scraping gebeurt in GitHub Actions (.github/workflows/scrape-opta.yml,
+// elke 5 min), niet in deze Worker zelf — nooit getest of Cloudflare-IP's
+// hier geblokkeerd worden, dus voor de zekerheid dezelfde ingest-aanpak als
+// eerdere databronnen in dit project (POST /ingest-opta).
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -38,10 +30,6 @@ function json(obj, status = 200) {
   });
 }
 
-// Workers AI geeft normaal { response: "..." } terug, maar bij lange
-// JSON-antwoorden (5-tips prompt, max_tokens 2000) kwam response soms als
-// array van tekst-chunks terug i.p.v. één string — de frontend toonde dan
-// letterlijk "[object Object],[object Object]". Vangt alle vormen netjes op.
 function extractAiText(aiResult) {
   const r = aiResult?.response;
   if (typeof r === 'string') return r;
@@ -51,20 +39,6 @@ function extractAiText(aiResult) {
   if (r && typeof r === 'object') return r.response ?? r.text ?? r.generated_text ?? '';
   return '';
 }
-
-// Bekende competities. Alleen Eredivisie heeft momenteel een gekoppelde
-// gratis scrape-bron voor het wedstrijdschema — zie ODDS_SEEDS.
-const COMPS = {
-  7:     { name: 'Champions League',   flag: '⭐' },
-  679:   { name: 'Europa League',      flag: '🟠' },
-  17015: { name: 'Conference League',  flag: '🟣' },
-  37:    { name: 'Eredivisie',         flag: '🇳🇱' },
-  17:    { name: 'Premier League',     flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
-  8:     { name: 'La Liga',            flag: '🇪🇸' },
-  35:    { name: 'Bundesliga',         flag: '🇩🇪' },
-  23:    { name: 'Serie A',            flag: '🇮🇹' },
-  34:    { name: 'Ligue 1',            flag: '🇫🇷' },
-};
 
 // ---------- KV helpers ----------
 async function kvGet(env, key, fallback = null) {
@@ -98,330 +72,6 @@ function computeForm(matches) {
   return Object.values(stats);
 }
 
-// ---------- Scraper: odds1x2.com (gratis, geen API-key, geen quotum) ----------
-// Elke competitie heeft een "seed"-wedstrijdpagina op odds1x2.com. Die
-// pagina bevat zelf een lijst met alle andere wedstrijden van dezelfde
-// speelronde (met hun eigen link), dus we hoeven geen URL-slugs te
-// verzinnen — we volgen gewoon de links die de site al aanbiedt. Elke
-// wedstrijdpagina bevat ook een `all-time-event`-blok met de echte
-// datum/tijd, bv. "Sunday - 09/08/2026 14:30".
-const ODDS_SOURCE = 'https://www.odds1x2.com';
-const ODDS_SEEDS = {
-  37: '/football/holland-eredivisie/odds/fc-zwolle-vs-ajax/', // Eredivisie
-  17: '/football/england-premier-league/odds/newcastle-vs-liverpool/', // Premier League
-  8:  '/football/spain-primera-division/odds/atletico-madrid-vs-malaga/', // La Liga
-  7:  '/football/champions-league-qual/odds/dinamo-zagreb-vs-viking/', // Champions League (kwalificatieronde — seizoen is nog niet in de groepsfase)
-  // Nog geen gratis seed gevonden voor: Europa League (679), Conference
-  // League (17015), Bundesliga (35), Serie A (23), Ligue 1 (34) — stonden
-  // niet op de odds1x2-homepage op het moment van scrapen.
-};
-const SCRAPE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
-
-// Sommige clubs worden door bookmakers/scrapers met een bijnaam aangeduid die
-// geen woord gemeen heeft met de "echte" naam (dus ook niet via prefix-matching
-// te herleiden is) — bv. "Linz" voor LASK (Linzer ASK). Losse lijst i.p.v.
-// een algoritme, want dit is per definitie niet generiek af te leiden.
-const TEAM_ALIASES = { linz: 'lask' };
-
-function normTeam(s) {
-  const n = (s || '')
-    .normalize('NFD').replace(/\p{Diacritic}/gu, '') // diacritics weg (ç→c, é→e, ...)
-    .toLowerCase()
-    .replace(/\./g, '')
-    .replace(/['’]/g, '') // apostrof WEGHALEN i.p.v. naar spatie omzetten — "Be'er" moet "beer" worden, niet "be er" (anders valt het woordenaantal met "Beer" uit elkaar)
-    .replace(/\b(fc|sc|afc|cf|vv|ud|cd|ac|sk|nk|fk|gnk|ol|if|bk|ik|ca|sd|kf|as|ss|us|cs|ssc|ssd)\b/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-  return TEAM_ALIASES[n] || n;
-}
-
-// De wereldwijde BetExplorer-scrape (parse-global-matches.mjs) kent geen
-// vaste compId's — die worden ter plekke verzonnen als `be_<land>_<competitie>`.
-// Voor competities die we al via een eigen scraper volgen (zie COMPS hierboven)
-// zorgt dat voor een 2e, ongekoppelde groep in de app (bv. "Champions League"
-// verschijnt dan 2x). Namen als "Premier League"/"Bundesliga"/"Serie A" bestaan
-// in meerdere landen, dus toetsen we bij die generieke namen ook het land.
-function canonicalCompId(league, country) {
-  const l = (league || '').toLowerCase();
-  const c = (country || '').toLowerCase();
-  // Vrouwencompetities zijn een aparte competitie — niet meetellen bij de
-  // mannen-groep (bv. "Champions League Women" hoorde anders ook bij compId 7).
-  if (/\bwomen'?s?\b|\bvrouwen\b|\(w\)$|\bw$/.test(l)) return null;
-  if (l.includes('champions league')) return 7;
-  if (l.includes('conference league')) return 17015;
-  if (l.includes('europa league')) return 679;
-  if (l.includes('eredivisie')) return 37;
-  if (c === 'england' && l.includes('premier league')) return 17;
-  if (c === 'spain' && /(la ?liga|primera divisi[oó]n)/.test(l)) return 8;
-  if (c === 'germany' && l.includes('bundesliga')) return 35;
-  if (c === 'italy' && l.includes('serie a')) return 23;
-  if (c === 'france' && l.includes('ligue 1')) return 34;
-  return null;
-}
-
-// Verschillende bronnen spellen dezelfde club soms anders (accenten, clubprefix
-// als "GNK", of een verkorte naam als "Lyon" i.p.v. "Olympique Lyonnais") —
-// exacte gelijkheid na normTeam() mist die gevallen, dus ook substring-bevat
-// toestaan als allebei de namen substantieel zijn (voorkomt valse hits bij
-// korte namen als "AS" of "US").
-function teamsMatch(a, b) {
-  const na = normTeam(a), nb = normTeam(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  if (na.length > 3 && nb.length > 3 && (na.includes(nb) || nb.includes(na))) return true;
-  // Woord-voor-woord vergelijken, robuust tegen afkortingen EN ontbrekende
-  // woorden (bv. "H. Beer Sheva" vs "Hapoel Be'er Sheva" vs "Hap Beer
-  // Sheva" — verschillend aantal woorden, dus geen 1-op-1 index-vergelijking
-  // meer maar: elk betekenisvol woord (≥3 letters) van de kortste naam moet
-  // als prefix voorkomen in een woord van de langste naam, ongeacht volgorde
-  // of aantal). Losse letters/initialen ("H.") worden genegeerd.
-  const ta = na.split(' ').filter(t => t.length >= 3);
-  const tb = nb.split(' ').filter(t => t.length >= 3);
-  if (!ta.length || !tb.length) return false;
-  const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
-  return shorter.every(t => longer.some(u => u.startsWith(t) || t.startsWith(u)));
-}
-
-async function fetchOddsPage(path) {
-  const res = await fetch(`${ODDS_SOURCE}${path}`, { headers: { 'User-Agent': SCRAPE_UA } });
-  if (!res.ok) throw new Error(`odds1x2 ${path} -> HTTP ${res.status}`);
-  return res.text();
-}
-
-// De statische seeds in ODDS_SEEDS raken na verloop van tijd achterhaald
-// (een speelronde is een keer voorbij, de site linkt dan geen sibling-
-// wedstrijden meer die nog moeten komen). Om dat op te lossen zoeken we
-// elke paar uur op de odds1x2-homepage naar een VERSERE wedstrijd van
-// dezelfde competitie (zelfde land/competitie-slug uit het pad) en
-// gebruiken die als seed in plaats van de vaste — zonder dat iemand
-// handmatig een nieuwe seed-URL hoeft op te zoeken.
-async function getCurrentSeed(env, compId) {
-  const staticSeed = ODDS_SEEDS[compId];
-  if (!staticSeed) return null;
-  const slug = staticSeed.match(/^\/football\/([a-z0-9-]+)\/odds\//)?.[1];
-  if (!slug) return staticSeed;
-
-  const cacheKey = `seed_${compId}`;
-  const cached = await kvGet(env, cacheKey, null);
-  if (cached?.seed && cached.fetchedAt && (Date.now() - new Date(cached.fetchedAt).getTime()) < 6 * 60 * 60 * 1000) {
-    return cached.seed;
-  }
-
-  try {
-    const homeHtml = await fetchOddsPage('/');
-    const re = new RegExp(`/football/${slug}/odds/[a-z0-9-]+-vs-[a-z0-9-]+/`, 'g');
-    const found = [...new Set(homeHtml.match(re) || [])];
-    const seed = found[0] || staticSeed;
-    await kvPut(env, cacheKey, { seed, fetchedAt: new Date().toISOString() });
-    return seed;
-  } catch {
-    return staticSeed;
-  }
-}
-
-// Haalt de "desktop" odds-tabel (bookmaker-kolommen, thuis/gelijk/uit-rijen) uit een matchpagina.
-function parseOddsTable(html) {
-  const box = html.match(/odds-table-desktop[\s\S]*?<table class="table table-hover allbets">([\s\S]*?)<\/table>/);
-  if (!box) return null;
-  const rows = [...box[1].matchAll(/<tr>\s*<td class="titlecard">([^<]+)<\/td>((?:\s*<td[^>]*>\s*<a[^>]*class="allodds[^"]*"[^>]*>([\d.]+)<\/a>\s*<\/td>)+)/g)];
-  const parsed = rows.map(r => {
-    const label = r[1].trim();
-    const vals = [...r[2].matchAll(/>([\d.]+)<\/a>/g)].map(m => parseFloat(m[1]));
-    return { label, best: vals.length ? Math.max(...vals) : null, bookmakers: vals.length };
-  });
-  if (parsed.length !== 3) return null;
-  return { home: parsed[0], draw: parsed[1], away: parsed[2] };
-}
-
-// De seed-pagina bevat "<li><a href="...">Team A v Team B</a></li>" voor elke
-// andere wedstrijd van dezelfde speelronde.
-function parseRoundLinks(html) {
-  const links = [...html.matchAll(/<li><a href="(\/football\/[^"]+\/odds\/[^"]+)">([^<]+) v ([^<]+)<\/a><\/li>/g)];
-  return links.map(m => ({ href: m[1], home: m[2].trim(), away: m[3].trim() }));
-}
-
-// Haalt de echte wedstrijddatum/tijd en teamnamen uit een matchpagina.
-// Bron: `<div class="all-time-event">Sunday - 09/08/2026 14:30</div>` en
-// `<h1 class="h1Match">FC Zwolle v Ajax Betting Odds</h1>`.
-function parseMatchMeta(html) {
-  const dateM = html.match(/all-time-event">\w+ - (\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2})</);
-  let date = '', time = '';
-  if (dateM) {
-    const [, dd, mm, yyyy, hh, min] = dateM;
-    date = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-    time = `${hh.padStart(2, '0')}:${min}`;
-  }
-  const teamsM = html.match(/<h1 class="h1Match">([^<]+?) v ([^<]+?) Betting Odds/);
-  return { date, time, home: teamsM?.[1]?.trim() || '', away: teamsM?.[2]?.trim() || '' };
-}
-
-// Zoek de odds voor een specifieke wedstrijd, cache resultaten in KV om
-// odds1x2.com niet onnodig vaak te belasten (rondelijst 6u, odds per match 1u).
-async function getOddsForMatch(env, compId, homeTeam, awayTeam) {
-  const seed = await getCurrentSeed(env, compId);
-  if (!seed) return { error: `geen odds-bron gekoppeld voor competitie ${compId}` };
-
-  const roundCacheKey = `oddsround_${compId}`;
-  let round = await kvGet(env, roundCacheKey, null);
-  if (!round || (Date.now() - new Date(round.fetchedAt).getTime()) > 6 * 60 * 60 * 1000) {
-    const seedHtml = await fetchOddsPage(seed);
-    round = {
-      fetchedAt: new Date().toISOString(),
-      links: parseRoundLinks(seedHtml),
-      seedHref: seed,
-      seedOdds: parseOddsTable(seedHtml),
-      seedMeta: parseMatchMeta(seedHtml),
-    };
-    await kvPut(env, roundCacheKey, round);
-  }
-
-  const nHome = normTeam(homeTeam), nAway = normTeam(awayTeam);
-  const isMatch = (h, a) => {
-    const lh = normTeam(h), la = normTeam(a);
-    return (nHome.includes(lh) || lh.includes(nHome)) && (nAway.includes(la) || la.includes(nAway));
-  };
-
-  let targetHref = round.links.find(l => isMatch(l.home, l.away))?.href;
-  if (!targetHref && round.seedOdds && isMatch(round.seedMeta?.home, round.seedMeta?.away)) {
-    return { ...round.seedOdds, source: round.seedHref };
-  }
-  if (!targetHref) return { error: 'wedstrijd niet gevonden in odds-bron (team-namen komen niet overeen)' };
-
-  const oddsCacheKey = `odds_${targetHref}`;
-  let odds = await kvGet(env, oddsCacheKey, null);
-  if (!odds || (Date.now() - new Date(odds.fetchedAt || 0).getTime()) > 60 * 60 * 1000) {
-    const html = await fetchOddsPage(targetHref);
-    const table = parseOddsTable(html);
-    if (!table) return { error: 'kon odds-tabel niet lezen op de pagina' };
-    odds = { ...table, fetchedAt: new Date().toISOString(), source: targetHref };
-    await kvPut(env, oddsCacheKey, odds);
-  }
-  return odds;
-}
-
-// Haalt het volledige wedstrijdschema (huidige speelronde) van een
-// competitie op via zijn ODDS_SEEDS-ingang: de seed-wedstrijd zelf +
-// alle wedstrijden die de seed-pagina als "zelfde speelronde" linkt.
-// Geen resultaten (odds1x2 toont alleen aankomende odds, geen scores) —
-// alleen datum/tijd/teams. Werkt voor elke compId die in ODDS_SEEDS staat.
-async function scrapeCompFixtures(env, compId) {
-  const seed = await getCurrentSeed(env, compId);
-  if (!seed) return [];
-  const seedHtml = await fetchOddsPage(seed);
-  const seedMeta = parseMatchMeta(seedHtml);
-  const links = parseRoundLinks(seedHtml);
-  const targets = [{ href: seed, fallbackHome: seedMeta.home, fallbackAway: seedMeta.away, html: seedHtml }, ...links];
-
-  const matches = [];
-  for (const t of targets) {
-    try {
-      const html = t.html || await fetchOddsPage(t.href);
-      const meta = parseMatchMeta(html);
-      if (!meta.date) continue;
-      const h = meta.home || t.fallbackHome || t.home;
-      const a = meta.away || t.fallbackAway || t.away;
-      if (!h || !a) continue;
-      matches.push({
-        apiId: `odds1x2_${t.href}`,
-        compId,
-        compName: COMPS[compId]?.name,
-        compFlag: COMPS[compId]?.flag,
-        h, a,
-        date: meta.date,
-        time: meta.time,
-        result: null,
-        live: false,
-        finished: false,
-        venue: '',
-        round: '',
-        source: 'odds1x2',
-      });
-    } catch { /* deze wedstrijd overslaan, rest gaat door */ }
-  }
-  return matches;
-}
-
-// ---------- Scraper: betexplorer.com (gratis, geen bot-blokkade aangetroffen) ----------
-// Vult de competities aan die odds1x2.com niet toont: Bundesliga, Serie A,
-// Ligue 1, Europa League, Conference League. BetExplorer heeft een simpele
-// server-gerenderde fixtures-tabel per competitie, geen Cloudflare-uitdaging
-// zoals Forebet, en toont ook per-wedstrijd H2H via de "mutual-matches"-pagina.
-const BETEXPLORER_SOURCE = 'https://www.betexplorer.com';
-const BETEXPLORER_COMPS = {
-  35:    'germany/bundesliga',              // Bundesliga
-  23:    'italy/serie-a',                   // Serie A
-  34:    'france/ligue-1',                  // Ligue 1
-  679:   'europe/europa-league',            // Europa League
-  17015: 'europe/conference-league',        // Conference League (BetExplorer's slug is zonder "europa-" — de oude slug redirect(te) naar de homepage, waardoor deze competitie stilzwijgend 0 wedstrijden teruggaf)
-};
-
-async function fetchBetExplorerPage(path) {
-  const res = await fetch(`${BETEXPLORER_SOURCE}${path}`, { headers: { 'User-Agent': SCRAPE_UA } });
-  if (!res.ok) throw new Error(`betexplorer ${path} -> HTTP ${res.status}`);
-  return res.text();
-}
-
-// Fixtures-tabel bevat rijen als:
-// <td class="table-main__datetime">28.08. 19:30</td>
-// <td class="h-text-left"><a href="/football/germany/bundesliga/bayern-munich-vfb-stuttgart/xrtCcyAe/" class="in-match"><span>Bayern Munich</span> - <span>Stuttgart</span></a></td>
-// Geen jaartal in de datum — we leiden het af (volgend jaar als de maand al
-// >2 maanden "in het verleden" zou liggen t.o.v. vandaag, i.v.m. seizoenen
-// die het jaar overschrijden).
-function parseBetExplorerFixtures(html, compId) {
-  const now = new Date();
-  const curYear = now.getUTCFullYear();
-  const rows = [...html.matchAll(
-    /<td class="table-main__datetime">(\d{1,2})\.(\d{1,2})\.\s*(\d{1,2}):(\d{2})<\/td>\s*<td class="h-text-left"><a href="(\/football\/[^"]+)" class="in-match"><span>([^<]+)<\/span>\s*-\s*<span>([^<]+)<\/span>/g
-  )];
-  return rows.map(m => {
-    const [, dd, mm, hh, min, href, home, away] = m;
-    let year = curYear;
-    const candidate = new Date(Date.UTC(year, Number(mm) - 1, Number(dd)));
-    if (candidate.getTime() < now.getTime() - 60 * 24 * 60 * 60 * 1000) year++;
-    const date = `${year}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-    return {
-      apiId: `betexplorer_${href}`,
-      compId,
-      compName: COMPS[compId]?.name,
-      compFlag: COMPS[compId]?.flag,
-      h: home.trim(), a: away.trim(),
-      date, time: `${hh.padStart(2, '0')}:${min}`,
-      result: null, live: false, finished: false,
-      venue: '', round: '', source: 'betexplorer',
-      beHref: href,
-    };
-  });
-}
-
-async function scrapeBetExplorerFixtures(env, compId) {
-  const slug = BETEXPLORER_COMPS[compId];
-  if (!slug) return [];
-  const html = await fetchBetExplorerPage(`/football/${slug}/fixtures/`);
-  return parseBetExplorerFixtures(html, compId);
-}
-
-// ---------- Wereldwijde "vandaag"-data (alle competities/landen door elkaar) ----------
-// De homepage van betexplorer.com toont (los van de vaste competities
-// hierboven) een live "vandaag"-overzicht met ALLE competities/landen door
-// elkaar (200+ wedstrijden). Beperking: dit is alleen VANDAAG — voor
-// toekomstige dagen zou je dit per competitie moeten herhalen, wat niet
-// haalbaar is voor 200+ competities tegelijk.
-//
-// Een directe fetch vanuit de Worker zelf naar betexplorer.com/ werkt NIET
-// betrouwbaar — getest en bevestigd: betexplorer.com geeft aan verzoeken die
-// vanaf Cloudflare's eigen IP-adressen komen een andere, lege pagina terug
-// (zelfde bytegrootte, maar zonder de wedstrijd-data), waarschijnlijk als
-// anti-bot-maatregel specifiek tegen cloud/Worker-verkeer. Losse
-// competitiepagina's (scrapeBetExplorerFixtures hierboven) werken wel vanuit
-// de Worker — alleen deze ene "alles-in-1"-pagina niet.
-//
-// Oplossing: de HTML wordt opgehaald en geparsed door een GitHub Actions
-// workflow (die GEEN Cloudflare-IP heeft en dus wel de volledige data
-// krijgt — zie .github/workflows/scrape-global.yml en
-// scripts/parse-global-matches.mjs) en vervolgens naar /ingest-global
-// hieronder gestuurd. refreshAll() leest die extern aangeleverde data uit
-// KV i.p.v. zelf te fetchen.
-
 // ---------- Eigen kansmodel (Poisson) op basis van computeForm() ----------
 function factorial(n) { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; }
 function poissonP(k, lambda) { return Math.exp(-lambda) * Math.pow(lambda, k) / factorial(k); }
@@ -445,214 +95,51 @@ function matchProbabilities(homeStats, awayStats, leagueAvgGoals = 1.35) {
   return { pHome, pDraw, pAway, lambdaHome, lambdaAway };
 }
 
-// ---------- Refresh ----------
-async function refreshAll(env, { force = false } = {}) {
+// ---------- Spelers: season-aggregatie uit opgestapelde matchlogs ----------
+function aggregatePlayers(entries) {
+  const byPlayer = new Map();
+  for (const e of entries) {
+    if (!byPlayer.has(e.playerId)) {
+      byPlayer.set(e.playerId, { playerId: e.playerId, name: e.name, pos: e.pos, team: e.team, compName: e.compName, apps: 0, mins: 0, shots: 0, xg: 0, goals: 0 });
+    }
+    const p = byPlayer.get(e.playerId);
+    p.apps++; p.mins += e.minsPlayed; p.shots += e.shots; p.xg += e.xg; p.goals += e.goals;
+    p.team = e.team; p.compName = e.compName; // laatste bekende team/competitie
+  }
+  return [...byPlayer.values()].map(p => {
+    const per90 = p.mins > 0 ? p.mins / 90 : 0;
+    return { ...p, shots90: per90 ? +(p.shots / per90).toFixed(2) : 0, xg90: per90 ? +(p.xg / per90).toFixed(2) : 0 };
+  });
+}
+
+// ---------- Refresh: nieuwe scrape-data mergen met opgebouwde geschiedenis ----------
+async function ingestOpta(env, body) {
   const now = new Date();
-  const log = [];
+  const incomingMatches = Array.isArray(body.matches) ? body.matches : [];
+  const incomingLog = Array.isArray(body.playerMatchStats) ? body.playerMatchStats : [];
 
-  const meta = await kvGet(env, 'meta_global', {});
-  const stale = force || !meta.lastRun || (now - new Date(meta.lastRun)) > 12 * 60 * 60 * 1000;
-  if (!stale) {
-    return { ok: true, log: ['skip: nog niet stale'], meta };
-  }
+  const existing = await kvGet(env, 'opta_matches', { matches: [] });
+  const byId = new Map((existing.matches || []).map(m => [m.apiId, m]));
+  for (const m of incomingMatches) byId.set(m.apiId, m);
+  const matches = [...byId.values()];
+  await kvPut(env, 'opta_matches', { matches, updatedAt: now.toISOString() });
 
-  // Begin met de bestaande dataset zodat oude wedstrijden (van de nu
-  // verwijderde Sofascore-bron, of andere competities zonder scraper)
-  // niet verloren gaan.
-  const existing = await kvGet(env, 'matches_all', { matches: [] });
-  // Verweesde entries zonder 'source'-veld voor een competitie die WEL een
-  // actieve scraper heeft (COMPS hierboven) zijn gegarandeerd stale — die
-  // scraper levert elke refresh verse, source-getagde data. Zulke oude
-  // resten (uit vroegere scraper-versies, met soms verkeerde datums/namen)
-  // bleven eerder eindeloos hangen en dook telkens als "extra" wedstrijd op
-  // ondanks de fuzzy-dedup hieronder — dus nu gewoon weggooien i.p.v.
-  // proberen te matchen. Entries zonder source voor NIET-gedekte competities
-  // (bv. Australia Cup) blijven wel staan — dat is daar de enige databron.
-  const cleanedExisting = (existing.matches || []).filter(m => !(m.compId != null && COMPS[m.compId] && !m.source));
-  const byId = new Map(cleanedExisting.map(m => [m.apiId ?? `${m.date}-${m.h}-${m.a}`, m]));
+  const form = computeForm(matches);
+  await kvPut(env, 'opta_standings', { standings: form, updatedAt: now.toISOString() });
 
-  // Cloudflare Workers (free tier) staat maar een beperkt aantal subrequests
-  // toe per invocation. odds1x2-scrapes zijn duur (1 fetch per WEDSTRIJD,
-  // dus 20+ requests voor een competitie met 20 wedstrijden) — als die als
-  // eerste draaien is het subrequest-budget vaak al op voordat de
-  // betexplorer-competities (Serie A/Ligue 1/Bundesliga/Europa League/
-  // Conference League) aan de beurt komen, en falen die dan STRUCTUREEL met
-  // "Too many subrequests" (geconstateerd: Conference League had hierdoor
-  // 0 wedstrijden). Betexplorer kost maar 1 request per competitie (5 totaal)
-  // dus die draaien we eerst, zodat ze altijd binnen het budget vallen.
-  const beCompIds = Object.keys(BETEXPLORER_COMPS).map(Number);
-  for (const compId of beCompIds) {
-    try {
-      const compMatches = await scrapeBetExplorerFixtures(env, compId);
-      for (const key of [...byId.keys()]) {
-        const m = byId.get(key);
-        if (m.compId === compId && m.source === 'betexplorer') byId.delete(key);
-      }
-      let mergedCount = 0, newCount = 0;
-      const snapshot = [...byId.entries()];
-      for (const scraped of compMatches) {
-        const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
-        let existingKey = null;
-        for (const [key, m] of snapshot) {
-          if (String(m.compId) !== String(compId) || m.date !== scraped.date) continue;
-          if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
-        }
-        if (existingKey && byId.has(existingKey)) {
-          const old = byId.get(existingKey);
-          byId.set(existingKey, {
-            ...scraped,
-            apiId: old.apiId,
-            source: old.source,
-            live: old.live || scraped.live,
-            finished: old.finished || scraped.finished,
-            result: old.result || scraped.result,
-          });
-          mergedCount++;
-        } else {
-          byId.set(scraped.apiId, scraped);
-          newCount++;
-        }
-      }
-      log.push(`${COMPS[compId]?.name} (betexplorer-scrape): ${compMatches.length} wedstrijden (${mergedCount} gemerged met bestaande data, ${newCount} nieuw)`);
-    } catch (e) {
-      log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
-    }
-  }
+  // Speler-matchlog: opstapelen, dedupliceren op matchApiId+playerId zodat
+  // een herhaalde scrape van dezelfde (nog lopende) wedstrijd niet dubbel telt.
+  const existingLog = await kvGet(env, 'opta_player_log', { entries: [] });
+  const logById = new Map((existingLog.entries || []).map(e => [`${e.matchApiId}_${e.playerId}`, e]));
+  for (const e of incomingLog) logById.set(`${e.matchApiId}_${e.playerId}`, e);
+  const entries = [...logById.values()];
+  await kvPut(env, 'opta_player_log', { entries, updatedAt: now.toISOString() });
 
-  const scrapedCompIds = Object.keys(ODDS_SEEDS).map(Number);
-  for (const compId of scrapedCompIds) {
-    try {
-      const compMatches = await scrapeCompFixtures(env, compId);
-      // Verwijder eerst onze eigen vorige odds1x2-scrape-resultaten van deze
-      // competitie, zodat wedstrijden die uit de huidige speelronde zijn
-      // verdwenen niet blijven hangen.
-      for (const key of [...byId.keys()]) {
-        const m = byId.get(key);
-        if (m.compId === compId && m.source === 'odds1x2') byId.delete(key);
-      }
-      let mergedCount = 0, newCount = 0;
-      const snapshot = [...byId.entries()]; // vaste snapshot, niet de live Map, om mutatie-tijdens-iteratie-verrassingen te vermijden
-      for (const scraped of compMatches) {
-        // Zoek een bestaande wedstrijd (bv. bevroren Sofascore-data) met
-        // dezelfde teams + datum, zodat we die MERGEN i.p.v. een dubbele
-        // kaart toevoegen — en zodat live/uitslag-status (die odds1x2 niet
-        // heeft) behouden blijft in plaats van overschreven te worden.
-        const nH = normTeam(scraped.h), nA = normTeam(scraped.a);
-        let existingKey = null;
-        for (const [key, m] of snapshot) {
-          if (String(m.compId) !== String(compId) || m.date !== scraped.date) continue;
-          if (normTeam(m.h) === nH && normTeam(m.a) === nA) { existingKey = key; break; }
-        }
-        if (existingKey && byId.has(existingKey)) {
-          const old = byId.get(existingKey);
-          // Belangrijk: we nemen NIET scraped.source ('odds1x2') over als de
-          // oude entry dat niet had. Zou dat wel gebeuren, dan ziet de
-          // "verwijder vorige odds1x2-scrape-resultaten"-stap hierboven deze
-          // gemergede entry bij de VOLGENDE refresh aan voor een pure
-          // scrape-entry en verwijdert 'm — waarna er een nieuwe entry met
-          // een andere apiId voor terugkomt en de merge zichzelf ontrafelt.
-          byId.set(existingKey, {
-            ...scraped,
-            apiId: old.apiId,
-            source: old.source,
-            live: old.live || scraped.live,
-            finished: old.finished || scraped.finished,
-            result: old.result || scraped.result,
-          });
-          mergedCount++;
-        } else {
-          byId.set(scraped.apiId, scraped);
-          newCount++;
-        }
-      }
-      log.push(`${COMPS[compId]?.name} (odds1x2-scrape): ${compMatches.length} wedstrijden van de huidige speelronde (${mergedCount} gemerged met bestaande data, ${newCount} nieuw)`);
-    } catch (e) {
-      log.push(`${COMPS[compId]?.name}-scrape FAIL (oude data behouden): ${e.message.slice(0, 120)}`);
-    }
-  }
+  const players = aggregatePlayers(entries);
+  await kvPut(env, 'opta_players', { players, updatedAt: now.toISOString() });
 
-  const uncoveredComps = Object.keys(COMPS).map(Number).filter(id => !scrapedCompIds.includes(id) && !beCompIds.includes(id));
-  if (uncoveredComps.length) {
-    log.push(`Nog geen gratis scrape-bron gekoppeld voor: ${uncoveredComps.map(id => COMPS[id]?.name).join(', ')} — oude gecachete wedstrijden blijven staan maar worden niet ververst.`);
-  }
-
-  // Globale "vandaag"-data: ALLE wedstrijden wereldwijd, los van de vaste
-  // competitielijst hierboven. Deze data komt NIET van een fetch vanuit de
-  // Worker (die wordt geblokkeerd, zie toelichting hierboven bij "Wereldwijde vandaag-data")
-  // maar wordt periodiek aangeleverd door een externe GitHub Actions cron-job
-  // via POST /ingest-global, en hier alleen uit KV gelezen. Skip wedstrijden
-  // die al via een specifieke scraper binnen zijn gekomen (zelfde teams +
-  // datum), zodat er geen dubbele kaarten ontstaan.
-  const globalCache = await kvGet(env, 'global_matches_raw', null);
-  if (globalCache?.matches?.length) {
-    for (const key of [...byId.keys()]) {
-      const m = byId.get(key);
-      if (m.source === 'betexplorer_global') byId.delete(key);
-    }
-    const snapshot = [...byId.entries()];
-    let addedGlobal = 0, skippedDup = 0;
-    for (const scraped of globalCache.matches) {
-      // Val terug op de vaste compId (zie COMPS) als deze wedstrijd bij een
-      // al bekende competitie hoort, zodat 'm niet als losse "be_..."-groep
-      // naast bv. de specifiek gescrapete Champions League-groep verschijnt.
-      const canon = canonicalCompId(scraped.compName, scraped.country);
-      if (canon && COMPS[canon]) {
-        scraped.compId = canon;
-        scraped.compName = COMPS[canon].name;
-        scraped.compFlag = COMPS[canon].flag;
-      }
-      const dup = snapshot.some(([, m]) => m.date === scraped.date && teamsMatch(m.h, scraped.h) && teamsMatch(m.a, scraped.a));
-      if (dup) { skippedDup++; continue; }
-      byId.set(scraped.apiId, scraped);
-      addedGlobal++;
-    }
-    log.push(`Wereldwijd (via GitHub-cron, opgehaald ${globalCache.fetchedAt}): ${globalCache.matches.length} wedstrijden gevonden, ${addedGlobal} toegevoegd, ${skippedDup} al aanwezig via specifieke scraper`);
-  } else {
-    log.push('Wereldwijd: nog geen data ontvangen van de GitHub-cron (eerste run moet nog lopen)');
-  }
-
-  // Normaliseer compId voor ALLE wedstrijden (ook oudere, al gecachete
-  // entries) — niet alleen de net binnengekomen globale data hierboven.
-  // Vangt ook oude/verweesde entries op die met een verouderd of
-  // inconsistent compId (bv. als string i.p.v. getal) zijn opgeslagen, wat
-  // anders een 2e, ongekoppelde competitiegroep in de app veroorzaakt.
-  for (const m of byId.values()) {
-    const canon = canonicalCompId(m.compName, m.country) ?? (COMPS[m.compId] ? Number(m.compId) : null);
-    if (canon != null && COMPS[canon]) {
-      m.compId = canon;
-      m.compName = COMPS[canon].name;
-      m.compFlag = COMPS[canon].flag;
-      // "Speelronde 636"-achtige onzin komt van verouderde/verweesde entries
-      // (geen van onze huidige scrapers vult round zo) — opschonen.
-      if (m.round && /^\d{3,}$/.test(m.round)) m.round = '';
-    }
-  }
-
-  // Volledige cross-dedup over ALLE wedstrijden (niet alleen de net
-  // binnengehaalde globale data hierboven) — ruimt oude/verweesde entries op
-  // die met een inmiddels niet meer geproduceerd apiId-formaat zijn
-  // opgeslagen (bv. uit een eerdere versie van de globale scraper) en
-  // daardoor nooit meer als duplicaat van de actueel gescrapete versie
-  // werden herkend, met steeds wisselende afkortingen tot gevolg (bv.
-  // "Sabah FK", "Sabah", "Sabah Baku" als 3 losse kaarten).
-  const sourceRank = m => (m.source === 'odds1x2' || m.source === 'betexplorer') ? 3 : m.source === 'betexplorer_global' ? 2 : 1;
-  const deduped = [];
-  for (const m of [...byId.values()].sort((a, b) => sourceRank(b) - sourceRank(a))) {
-    const existing = deduped.find(x => x.date === m.date && x.compId === m.compId && teamsMatch(x.h, m.h) && teamsMatch(x.a, m.a));
-    if (!existing) { deduped.push(m); continue; }
-    if (!existing.result && m.result) existing.result = m.result;
-    if (!existing.venue && m.venue) existing.venue = m.venue;
-  }
-
-  const all = deduped;
-  await kvPut(env, 'matches_all', { matches: all, updatedAt: now.toISOString() });
-  const form = computeForm(all);
-  await kvPut(env, 'standings_all', { standings: form, updatedAt: now.toISOString() });
-  log.push(`vorm berekend voor ${form.length} teams (alleen op basis van wedstrijden met bekende uitslag)`);
-
-  const globalMeta = { lastRun: now.toISOString(), totalMatches: all.length };
-  await kvPut(env, 'meta_global', globalMeta);
-  return { ok: true, log, meta: globalMeta };
+  await kvPut(env, 'meta_opta', { lastRun: now.toISOString(), totalMatches: matches.length, totalPlayers: players.length });
+  return { ok: true, matches: matches.length, players: players.length };
 }
 
 // ---------- PIN / ADMIN helpers ----------
@@ -685,159 +172,73 @@ export default {
     const url = new URL(req.url);
 
     if (url.pathname === '/matches') {
-      const d = await kvGet(env, 'matches_all', { matches: [] });
+      const d = await kvGet(env, 'opta_matches', { matches: [] });
       return json({ matches: d.matches || [], updatedAt: d.updatedAt });
     }
 
-    if (url.pathname === '/comps') return json(COMPS);
-    if (url.pathname === '/standings') return json(await kvGet(env, 'standings_all', { standings: [] }));
+    if (url.pathname === '/standings') return json(await kvGet(env, 'opta_standings', { standings: [] }));
 
-    // Odds voor alle momenteel gescrapete wedstrijden (odds1x2.com), in
-    // dezelfde vorm als de oude the-odds-api-gebaseerde /odds-route
-    // ({matches: {key: {h,a,sport,odds:{'1X2':{h,d,a,bm}}}}}) zodat de
-    // frontend (ODDS_API_DATA/getOddsApiMatch) ongewijzigd kan blijven.
-    if (url.pathname === '/odds') {
-      const d = await kvGet(env, 'matches_all', { matches: [] });
-      const scrapedMatches = (d.matches || []).filter(m => m.source === 'odds1x2');
-      const result = {};
-      for (const m of scrapedMatches) {
-        try {
-          const odds = await getOddsForMatch(env, m.compId, m.h, m.a);
-          if (!odds || odds.error) continue;
-          result[`${m.h}_${m.a}`] = {
-            h: m.h, a: m.a, sport: m.compName,
-            odds: { '1X2': { h: odds.home?.best, d: odds.draw?.best, a: odds.away?.best, bm: 'odds1x2.com' } },
-          };
-        } catch { /* deze wedstrijd overslaan */ }
+    if (url.pathname === '/players') {
+      const d = await kvGet(env, 'opta_players', { players: [] });
+      let players = d.players || [];
+      const q = url.searchParams.get('q');
+      if (q) players = players.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
+      const team = url.searchParams.get('team');
+      if (team) players = players.filter(p => p.team.toLowerCase() === team.toLowerCase());
+      const id = url.searchParams.get('id');
+      if (id) {
+        const p = players.find(p => p.playerId === id);
+        if (!p) return json({ error: 'not found' }, 404);
+        return json(p);
       }
-      // Wereldwijde wedstrijden hebben hun 1X2-odds al direct meegescraped
-      // (zie /ingest-global) — geen aparte lookup nodig, gewoon overnemen.
-      const globalWithOdds = (d.matches || []).filter(m => m.source === 'betexplorer_global' && m.oddsH != null);
-      for (const m of globalWithOdds) {
-        result[`${m.h}_${m.a}`] = {
-          h: m.h, a: m.a, sport: m.compName,
-          odds: { '1X2': { h: m.oddsH, d: m.oddsD, a: m.oddsA, bm: 'betexplorer.com' } },
-        };
-      }
-      return json({ matches: result, fetchedAt: new Date().toISOString() });
-    }
-    if (url.pathname === '/player-stats') {
-      const wk = await kvGet(env, 'player_stats', {});
-      return json(wk);
+      return json({ players, updatedAt: d.updatedAt });
     }
 
-    // Kansmodel + odds1x2-odds + Workers AI (env.AI) leesbare analyse.
-    // Vervangt de oude /ai-bet die de betaalde Anthropic-API gebruikte.
-    if (url.pathname === '/ai-analyse') {
+    // Kansmodel (Poisson) + top spelersvoorspellingen (schoten/xG per 90,
+    // opgebouwd uit eigen matchlog) + Workers AI leesbare analyse. Geen
+    // odds — deze databron levert die niet (zie toelichting bovenaan).
+    if (url.pathname === '/predict') {
       const apiId = url.searchParams.get('apiId');
-      const d = await kvGet(env, 'matches_all', { matches: [] });
+      const d = await kvGet(env, 'opta_matches', { matches: [] });
       const match = (d.matches || []).find(m => String(m.apiId) === String(apiId));
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
 
-      const s = await kvGet(env, 'standings_all', { standings: [] });
+      const s = await kvGet(env, 'opta_standings', { standings: [] });
       const homeStats = s.standings.find(t => t.team === match.h);
       const awayStats = s.standings.find(t => t.team === match.a);
       const model = matchProbabilities(homeStats, awayStats);
 
-      let odds = null;
-      try {
-        odds = await getOddsForMatch(env, match.compId, match.h, match.a);
-      } catch (e) {
-        odds = { error: e.message.slice(0, 200) };
-      }
+      const pd = await kvGet(env, 'opta_players', { players: [] });
+      const topFor = team => (pd.players || [])
+        .filter(p => p.team === team && p.apps >= 2)
+        .sort((a, b) => b.shots90 - a.shots90)
+        .slice(0, 5)
+        .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, xg90: p.xg90, apps: p.apps }));
+
+      const homePlayers = topFor(match.h);
+      const awayPlayers = topFor(match.a);
 
       const prompt = `Je bent een nuchtere voetbalanalist. Wedstrijd: ${match.h} vs ${match.a} (${match.compName || ''}, ${match.date} ${match.time}).
-Modelkansen (Poisson, op basis van eigen vormberekening uit gespeelde wedstrijden): thuis ${(model.pHome * 100).toFixed(1)}%, gelijk ${(model.pDraw * 100).toFixed(1)}%, uit ${(model.pAway * 100).toFixed(1)}%.
-${odds && !odds.error ? `Bookmaker-odds (beste gevonden prijs): thuis ${odds.home?.best}, gelijk ${odds.draw?.best}, uit ${odds.away?.best}.` : 'Geen bookmaker-odds beschikbaar voor deze wedstrijd.'}
-Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelkans duidelijk hoger dan wat de odds impliceren)? Wees kritisch en nuchter — het model is simpel (Poisson op vorm) en geen garantie.`;
+Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(model.pHome * 100).toFixed(1)}%, gelijk ${(model.pDraw * 100).toFixed(1)}%, uit ${(model.pAway * 100).toFixed(1)}%.
+Spelers met de meeste schoten per 90 min bij ${match.h}: ${homePlayers.map(p => `${p.name} (${p.shots90}/90, xG ${p.xg90}/90)`).join(', ') || 'nog geen data'}.
+Spelers met de meeste schoten per 90 min bij ${match.a}: ${awayPlayers.map(p => `${p.name} (${p.shots90}/90, xG ${p.xg90}/90)`).join(', ') || 'nog geen data'}.
+Geef in maximaal 4 zinnen Nederlandstalige analyse: wie is favoriet, en welke 1-2 spelers zijn interessant om op te letten voor schoten/doelpunten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
 
+      let analysis = '';
       try {
         const aiResult = await env.AI.run('@cf/mistralai/mistral-small-3.1-24b-instruct', {
           messages: [{ role: 'user', content: prompt }],
         });
-        return json({
-          match: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
-          model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
-          odds,
-          analysis: aiResult.response || aiResult,
-        });
+        analysis = extractAiText(aiResult).trim();
       } catch (e) {
-        return json({ error: `Workers AI fout: ${e.message}` }, 500);
-      }
-    }
-
-    // Vrije-vorm prompt-endpoint voor de frontend (AI-bet-tips-kaarten in
-    // index.html). Gebruikt Workers AI (env.AI) i.p.v. de vroegere,
-    // betaalde Anthropic-API — response-vorm blijft compatibel
-    // ({content:[{text}]}) zodat de bestaande frontend-code ongewijzigd werkt.
-    if (url.pathname === '/ai-bet') {
-      if (req.method === 'GET') return json({ ok: true, backend: 'Cloudflare Workers AI' });
-      try {
-        const body = await req.json();
-        // Zonder max_tokens gebruikt Workers AI een lage default — de
-        // 5-tips JSON-respons werd daardoor midden in een tip afgekapt
-        // (ongeldige JSON, frontend viel terug op ruwe tekst tonen). Soms
-        // levert het model desondanks een lege respons — dan één keer
-        // opnieuw proberen voor we een nette foutmelding teruggeven.
-        // llama-3.3-70b-instruct-fp8-fast (en het kleinere llama-3.1-8b-instruct)
-        // gaven op Workers AI consistent een lege respons terug bij deze
-        // JSON-tips-prompt (getest, ook na retry) — mistral-small-3.1-24b-instruct
-        // volgt dezelfde JSON-instructie wel betrouwbaar op.
-        const model = '@cf/mistralai/mistral-small-3.1-24b-instruct';
-        let text = '';
-        for (let poging = 0; poging < 2 && !text; poging++) {
-          const aiResult = await env.AI.run(model, {
-            messages: [{ role: 'user', content: body.prompt }],
-            max_tokens: 2000,
-          });
-          text = extractAiText(aiResult).trim();
-        }
-        if (!text) return json({ error: 'Workers AI gaf een lege respons (ook na retry)' }, 502);
-        return json({ content: [{ text }] });
-      } catch (e) {
-        return json({ error: e.message }, 500);
-      }
-    }
-
-    if (url.pathname === '/value-bet') {
-      const apiId = url.searchParams.get('apiId');
-      const d = await kvGet(env, 'matches_all', { matches: [] });
-      const match = (d.matches || []).find(m => String(m.apiId) === String(apiId));
-      if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
-
-      const s = await kvGet(env, 'standings_all', { standings: [] });
-      const homeStats = s.standings.find(t => t.team === match.h);
-      const awayStats = s.standings.find(t => t.team === match.a);
-      const model = matchProbabilities(homeStats, awayStats);
-
-      let odds = null;
-      try {
-        odds = await getOddsForMatch(env, match.compId, match.h, match.a);
-      } catch (e) {
-        odds = { error: e.message.slice(0, 200) };
-      }
-
-      const bets = [];
-      if (odds && !odds.error) {
-        const checks = [
-          { label: match.h, modelProb: model.pHome, odds: odds.home?.best },
-          { label: 'Gelijkspel', modelProb: model.pDraw, odds: odds.draw?.best },
-          { label: match.a, modelProb: model.pAway, odds: odds.away?.best },
-        ];
-        for (const c of checks) {
-          if (!c.odds) continue;
-          const impliedProb = 1 / c.odds;
-          const edge = c.modelProb - impliedProb;
-          bets.push({ ...c, impliedProb, edge, isValue: edge > 0.05 });
-        }
-        bets.sort((a, b) => b.edge - a.edge);
+        analysis = '';
       }
 
       return json({
         match: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
         model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
-        odds,
-        bets,
+        players: { home: homePlayers, away: awayPlayers },
+        analysis,
       });
     }
 
@@ -851,45 +252,19 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       return json({ total: list.length, visitors: list });
     }
 
-    if (url.pathname === '/refresh') {
-      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
-      return json(await refreshAll(env, { force: true }));
-    }
-
-    if (url.pathname === '/debug-scrape') {
-      const target = url.searchParams.get('url');
-      const offset = parseInt(url.searchParams.get('offset') || '0', 10);
-      const len = parseInt(url.searchParams.get('len') || '3000', 10);
-      try {
-        const res = await fetch(target, { headers: { 'User-Agent': SCRAPE_UA } });
-        const text = await res.text();
-        return json({ status: res.status, length: text.length, snippet: text.slice(offset, offset + len) });
-      } catch (e) {
-        return json({ error: e.message }, 500);
-      }
-    }
-
     if (url.pathname === '/debug') {
-      const meta = await kvGet(env, 'meta_global', {});
-      const d = await kvGet(env, 'matches_all', { matches: [] });
-      const s = await kvGet(env, 'standings_all', { standings: [] });
-      return json({ meta, totalMatches: (d.matches || []).length, totalTeamsMetVorm: (s.standings || []).length });
+      const meta = await kvGet(env, 'meta_opta', {});
+      return json(meta);
     }
 
     // Clublogo's: gratis, geen API-key nodig via TheSportsDB's publieke
     // test-endpoint (key "3"). We cachen de gevonden badge-URL permanent per
     // team in KV, zodat we TheSportsDB niet steeds opnieuw hoeven te vragen.
-    // Geeft een 302-redirect naar de echte afbeelding terug zodat de
-    // frontend 'm gewoon als <img src="/crest?team=..."> kan gebruiken.
     if (url.pathname === '/crest') {
       const team = url.searchParams.get('team') || '';
       if (!team) return new Response('', { status: 400 });
-      const cacheKey = `crest_${normTeam(team)}`;
+      const cacheKey = `crest_${team.toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
       let cached = await kvGet(env, cacheKey, null);
-      // Alleen een GEVONDEN badge is permanent geldig om te cachen. Een
-      // eerdere mislukte/niet-gevonden lookup slaan we NIET op — anders
-      // blijft die voor altijd "vastzitten" en wordt de zoekopdracht nooit
-      // opnieuw geprobeerd (bug: eerdere versie cachete ook {badge:null}).
       if (!cached || !cached.badge) {
         try {
           const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(team)}`);
@@ -905,93 +280,19 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: is er een value bet (modelka
       return new Response('', { status: 404 });
     }
 
-    // Ontvangt de wereldwijde "vandaag"-wedstrijdenlijst, aangeleverd door de
-    // externe GitHub Actions cron-job (.github/workflows/scrape-global.yml)
-    // omdat de Worker zelf niet bij deze data kan (zie toelichting hierboven
-    // hierboven). Slaat de ruwe lijst op in KV; refreshAll()
-    // merget 'm bij de volgende refresh in matches_all.
-    if (url.pathname === '/ingest-global' && req.method === 'POST') {
+    // Ontvangt de scrape-resultaten van .github/workflows/scrape-opta.yml
+    // (wedstrijden + per-speler matchstats), elke 5 minuten.
+    if (url.pathname === '/ingest-opta' && req.method === 'POST') {
       if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
       try {
         const body = await req.json();
-        const matches = Array.isArray(body.matches) ? body.matches : [];
-        await kvPut(env, 'global_matches_raw', { matches, fetchedAt: new Date().toISOString() });
-        const result = await refreshAll(env, { force: true });
-        return json({ ok: true, received: matches.length, refresh: result });
+        const result = await ingestOpta(env, body);
+        return json(result);
       } catch (e) {
         return json({ error: e.message }, 500);
       }
     }
 
-    // Ontvangt spelersstatistieken, aangeleverd door externe GitHub Actions
-    // cron-jobs (deze Worker kan zelf niet scrapen — zie de losse toelichting
-    // per bron). Losse KV-keys per bron/seizoen zodat ze elkaar niet
-    // overschrijven:
-    // - scrape-players.yml (Understat, Playwright): xG/xA voor 6 competities
-    // - scrape-espn-players.yml (ESPN core API, plain fetch, ?source=espn):
-    //   geen xG, wel goals/assists/schoten/kaarten, huidig seizoen, dagelijks
-    //   ververst — dekt ook competities die Understat niet heeft.
-    // - scrape-espn-players-backfill.yml (?source=espn_prev): eenmalige
-    //   momentopname van vorig seizoen, wordt nooit automatisch overschreven.
-    if (url.pathname === '/ingest-players' && req.method === 'POST') {
-      if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
-      try {
-        const body = await req.json();
-        const players = Array.isArray(body.players) ? body.players : [];
-        const source = url.searchParams.get('source');
-        const kvKey = source === 'espn' ? 'players_espn' : source === 'espn_prev' ? 'players_espn_prev' : 'players_all';
-        await kvPut(env, kvKey, { players, updatedAt: body.updatedAt || new Date().toISOString() });
-        return json({ ok: true, received: players.length, source: kvKey });
-      } catch (e) {
-        return json({ error: e.message }, 500);
-      }
-    }
-
-    // Spelerprofiel-endpoint: /players (lijst, met ?q=naam of ?team=naam
-    // filter) en /players?id=123 (één speler). De lijst combineert Understat
-    // (xG) en ESPN huidig seizoen; bij een losse ?id=-opvraag wordt er ook
-    // gezocht naar dezelfde ESPN-speler vorig seizoen (prevSeason-veld) als
-    // die er is, voor een "hoe presteerde hij vorig seizoen"-vergelijking.
-    if (url.pathname === '/players') {
-      const [understatRaw, espnRaw, espnPrevRaw] = await Promise.all([
-        kvGet(env, 'players_all'),
-        kvGet(env, 'players_espn'),
-        kvGet(env, 'players_espn_prev'),
-      ]);
-      const understat = understatRaw || { players: [], updatedAt: null };
-      const espn = espnRaw || { players: [], updatedAt: null };
-      const espnPrev = espnPrevRaw || { players: [], updatedAt: null };
-      const data = {
-        players: [...(understat.players || []), ...(espn.players || [])],
-        updatedAt: understat.updatedAt || espn.updatedAt,
-      };
-      let players = data.players;
-      const id = url.searchParams.get('id');
-      if (id) {
-        const p = players.find(p => p.id === id);
-        if (!p) return json({ error: 'not found' }, 404);
-        if (p.id.startsWith('espn_')) {
-          const athId = p.id.split('_').pop();
-          const prev = (espnPrev.players || []).find(x => x.id.endsWith(`_${athId}`));
-          if (prev) return json({ ...p, prevSeason: prev });
-        }
-        return json(p);
-      }
-      const q = url.searchParams.get('q');
-      if (q) players = players.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
-      const team = url.searchParams.get('team');
-      if (team) players = players.filter(p => p.team.toLowerCase() === team.toLowerCase());
-      // playersPrev (vorig seizoen, ESPN) meesturen zodat de frontend bet-kansen
-      // kan blenden met vorig seizoen — vooral nuttig vroeg in een nieuw seizoen
-      // wanneer de huidige-seizoen-sample nog klein is.
-      return json({ players, playersPrev: espnPrev.players || [], updatedAt: data.updatedAt });
-    }
-
-    return json({ error: 'not found', routes: ['/matches', '/comps', '/odds', '/standings', '/player-stats', '/players', '/ai-analyse', '/ai-bet', '/value-bet', '/check-pin', '/visitors', '/refresh', '/crest', '/ingest-global', '/ingest-players', '/debug'] }, 404);
-  },
-
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(refreshAll(env, {}));
+    return json({ error: 'not found', routes: ['/matches', '/standings', '/players', '/predict', '/check-pin', '/visitors', '/crest', '/ingest-opta', '/debug'] }, 404);
   },
 };
-
