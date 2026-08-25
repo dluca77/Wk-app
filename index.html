@@ -430,7 +430,11 @@ function renderPredictionBlock(target, m, d){
     if(p.redCards) s += `<span style="color:#ff5c6c">${p.redCards}R</span>`;
     return s;
   };
-  const playerRow = (p,i) => `<div class="prow" style="animation-delay:${i*35}ms"><div class="pn">${p.name}<div class="pp">${p.pos||''} · ${p.apps} apps · ${p.goals}g ${p.assists}a · ${p.corners||0} corners ${cardsBadge(p)}</div></div><div class="stat">${p.shots90}<div class="pp">${p.sot90} on target</div></div></div>`;
+  const POS_NAMES = {G:'Keeper',D:'Verdediger',M:'Middenvelder',F:'Aanvaller'};
+  const playerRow = (p,i) => `<div class="prow" style="animation-delay:${i*35}ms">
+    <div class="pn">${p.name}<div class="pp">${POS_NAMES[p.pos]||p.pos||''} · ${p.apps} wedstrijden gespeeld · ${p.goals} goals, ${p.assists} assists dit seizoen · ${p.corners||0} corners veroorzaakt ${cardsBadge(p)}</div></div>
+    <div class="stat">${p.shots90}<div class="pp">schoten/90 min</div><div class="pp" style="margin-top:2px">${p.sot90} op doel/90 min</div></div>
+  </div>`;
   let html = `
     <h3>Win probability</h3>
     <div class="probrow">
@@ -446,8 +450,9 @@ function renderPredictionBlock(target, m, d){
   });
   let extra = '';
   if(d.players.home.length || d.players.away.length){
-    extra += `<div class="section"><h3>${m.h} — shots per 90</h3><div class="plist">${d.players.home.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">No player data yet</div>'}</div></div>`;
-    extra += `<div class="section"><h3>${m.a} — shots per 90</h3><div class="plist">${d.players.away.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">No player data yet</div>'}</div></div>`;
+    const legend = `<div class="pp" style="padding:0 0 8px;color:var(--muted2)">Schoten per 90 min = gemiddeld aantal schoten per volle wedstrijd dit seizoen. Top 5 spelers per team, gesorteerd op schoten/90.</div>`;
+    extra += `<div class="section"><h3>${m.h} — meeste schoten</h3>${legend}<div class="plist">${d.players.home.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">Nog geen spelersdata</div>'}</div></div>`;
+    extra += `<div class="section"><h3>${m.a} — meeste schoten</h3>${legend}<div class="plist">${d.players.away.map(playerRow).join('') || '<div class="empty" style="padding:8px 0">Nog geen spelersdata</div>'}</div></div>`;
   }
   return extra;
 }

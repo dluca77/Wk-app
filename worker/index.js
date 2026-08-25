@@ -77,10 +77,15 @@ function poissonP(k, lambda) { return Math.exp(-lambda) * Math.pow(lambda, k) / 
 
 function matchProbabilities(homeStats, awayStats, leagueAvgGoals = 1.35) {
   const avg = leagueAvgGoals;
-  const homeAtt = homeStats?.played ? homeStats.gf / homeStats.played : avg;
-  const homeDef = homeStats?.played ? homeStats.ga / homeStats.played : avg;
-  const awayAtt = awayStats?.played ? awayStats.gf / awayStats.played : avg;
-  const awayDef = awayStats?.played ? awayStats.ga / awayStats.played : avg;
+  // Shrinkage naar het league-gemiddelde: bij weinig gespeelde wedstrijden
+  // (begin seizoen) telt een team se eigen cijfers nog nauwelijks mee, zodat
+  // één 0-0'tje niet meteen een kansloos-laag verwacht doelaantal oplevert.
+  const PRIOR_GAMES = 6;
+  const shrink = (sum, played) => (sum + PRIOR_GAMES * avg) / (played + PRIOR_GAMES);
+  const homeAtt = shrink(homeStats?.gf ?? 0, homeStats?.played ?? 0);
+  const homeDef = shrink(homeStats?.ga ?? 0, homeStats?.played ?? 0);
+  const awayAtt = shrink(awayStats?.gf ?? 0, awayStats?.played ?? 0);
+  const awayDef = shrink(awayStats?.ga ?? 0, awayStats?.played ?? 0);
   const lambdaHome = Math.max(0.2, (homeAtt / avg) * (awayDef / avg) * avg * 1.1);
   const lambdaAway = Math.max(0.2, (awayAtt / avg) * (homeDef / avg) * avg * 0.95);
 
