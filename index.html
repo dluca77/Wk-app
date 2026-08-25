@@ -114,15 +114,25 @@ async function loadPlayers(){
   }catch(e){ PLAYERS = []; }
 }
 
+let dayTabsInit = false;
+
 function buildDayTabs(){
   const dates = [...new Set(MATCHES.map(m=>m.date))].sort();
   if(!dates.length){ document.getElementById('dayTabs').innerHTML = ''; return; }
-  if(!selDate || !dates.includes(selDate)) selDate = dates[0];
   const today = new Date().toISOString().slice(0,10);
+  if(!dayTabsInit){
+    // Altijd starten op vandaag (of de eerstvolgende datum erna als er
+    // vandaag toevallig niks gepland staat) — nooit op de oudste datum.
+    selDate = dates.includes(today) ? today : (dates.find(d => d > today) || dates[dates.length - 1]);
+    dayTabsInit = true;
+  } else if(!selDate || !dates.includes(selDate)){
+    selDate = dates[0];
+  }
   document.getElementById('dayTabs').innerHTML = dates.map(d=>{
     const label = d === today ? 'Today' : new Date(d).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
     return `<div class="tab ${d===selDate?'on':''}" onclick="selDate='${d}';render()">${label}</div>`;
   }).join('');
+  document.querySelector('#dayTabs .tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 
 function probs(m){
