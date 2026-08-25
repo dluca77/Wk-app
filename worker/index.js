@@ -1,21 +1,20 @@
 // Football Proxy — Cloudflare Worker
-// Databron: uitsluitend de publieke backend van Stats Perform's "Betting
-// Showcase"-widget (optaplayerstats.statsperform.com/api/en_GB/soccer/...).
-// Geen API-key, geen quotum — maar ook geen odds (dat is een widget die
-// naast een bookmaker's eigen odds-widget hoort te draaien, ze leveren zelf
-// geen prijzen). De app toont daarom geen odds/value-bets meer, alleen:
+// Databron: uitsluitend ESPN's onofficiële "core" API
+// (sports.core.api.espn.com) — geen API-key, geen quotum, en (anders dan
+// Stats Perform's Opta-widget) gewoon bereikbaar vanuit GitHub Actions
+// zonder botdetectie-blokkade. Levert wedstrijdschema's/uitslagen én
+// per-speler seizoenstotalen (goals, assists, schoten, schoten-op-doel).
+// Geen odds, geen xG — de app toont daarom geen odds/value-bets, alleen:
 // - Winkans per team (eigen Poisson-model op basis van opgebouwde vorm)
-// - Spelersvoorspellingen: schoten or verwachte goals (xG), op basis van
-//   season-gemiddeldes die over meerdere scrape-runs heen opgebouwd worden.
+// - Spelersvoorspellingen: schoten/schoten-op-doel per 90 min, dit seizoen
 //
-// Beperking: de livescores-feed van deze widget toont maar een curated
-// subset (~9 competities, vandaag+morgen) — geen volledige wereldwijde
-// dekking. Groeit vanzelf mee als Stats Perform de widget-selectie uitbreidt.
+// Beperking: dekt 9 vaste competities; Europa League/Conference League
+// tonen (nog) geen teams zolang ESPN de groepsfase niet heeft opgezet, en
+// spelersstats van een net gestarte competitie kunnen leeg zijn totdat er
+// wedstrijden gespeeld zijn — vult zichzelf organisch aan.
 //
-// Scraping gebeurt in GitHub Actions (.github/workflows/scrape-opta.yml,
-// elke 5 min), niet in deze Worker zelf — nooit getest of Cloudflare-IP's
-// hier geblokkeerd worden, dus voor de zekerheid dezelfde ingest-aanpak als
-// eerdere databronnen in dit project (POST /ingest-opta).
+// Scraping gebeurt in GitHub Actions (.github/workflows/scrape-espn.yml),
+// niet in deze Worker zelf, via POST /ingest.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -95,51 +94,29 @@ function matchProbabilities(homeStats, awayStats, leagueAvgGoals = 1.35) {
   return { pHome, pDraw, pAway, lambdaHome, lambdaAway };
 }
 
-// ---------- Spelers: season-aggregatie uit opgestapelde matchlogs ----------
-function aggregatePlayers(entries) {
-  const byPlayer = new Map();
-  for (const e of entries) {
-    if (!byPlayer.has(e.playerId)) {
-      byPlayer.set(e.playerId, { playerId: e.playerId, name: e.name, pos: e.pos, team: e.team, compName: e.compName, apps: 0, mins: 0, shots: 0, xg: 0, goals: 0 });
-    }
-    const p = byPlayer.get(e.playerId);
-    p.apps++; p.mins += e.minsPlayed; p.shots += e.shots; p.xg += e.xg; p.goals += e.goals;
-    p.team = e.team; p.compName = e.compName; // laatste bekende team/competitie
-  }
-  return [...byPlayer.values()].map(p => {
-    const per90 = p.mins > 0 ? p.mins / 90 : 0;
-    return { ...p, shots90: per90 ? +(p.shots / per90).toFixed(2) : 0, xg90: per90 ? +(p.xg / per90).toFixed(2) : 0 };
-  });
-}
-
 // ---------- Refresh: nieuwe scrape-data mergen met opgebouwde geschiedenis ----------
-async function ingestOpta(env, body) {
+async function ingestEspn(env, body) {
   const now = new Date();
   const incomingMatches = Array.isArray(body.matches) ? body.matches : [];
-  const incomingLog = Array.isArray(body.playerMatchStats) ? body.playerMatchStats : [];
+  const incomingPlayers = Array.isArray(body.players) ? body.players : [];
 
-  const existing = await kvGet(env, 'opta_matches', { matches: [] });
+  // Wedstrijden mergen op apiId zodat oudere, inmiddels buiten het scrape-
+  // venster gevallen wedstrijden (voor vormberekening) bewaard blijven.
+  const existing = await kvGet(env, 'espn_matches', { matches: [] });
   const byId = new Map((existing.matches || []).map(m => [m.apiId, m]));
   for (const m of incomingMatches) byId.set(m.apiId, m);
   const matches = [...byId.values()];
-  await kvPut(env, 'opta_matches', { matches, updatedAt: now.toISOString() });
+  await kvPut(env, 'espn_matches', { matches, updatedAt: now.toISOString() });
 
   const form = computeForm(matches);
-  await kvPut(env, 'opta_standings', { standings: form, updatedAt: now.toISOString() });
+  await kvPut(env, 'espn_standings', { standings: form, updatedAt: now.toISOString() });
 
-  // Speler-matchlog: opstapelen, dedupliceren op matchApiId+playerId zodat
-  // een herhaalde scrape van dezelfde (nog lopende) wedstrijd niet dubbel telt.
-  const existingLog = await kvGet(env, 'opta_player_log', { entries: [] });
-  const logById = new Map((existingLog.entries || []).map(e => [`${e.matchApiId}_${e.playerId}`, e]));
-  for (const e of incomingLog) logById.set(`${e.matchApiId}_${e.playerId}`, e);
-  const entries = [...logById.values()];
-  await kvPut(env, 'opta_player_log', { entries, updatedAt: now.toISOString() });
+  // Spelers zijn al season-cumulatieve totalen (ESPN levert dat direct) —
+  // gewoon overschrijven, geen eigen opstapeling nodig.
+  await kvPut(env, 'espn_players', { players: incomingPlayers, updatedAt: now.toISOString() });
 
-  const players = aggregatePlayers(entries);
-  await kvPut(env, 'opta_players', { players, updatedAt: now.toISOString() });
-
-  await kvPut(env, 'meta_opta', { lastRun: now.toISOString(), totalMatches: matches.length, totalPlayers: players.length });
-  return { ok: true, matches: matches.length, players: players.length };
+  await kvPut(env, 'meta_espn', { lastRun: now.toISOString(), totalMatches: matches.length, totalPlayers: incomingPlayers.length });
+  return { ok: true, matches: matches.length, players: incomingPlayers.length };
 }
 
 // ---------- PIN / ADMIN helpers ----------
@@ -172,14 +149,14 @@ export default {
     const url = new URL(req.url);
 
     if (url.pathname === '/matches') {
-      const d = await kvGet(env, 'opta_matches', { matches: [] });
+      const d = await kvGet(env, 'espn_matches', { matches: [] });
       return json({ matches: d.matches || [], updatedAt: d.updatedAt });
     }
 
-    if (url.pathname === '/standings') return json(await kvGet(env, 'opta_standings', { standings: [] }));
+    if (url.pathname === '/standings') return json(await kvGet(env, 'espn_standings', { standings: [] }));
 
     if (url.pathname === '/players') {
-      const d = await kvGet(env, 'opta_players', { players: [] });
+      const d = await kvGet(env, 'espn_players', { players: [] });
       let players = d.players || [];
       const q = url.searchParams.get('q');
       if (q) players = players.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
@@ -194,34 +171,34 @@ export default {
       return json({ players, updatedAt: d.updatedAt });
     }
 
-    // Kansmodel (Poisson) + top spelersvoorspellingen (schoten/xG per 90,
-    // opgebouwd uit eigen matchlog) + Workers AI leesbare analyse. Geen
-    // odds — deze databron levert die niet (zie toelichting bovenaan).
+    // Kansmodel (Poisson) + top spelersvoorspellingen (schoten/schoten-op-
+    // doel per 90 min, dit seizoen) + Workers AI leesbare analyse. Geen
+    // odds — deze databron levert die niet.
     if (url.pathname === '/predict') {
       const apiId = url.searchParams.get('apiId');
-      const d = await kvGet(env, 'opta_matches', { matches: [] });
+      const d = await kvGet(env, 'espn_matches', { matches: [] });
       const match = (d.matches || []).find(m => String(m.apiId) === String(apiId));
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
 
-      const s = await kvGet(env, 'opta_standings', { standings: [] });
+      const s = await kvGet(env, 'espn_standings', { standings: [] });
       const homeStats = s.standings.find(t => t.team === match.h);
       const awayStats = s.standings.find(t => t.team === match.a);
       const model = matchProbabilities(homeStats, awayStats);
 
-      const pd = await kvGet(env, 'opta_players', { players: [] });
+      const pd = await kvGet(env, 'espn_players', { players: [] });
       const topFor = team => (pd.players || [])
         .filter(p => p.team === team && p.apps >= 2)
         .sort((a, b) => b.shots90 - a.shots90)
         .slice(0, 5)
-        .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, xg90: p.xg90, apps: p.apps }));
+        .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, sot90: p.sot90, goals: p.goals, assists: p.assists, apps: p.apps }));
 
       const homePlayers = topFor(match.h);
       const awayPlayers = topFor(match.a);
 
       const prompt = `Je bent een nuchtere voetbalanalist. Wedstrijd: ${match.h} vs ${match.a} (${match.compName || ''}, ${match.date} ${match.time}).
 Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(model.pHome * 100).toFixed(1)}%, gelijk ${(model.pDraw * 100).toFixed(1)}%, uit ${(model.pAway * 100).toFixed(1)}%.
-Spelers met de meeste schoten per 90 min bij ${match.h}: ${homePlayers.map(p => `${p.name} (${p.shots90}/90, xG ${p.xg90}/90)`).join(', ') || 'nog geen data'}.
-Spelers met de meeste schoten per 90 min bij ${match.a}: ${awayPlayers.map(p => `${p.name} (${p.shots90}/90, xG ${p.xg90}/90)`).join(', ') || 'nog geen data'}.
+Spelers met de meeste schoten per 90 min bij ${match.h}: ${homePlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.
+Spelers met de meeste schoten per 90 min bij ${match.a}: ${awayPlayers.map(p => `${p.name} (${p.shots90}/90, ${p.sot90} op doel/90, ${p.goals} goals dit seizoen)`).join(', ') || 'nog geen data'}.
 Geef in maximaal 4 zinnen Nederlandstalige analyse: wie is favoriet, en welke 1-2 spelers zijn interessant om op te letten voor schoten/doelpunten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
 
       let analysis = '';
@@ -253,7 +230,7 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: wie is favoriet, en welke 1-
     }
 
     if (url.pathname === '/debug') {
-      const meta = await kvGet(env, 'meta_opta', {});
+      const meta = await kvGet(env, 'meta_espn', {});
       return json(meta);
     }
 
@@ -280,19 +257,19 @@ Geef in maximaal 4 zinnen Nederlandstalige analyse: wie is favoriet, en welke 1-
       return new Response('', { status: 404 });
     }
 
-    // Ontvangt de scrape-resultaten van .github/workflows/scrape-opta.yml
-    // (wedstrijden + per-speler matchstats), elke 5 minuten.
-    if (url.pathname === '/ingest-opta' && req.method === 'POST') {
+    // Ontvangt de scrape-resultaten van .github/workflows/scrape-espn.yml
+    // (wedstrijden + season-spelersstats).
+    if (url.pathname === '/ingest' && req.method === 'POST') {
       if (url.searchParams.get('key') !== env.REFRESH_SECRET) return json({ error: 'forbidden' }, 403);
       try {
         const body = await req.json();
-        const result = await ingestOpta(env, body);
+        const result = await ingestEspn(env, body);
         return json(result);
       } catch (e) {
         return json({ error: e.message }, 500);
       }
     }
 
-    return json({ error: 'not found', routes: ['/matches', '/standings', '/players', '/predict', '/check-pin', '/visitors', '/crest', '/ingest-opta', '/debug'] }, 404);
+    return json({ error: 'not found', routes: ['/matches', '/standings', '/players', '/predict', '/check-pin', '/visitors', '/crest', '/ingest', '/debug'] }, 404);
   },
 };

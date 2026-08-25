@@ -206,7 +206,7 @@ async function openMatch(apiId){
       return;
     }
     const p1 = Math.round(d.model.pHome*100), px = Math.round(d.model.pDraw*100), p2 = 100-p1-px;
-    const playerRow = p => `<div class="prow"><div class="pn">${p.name}<div class="pp">${p.pos||''} · ${p.apps} apps</div></div><div class="stat">${p.shots90}</div></div>`;
+    const playerRow = p => `<div class="prow"><div class="pn">${p.name}<div class="pp">${p.pos||''} · ${p.apps} apps · ${p.goals} goals, ${p.assists} assists</div></div><div class="stat">${p.shots90}<div class="pp">${p.sot90} on target</div></div></div>`;
     document.getElementById('predict-section').innerHTML = `
       <h3>Win probability</h3>
       <div class="probrow">
@@ -245,8 +245,8 @@ function filterPlayers(q){
   const list = PLAYERS.filter(p=>p.name.toLowerCase().includes(q)).sort((a,b)=>b.shots90-a.shots90).slice(0,100);
   document.getElementById('playerList').innerHTML = list.length ? list.map(p=>`
     <div class="prow">
-      <div class="pn">${p.name}<div class="pp">${p.team} · ${p.compName||''} · ${p.apps} apps</div></div>
-      <div class="stat">${p.shots90}<div class="pp">sh/90</div></div>
+      <div class="pn">${p.name}<div class="pp">${p.team} · ${p.compName||''} · ${p.goals}g ${p.assists}a in ${p.apps} apps</div></div>
+      <div class="stat">${p.shots90}<div class="pp">sh/90 (${p.sot90} on target)</div></div>
     </div>
   `).join('') : '<div class="empty">No players found.</div>';
 }

@@ -1,0 +1,26 @@
+name: Scrape wedstrijden + spelerstats (ESPN)
+
+# Enige databron van de app: ESPN's onofficiële "core" API
+# (sports.core.api.espn.com) — geen API-key nodig, en anders dan
+# site.api.espn.com of Stats Perform's Opta-widget géén Akamai-blokkade
+# vanuit GitHub Actions. Zie scripts/scrape-espn.mjs voor de toelichting.
+on:
+  schedule:
+    - cron: '*/15 * * * *' # elke 15 min i.p.v. 5 — het spelersgedeelte doet veel requests (team → athletes → stats per speler)
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scrape ESPN wedstrijden + spelerstats
+        run: node scripts/scrape-espn.mjs > espn-data.json
+      - name: Stuur naar Worker
+        env:
+          RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
+        run: |
+          CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
+          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ingest?key=$CLEAN_SECRET" \
+            -H "Content-Type: application/json" \
+            --data @espn-data.json
