@@ -40,7 +40,23 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .tab{flex:none;padding:6px 13px;border-radius:6px;background:var(--card);color:var(--muted);font-size:12.5px;font-weight:600;border:1px solid var(--border);cursor:pointer;white-space:nowrap;transition:all .12s ease}
 .tab:active{transform:scale(.94)}
 .tab.on{background:var(--mint);color:#04231b;border-color:var(--mint);font-weight:700}
+.layout{max-width:1040px;margin:0 auto;display:block}
+.sidebar{display:none}
 .wrap{position:relative;z-index:1;padding:10px 12px;max-width:760px;margin:0 auto}
+@media (min-width:900px){
+  .layout{display:flex;align-items:flex-start;gap:0;max-width:1040px}
+  .sidebar{display:block;width:230px;flex:none;position:sticky;top:96px;padding:14px 10px;border-right:1px solid var(--border);max-height:calc(100vh - 96px);overflow-y:auto}
+  .wrap{flex:1;max-width:none;margin:0;padding:14px 20px}
+  .top-row,.tabs{max-width:none;margin-left:0}
+}
+.sb-search{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12.5px;margin-bottom:16px}
+.sb-search:focus{outline:none;border-color:var(--mint)}
+.sb-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2);font-weight:700;margin:0 0 8px;padding:0 4px}
+.sb-list{display:flex;flex-direction:column;margin-bottom:20px}
+.sb-item{display:flex;align-items:center;gap:9px;padding:7px 4px;border-radius:6px;font-size:12.5px;color:#c7d0dd;cursor:pointer;transition:background .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-item:hover{background:var(--card)}
+.sb-item .ico{font-size:13px;flex:none;opacity:.85}
+.sb-item .cnt{margin-left:auto;color:var(--muted2);font-size:10.5px;font-weight:600}
 .matchgrid{display:flex;flex-direction:column;gap:8px}
 .empty{color:var(--muted);text-align:center;padding:64px 20px;font-size:14px;animation:fadeIn .3s ease}
 .empty .big{font-size:36px;display:block;margin-bottom:12px;opacity:.6}
@@ -129,7 +145,10 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
   <div class="tabs" id="dayTabs"></div>
 </div>
 
-<div class="wrap" id="view"></div>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="wrap" id="view"></div>
+</div>
 
 <div class="fab-wrap" id="fabWrap"></div>
 
@@ -148,6 +167,12 @@ let MATCHES = [], PLAYERS = [], page = 'matches', selDate = null;
 let groupOpen = {};
 let selectMode = false, selectedIds = new Set();
 
+function nlToday(){
+  // Wedstrijddata staat al in NL-tijd (server-side omgerekend) — "vandaag"
+  // moet dus ook op NL-tijd bepaald worden, niet op UTC (anders klopt het
+  // 's ochtends vroeg niet, als UTC-datum nog de vorige dag is).
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Amsterdam' });
+}
 function isLive(m){ return m.live || m.status === 'live'; }
 function isDone(m){ return m.finished || m.status === 'played'; }
 function fmtTime(t){ return t || ''; }
@@ -176,7 +201,7 @@ let dayTabsInit = false;
 function buildDayTabs(){
   const dates = [...new Set(MATCHES.map(m=>m.date))].sort();
   if(!dates.length){ document.getElementById('dayTabs').innerHTML = ''; return; }
-  const today = new Date().toISOString().slice(0,10);
+  const today = nlToday();
   if(!dayTabsInit){
     // Altijd starten op vandaag (of de eerstvolgende datum erna als er
     // vandaag toevallig niks gepland staat) — nooit op de oudste datum.
@@ -273,9 +298,24 @@ function render(){
   el.innerHTML = `<div class="matchgrid">${groupsHtml}</div>`;
 }
 
+function teamInitials(name){
+  const words = (name||'?').replace(/[^\p{L}0-9 ]/gu,'').trim().split(/\s+/);
+  if(words.length === 1) return words[0].slice(0,2).toUpperCase();
+  return (words[0][0] + words[words.length-1][0]).toUpperCase();
+}
+function teamHue(name){
+  let h = 0;
+  for(const c of (name||'?')) h = (h*31 + c.charCodeAt(0)) >>> 0;
+  return h % 360;
+}
+function crestFallback(team){
+  const hue = teamHue(team);
+  return `<span class="crest crest-fb" style="background:hsl(${hue} 45% 24%);color:hsl(${hue} 70% 78%)">${teamInitials(team)}</span>`;
+}
 function crestImg(team){
   const src = `${API}/crest?team=${encodeURIComponent(team)}`;
-  return `<img class="crest" src="${src}" loading="lazy" onerror="this.classList.add('hide')">`;
+  const fb = crestFallback(team).replace(/"/g,'&quot;');
+  return `<img class="crest" src="${src}" loading="lazy" onerror="this.outerHTML='${fb}'">`;
 }
 
 function probChip(label, pct, isFav){

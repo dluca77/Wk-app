@@ -52,6 +52,18 @@ function statVal(stats, name) {
   return s ? s.value : 0;
 }
 
+// ESPN geeft wedstrijddatums in UTC — de app moet Nederlandse (lokale)
+// tijd tonen, dus hier omrekenen incl. zomer-/wintertijd (DST).
+const nlFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+});
+function toNlDateTime(isoUtc) {
+  const parts = nlFmt.formatToParts(new Date(isoUtc));
+  const get = t => parts.find(p => p.type === t).value;
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
+}
+
 // Datumvenster: 10 dagen terug (voor vorm/season-stats) t/m 10 dagen vooruit
 // (aankomende wedstrijden). ESPN's core API accepteert een dash-range.
 function dateRange() {
@@ -122,14 +134,13 @@ async function scrapeMatches(slug, leagueName, teamIdToName) {
       if (hs && as) result = `${Math.round(hs.value)}-${Math.round(as.value)}`;
     }
 
-    const d = new Date(ev.date);
+    const { date, time } = toNlDateTime(ev.date);
     return {
       apiId: `espn_${ev.id}`,
       compId: slug,
       compName: leagueName,
       h, a,
-      date: d.toISOString().slice(0, 10),
-      time: d.toISOString().slice(11, 16),
+      date, time,
       status: finished ? 'played' : live ? 'live' : 'fixture',
       live, finished, result,
       venue: comp.venue?.fullName || '',

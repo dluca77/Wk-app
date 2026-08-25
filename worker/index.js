@@ -284,24 +284,40 @@ Geef een Nederlandstalige analyse (max 6 zinnen): welke 1-2 wedstrijden uit dit 
       return json(meta);
     }
 
-    // Clublogo's: gratis, geen API-key nodig via TheSportsDB's publieke
-    // test-endpoint (key "3"). We cachen de gevonden badge-URL permanent per
-    // team in KV, zodat we TheSportsDB niet steeds opnieuw hoeven te vragen.
+    // Clublogo's: TheSportsDB (gratis test-key "3") dekt vooral bekende
+    // clubs uit de grote competities — lagere divisies/reserveteams/kleinere
+    // landen staan er meestal niet in. Wikipedia heeft van vrijwel elke club
+    // (ook obscure) een pagina met een logo in de infobox, dus die is de
+    // fallback: opensearch vindt de beste paginatitel voor de teamnaam, de
+    // page-summary geeft het thumbnail. Resultaat wordt permanent gecachet
+    // per team in KV zodat we dit maar één keer per club hoeven te doen.
     if (url.pathname === '/crest') {
       const team = url.searchParams.get('team') || '';
       if (!team) return new Response('', { status: 400 });
       const cacheKey = `crest_${team.toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
       let cached = await kvGet(env, cacheKey, null);
       if (!cached || !cached.badge) {
+        let badge = null;
         try {
           const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(team)}`);
           const data = await res.json();
-          const badge = data?.teams?.[0]?.strBadge || data?.teams?.[0]?.strTeamBadge || null;
-          cached = { badge, fetchedAt: new Date().toISOString() };
-          if (badge) await kvPut(env, cacheKey, cached);
-        } catch {
-          cached = { badge: null };
+          badge = data?.teams?.[0]?.strBadge || data?.teams?.[0]?.strTeamBadge || null;
+        } catch { /* val door naar Wikipedia */ }
+        if (!badge) {
+          try {
+            const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(team + ' FC')}&limit=1&format=json`);
+            const [, , , urls] = await searchRes.json();
+            const pageUrl = urls?.[0];
+            const title = pageUrl ? decodeURIComponent(pageUrl.split('/wiki/')[1] || '') : null;
+            if (title) {
+              const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+              const sum = await sumRes.json();
+              badge = sum?.thumbnail?.source || sum?.originalimage?.source || null;
+            }
+          } catch { /* geen logo gevonden */ }
         }
+        cached = { badge, fetchedAt: new Date().toISOString() };
+        if (badge) await kvPut(env, cacheKey, cached);
       }
       if (cached.badge) return Response.redirect(cached.badge, 302);
       return new Response('', { status: 404 });
