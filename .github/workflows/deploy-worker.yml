@@ -30,14 +30,6 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: DEBUG verifieer nieuwe ECL-slug
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
-          import json,sys,collections
-          d = json.load(sys.stdin)
-          c = collections.Counter(m.get('compId') for m in d['matches'])
-          print('ECL wedstrijden:', c.get(17015,0))
-          "
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
