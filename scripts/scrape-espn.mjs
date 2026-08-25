@@ -2,31 +2,28 @@
 // (sports.core.api.espn.com). Anders dan site.api.espn.com (die Akamai/403
 // geeft vanaf cloud-IP's, getest vanuit deze GitHub Actions-omgeving) is
 // deze core-API gewoon bereikbaar zonder blokkade en zonder API-key.
-// Levert zowel wedstrijdschema's/uitslagen als per-speler matchstats
-// (goals/assists/schoten/schoten-op-doel) — geen xG, maar wel alles wat
-// nodig is voor winkans + speler-schotenvoorspellingen, uit één bron.
-const LEAGUES = {
-  'ned.1': 'Eredivisie',
-  'uefa.champions': 'Champions League',
-  'uefa.europa': 'Europa League',
-  'uefa.europa.conf': 'Conference League',
-  'eng.1': 'Premier League',
-  'esp.1': 'La Liga',
-  'ger.1': 'Bundesliga',
-  'ita.1': 'Serie A',
-  'fra.1': 'Ligue 1',
-  // Bredere dekking zodat er op meer dagen daadwerkelijk iets te zien is
-  // (net als op Livescore) — niet alleen de "grote 5" + Europese bekers.
-  'eng.2': 'Championship',
-  'ned.2': 'Eerste Divisie',
-  'por.1': 'Primeira Liga',
-  'bel.1': 'Pro League',
-  'tur.1': 'Süper Lig',
-  'sco.1': 'Scottish Premiership',
-  'usa.1': 'MLS',
-  'mex.1': 'Liga MX',
-  'bra.1': 'Brasileirão',
-};
+//
+// Twee fases, om Livescore-achtige breedte te krijgen zonder de looptijd te
+// laten ontploffen:
+// 1. DISCOVERY — alle ~218 voetbalcompetities die ESPN kent (opgehaald via
+//    de /leagues-masterlijst) krijgen één goedkope events-aanvraag om te
+//    zien of ze wedstrijden hebben in het datumvenster. De meeste landen/
+//    bekers hebben op een willekeurige dag niks — die vallen meteen af.
+// 2. DETAIL — voor elke competitie die wél iets heeft, worden de echte
+//    wedstrijden (teams/tijd/uitslag) opgehaald. Spelersstats (schoten/
+//    schoten-op-doel, dus team→spelers→season-stats, veel duurder) worden
+//    alleen gedaan voor de PRIORITY_LEAGUES-lijst hieronder — anders zou één
+//    scrape-run met 100+ actieve competities veel te lang duren. Wedstrijden
+//    uit niet-prioritaire competities worden dus wel getoond, alleen zonder
+//    speler-schotenvoorspelling.
+const PRIORITY_LEAGUES = new Set([
+  'ned.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf',
+  'uefa.champions_qual', 'uefa.europa_qual', 'uefa.europa.conf_qual',
+  'eng.1', 'esp.1', 'ger.1', 'ita.1', 'fra.1',
+  'eng.2', 'ned.2', 'por.1', 'bel.1', 'tur.1', 'sco.1',
+  'usa.1', 'mex.1', 'bra.1', 'ksa.1', 'eng.league_cup', 'eng.fa',
+]);
+
 const SEASON = process.env.SEASON || '2026';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const BASE = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues';
@@ -65,21 +62,33 @@ function dateRange() {
   return `${fmt(from)}-${fmt(to)}`;
 }
 
-async function scrapeLeague(slug, leagueName) {
-  const teamsList = await getJson(`${BASE}/${slug}/seasons/${SEASON}/teams?lang=en&region=us&limit=50`);
-  const teamRefs = (teamsList?.items || []).map(i => i.$ref);
-  const teamIdToName = new Map();
-  const teams = [];
-  for (const ref of teamRefs) {
-    const t = await getJson(ref);
-    if (!t) continue;
-    teamIdToName.set(String(t.id), t.displayName || t.name);
-    teams.push(t);
-  }
-  console.error(`${leagueName}: ${teams.length} teams`);
+// ---------- Fase 1: discovery — welke competities hebben wedstrijden? ----------
+async function discoverActiveLeagues() {
+  const list = await getJson(`${BASE}?lang=en&region=us&limit=500`);
+  const slugs = (list?.items || [])
+    .map(it => it.$ref?.match(/\/leagues\/([^?]+)/)?.[1])
+    .filter(Boolean);
+  console.error(`discovery: ${slugs.length} competities bekend bij ESPN`);
 
-  // ---------- Wedstrijden ----------
-  const eventsList = await getJson(`${BASE}/${slug}/events?lang=en&region=us&dates=${dateRange()}&limit=100`);
+  const range = dateRange();
+  const checked = await pool(slugs, 16, async (slug) => {
+    const d = await getJson(`${BASE}/${slug}/events?lang=en&region=us&dates=${range}&limit=1`);
+    return { slug, count: d?.count || 0 };
+  });
+  const active = checked.filter(c => c.count > 0).map(c => c.slug);
+  console.error(`discovery: ${active.length} competities hebben wedstrijden in dit venster`);
+  return active;
+}
+
+async function fetchLeagueName(slug) {
+  const d = await getJson(`${BASE}/${slug}?lang=en&region=us`);
+  return d?.displayName || d?.name || slug;
+}
+
+// ---------- Fase 2a: wedstrijden voor één competitie (goedkoop) ----------
+async function scrapeMatches(slug, leagueName, teamIdToName) {
+  const range = dateRange();
+  const eventsList = await getJson(`${BASE}/${slug}/events?lang=en&region=us&dates=${range}&limit=100`);
   const eventRefs = (eventsList?.items || []).map(i => i.$ref);
   const matches = (await pool(eventRefs, 8, async (ref) => {
     const ev = await getJson(ref);
@@ -90,8 +99,13 @@ async function scrapeLeague(slug, leagueName) {
     const away = comp.competitors?.find(c => c.homeAway === 'away');
     const homeId = home?.team?.$ref?.match(/teams\/(\d+)/)?.[1];
     const awayId = away?.team?.$ref?.match(/teams\/(\d+)/)?.[1];
-    const h = teamIdToName.get(homeId) || '';
-    const a = teamIdToName.get(awayId) || '';
+    let h = teamIdToName?.get(homeId);
+    let a = teamIdToName?.get(awayId);
+    // Niet-prioritaire competities hebben geen vooraf opgehaalde teamlijst
+    // (te duur om voor 100+ competities te doen) — dan de teamnaam per
+    // wedstrijd direct van de team-ref zelf lezen.
+    if (!h && home?.team?.$ref) h = (await getJson(home.team.$ref))?.displayName;
+    if (!a && away?.team?.$ref) a = (await getJson(away.team.$ref))?.displayName;
     if (!h || !a) return null;
 
     const status = await getJson(comp.status?.$ref);
@@ -121,9 +135,11 @@ async function scrapeLeague(slug, leagueName) {
       venue: comp.venue?.fullName || '',
     };
   })).filter(Boolean);
-  console.error(`${leagueName}: ${matches.length} wedstrijden`);
+  return matches;
+}
 
-  // ---------- Spelers (season-totalen, huidig seizoen) ----------
+// ---------- Fase 2b: spelers (season-totalen) — alleen prioriteitscompetities ----------
+async function scrapePlayers(leagueName, teams) {
   const players = [];
   for (const team of teams) {
     const athletesRef = team.athletes?.$ref;
@@ -159,27 +175,44 @@ async function scrapeLeague(slug, leagueName) {
     });
     for (const p of teamPlayers) if (p) players.push(p);
   }
-  console.error(`${leagueName}: ${players.length} spelers`);
+  return players;
+}
 
+async function processLeague(slug, isPriority) {
+  const leagueName = await fetchLeagueName(slug);
+  let teamIdToName, teams;
+  if (isPriority) {
+    const teamsList = await getJson(`${BASE}/${slug}/seasons/${SEASON}/teams?lang=en&region=us&limit=50`);
+    const teamRefs = (teamsList?.items || []).map(i => i.$ref);
+    teams = (await pool(teamRefs, 8, ref => getJson(ref))).filter(Boolean);
+    teamIdToName = new Map(teams.map(t => [String(t.id), t.displayName || t.name]));
+  }
+
+  const matches = await scrapeMatches(slug, leagueName, teamIdToName);
+  const players = isPriority && teams?.length ? await scrapePlayers(leagueName, teams) : [];
+  console.error(`${leagueName} (${slug}): ${matches.length} wedstrijden${isPriority ? `, ${players.length} spelers` : ''}`);
   return { matches, players };
 }
 
 async function main() {
-  // Competities parallel verwerken (i.p.v. één voor één) — bij 18 competities
-  // scheelt dat een veelvoud aan wall-clock tijd. Concurrency-limiet van 4
-  // om ESPN niet met te veel gelijktijdige requests te bestoken.
-  const entries = Object.entries(LEAGUES);
-  const results = await pool(entries, 4, async ([slug, name]) => {
+  const activeSlugs = await discoverActiveLeagues();
+  // Prioriteitscompetities altijd meenemen ook al had de discovery-check
+  // toevallig 0 wedstrijden in dit venster (bv. Champions League-groepsfase
+  // moet nog beginnen) — zodat ze meteen weer meedoen zodra dat wél zo is.
+  const allSlugs = [...new Set([...activeSlugs, ...PRIORITY_LEAGUES])];
+
+  const results = await pool(allSlugs, 6, async (slug) => {
     try {
-      return await scrapeLeague(slug, name);
+      return await processLeague(slug, PRIORITY_LEAGUES.has(slug));
     } catch (e) {
-      console.error(`${name} FOUT: ${e.message}`);
+      console.error(`${slug} FOUT: ${e.message}`);
       return { matches: [], players: [] };
     }
   });
 
   const allMatches = results.flatMap(r => r.matches);
   const allPlayers = results.flatMap(r => r.players);
+  console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers uit ${allSlugs.length} competities`);
   process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, updatedAt: new Date().toISOString() }));
 }
 
