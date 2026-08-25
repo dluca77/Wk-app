@@ -30,6 +30,14 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
+      - name: DEBUG probe WhoScored/Opta-achtige bronnen
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          for URL in "https://www.whoscored.com/" "https://www.optasports.com/" "https://www.fotmob.com/"; do
+            echo "=== $URL ==="
+            curl -sS -A "$UA" -o /tmp/probe.html -w 'HTTP_STATUS:%{http_code}  SIZE:%{size_download}\n' "$URL"
+            grep -oc 'Just a moment\|Cloudflare\|captcha' /tmp/probe.html || echo "geen block-indicatoren"
+          done
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
