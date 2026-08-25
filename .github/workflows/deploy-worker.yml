@@ -30,16 +30,18 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: DEBUG probe ECL redirect-doel vinden
+      - name: DEBUG probe alternatieve ECL-slugs
         run: |
-          curl -sS -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
-            -I "https://www.betexplorer.com/football/europe/europa-conference-league/fixtures/"
-          echo "--- volg redirect ---"
-          curl -sS -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
-            -w 'FINAL_URL:%{url_effective}\nHTTP_STATUS:%{http_code}\n' \
-            "https://www.betexplorer.com/football/europe/europa-conference-league/fixtures/" -o /tmp/ecl.html
-          wc -c /tmp/ecl.html
-          grep -oc 'table-main__datetime' /tmp/ecl.html || true
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          for SLUG in "europe/conference-league" "europe/uefa-europa-conference-league" "europe/europa-conference-league-qualification" "europe/europa-conference-league-qual"; do
+            echo "=== $SLUG ==="
+            curl -sS -A "$UA" -L -w 'FINAL_URL:%{url_effective}\nHTTP_STATUS:%{http_code}\n' \
+              "https://www.betexplorer.com/football/$SLUG/fixtures/" -o /tmp/probe.html
+            grep -oc 'table-main__datetime' /tmp/probe.html || echo 0
+          done
+          echo "=== zoek link op homepage ==="
+          curl -sS -A "$UA" "https://www.betexplorer.com/football/" -o /tmp/home.html
+          grep -o 'href="/football/europe/[a-z0-9-]*conference[a-z0-9-]*/"' /tmp/home.html | sort -u
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
