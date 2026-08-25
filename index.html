@@ -86,7 +86,13 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .fp-opt{padding:8px 10px;border-radius:8px;font-size:13px;color:#dbe4f0;cursor:pointer;transition:background .1s}
 .fp-opt:hover{background:var(--card)}
 .fp-opt.on{background:var(--mint);color:#04231b;font-weight:700}
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;flex:1;min-width:0}
+.tabs-scroll{position:relative;flex:1;min-width:0;overflow:hidden}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;min-width:0}
+.tabs-fade{position:absolute;top:0;bottom:2px;width:20px;pointer-events:none;z-index:2;transition:opacity .15s ease}
+.tabs-fade.left{left:0;background:linear-gradient(90deg,var(--bg),transparent)}
+.tabs-fade.right{right:0;background:linear-gradient(270deg,var(--bg),transparent)}
+.tab-arrow{flex:none;font-size:16px;font-weight:700}
+.tab-arrow.hide{visibility:hidden}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:none;padding:7px 15px;border-radius:7px;background:var(--card);color:var(--muted);font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer;white-space:nowrap;transition:all .15s cubic-bezier(.2,.8,.3,1)}
 .tab:active{transform:scale(.94)}
@@ -239,7 +245,13 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
     </div>
   </div>
   <div class="tabs-row" id="tabsRow">
-    <div class="tabs" id="dayTabs"></div>
+    <div class="iconbtn tab-arrow" id="tabArrowLeft" onclick="scrollTabs(-1)">‹</div>
+    <div class="tabs-scroll">
+      <div class="tabs" id="dayTabs" onscroll="updateTabArrows()"></div>
+      <div class="tabs-fade left"></div>
+      <div class="tabs-fade right"></div>
+    </div>
+    <div class="iconbtn tab-arrow" id="tabArrowRight" onclick="scrollTabs(1)">›</div>
     <div class="filter-wrap">
       <div class="iconbtn filter-btn" id="filterBtn" onclick="toggleFilterPop()">⚏<span id="filterBadge" class="fbadge" style="display:none"></span></div>
       <div class="filter-pop" id="filterPop">
@@ -360,6 +372,25 @@ function buildDayTabs(){
     return `<div class="tab ${d===selDate?'on':''}" onclick="selDate='${d}';render()">${label}</div>`;
   }).join('');
   document.querySelector('#dayTabs .tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  updateTabArrows();
+}
+
+function scrollTabs(dir){
+  document.getElementById('dayTabs').scrollBy({ left: dir * 220, behavior: 'smooth' });
+}
+function updateTabArrows(){
+  const el = document.getElementById('dayTabs');
+  if(!el) return;
+  const left = document.getElementById('tabArrowLeft');
+  const right = document.getElementById('tabArrowRight');
+  const fadeL = document.querySelector('.tabs-fade.left');
+  const fadeR = document.querySelector('.tabs-fade.right');
+  const atStart = el.scrollLeft <= 2;
+  const atEnd = el.scrollLeft >= el.scrollWidth - el.clientWidth - 2;
+  left?.classList.toggle('hide', atStart);
+  right?.classList.toggle('hide', atEnd);
+  if(fadeL) fadeL.style.opacity = atStart ? '0' : '1';
+  if(fadeR) fadeR.style.opacity = atEnd ? '0' : '1';
 }
 
 function toggleSelectMode(){
@@ -933,6 +964,8 @@ function renderFavorites(){
   }
   el.innerHTML = `<div class="matchgrid">${renderCardGroup(ms)}</div>`;
 }
+
+window.addEventListener('resize', updateTabArrows);
 
 loadMatches();
 setInterval(loadMatches, 60000);
