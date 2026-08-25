@@ -184,6 +184,7 @@ async function loadMatches(){
     MATCHES = d.matches || [];
   }catch(e){ MATCHES = []; }
   buildDayTabs();
+  buildSidebar();
   render();
 }
 
@@ -242,6 +243,46 @@ function renderFab(){
   } else {
     wrap.innerHTML = '';
   }
+}
+
+function buildSidebar(){
+  const sb = document.getElementById('sidebar');
+  const comps = new Map(); // name -> total match count across all loaded days
+  for(const m of MATCHES){
+    const key = m.compName || 'Other';
+    comps.set(key, (comps.get(key)||0) + 1);
+  }
+  const names = [...comps.keys()].sort();
+  sb.innerHTML = `
+    <input class="sb-search" id="sbSearch" placeholder="Search competition…" oninput="filterSidebar(this.value)">
+    <div class="sb-h">Competitions</div>
+    <div class="sb-list" id="sbList">${names.map(n=>`<div class="sb-item" onclick="jumpToComp('${n.replace(/'/g,"\\'")}')"><span class="ico">🌐</span><span>${n}</span><span class="cnt">${comps.get(n)}</span></div>`).join('')}</div>
+  `;
+}
+
+function filterSidebar(q){
+  q = (q||'').toLowerCase();
+  document.querySelectorAll('#sbList .sb-item').forEach(el=>{
+    const name = el.textContent.toLowerCase();
+    el.style.display = name.includes(q) ? '' : 'none';
+  });
+}
+
+function jumpToComp(name){
+  // Vind de eerstvolgende datum (vanaf vandaag) waarop deze competitie
+  // wedstrijden heeft, spring daarheen en klap de groep open.
+  const today = nlToday();
+  const dates = [...new Set(MATCHES.filter(m=>(m.compName||'Other')===name).map(m=>m.date))].sort();
+  const target = dates.find(d => d >= today) || dates[dates.length-1];
+  if(!target) return;
+  selDate = target;
+  groupOpen[name] = true;
+  buildDayTabs();
+  render();
+  setTimeout(()=>{
+    const hdr = [...document.querySelectorAll('.comp-hdr .name')].find(el=>el.textContent===name);
+    hdr?.closest('.comp-group')?.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 30);
 }
 
 function render(){
