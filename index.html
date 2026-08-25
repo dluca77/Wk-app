@@ -1373,6 +1373,8 @@ function renderMatchGroups(ms){
     const aW=m.result&&parseInt(m.result[2])>parseInt(m.result[0]);
     const isSel = selectedMatchIds.has(m.id);
     const canSelect = !done && !live; // alleen aankomende wedstrijden
+    const tie = returnTieInfo(m);
+    const tieHtml = tie ? `<div style="font-size:10px;color:var(--muted2);margin-top:-2px;margin-bottom:6px">🔄 Return · ${tie.done?`agg. ${tie.aggH}-${tie.aggA}`:`1e wedstrijd ${tie.leg1.result}`}</div>` : '';
     return `<div class="match-card ${live?'live':''} ${isSel?'sel-card':''}" onclick="openModal('${m.id}')">
       <div class="mc-inner">
         <div class="mc-top">
@@ -1382,6 +1384,7 @@ function renderMatchGroups(ms){
             ${canSelect?`<div class="sel-toggle ${isSel?'sel-on':''}" onclick="event.stopPropagation();toggleSelect('${m.id}')" title="Toevoegen aan dagtip">${isSel?'✓':''}</div>`:''}
           </div>
         </div>
+        ${tieHtml}
         <div class="mc-body">
           <div class="mc-teams">
             <div class="team-row"><span class="tflag">${hf}</span><span class="tname ${hW?'w':''}">${m.h}</span></div>
@@ -1533,10 +1536,12 @@ function openModal(id){
   const propHtml = propBlock(m.h) + propBlock(m.a);
   const shdrH = `<div class="shdr"><span class="sflag">${hf}</span><span class="sname">${m.h}</span><span class="slbl">${hLinup.length?'WK-gemiddelden':'Top schutters'}</span></div>`;
   const shdrA = `<div class="shdr"><span class="sflag">${af}</span><span class="sname">${m.a}</span><span class="slbl">${aLinup.length?'WK-gemiddelden':'Top schutters'}</span></div>`;
+  const tie = returnTieInfo(m);
+  const tieMeta = tie ? ` · 🔄 return (heenwedstrijd ${tie.leg1.h} ${tie.leg1.result} ${tie.leg1.a}${tie.done?`, agg. ${tie.aggH}-${tie.aggA}`:''})` : '';
   document.getElementById('mbody').innerHTML=`
     ${topBox}
     <div class="md-hero">
-      <div class="md-meta">${RL(m.g, m)} · ${m.time} NL · ${m.venue}</div>
+      <div class="md-meta">${RL(m.g, m)} · ${m.time} NL · ${m.venue}${tieMeta}</div>
       <div class="md-teams">
         <div class="md-team"><span class="md-flag">${hf}</span><div class="md-name">${m.h}</div></div>
         <div class="md-mid">${m.result?`<div class="md-score">${m.result}</div>`:`<div class="md-vs">vs</div>`}</div>
@@ -1620,6 +1625,16 @@ async function generateAiBet(m, odds, hLinup, aLinup){
   const compLabel = m.compName || 'WK 2026';
   const hasLineups = (hLinup && hLinup.length) || (aLinup && aLinup.length);
 
+  // Return-wedstrijd (2 wedstrijden over een dubbele confrontatie, bv. CL-kwal.)
+  // — heenwedstrijd-uitslag en (indien bekend) aggregaatstand meegeven zodat de
+  // AI daar rekening mee houdt (bv. team dat al ruim voorstaat hoeft minder te
+  // scoren). Geen per-wedstrijd spelersstats beschikbaar, dus geen "wie speelde
+  // goed"-detail — dat wordt niet verzonnen.
+  const tieForAi = returnTieInfo(m);
+  const tieStr = tieForAi
+    ? `RETURN-WEDSTRIJD: dit is de 2e wedstrijd van een dubbele confrontatie. Heenwedstrijd: ${tieForAi.leg1.h} ${tieForAi.leg1.result} ${tieForAi.leg1.a} (${tieForAi.leg1.date}).${tieForAi.done ? '' : ` Houd hier rekening mee bij de kansinschatting (bv. een team dat al voorstaat kan voorzichtiger spelen).`}\n`
+    : '';
+
   // Zonder spelersdata mag de AI GEEN spelers noemen of verzinnen (dat
   // leidde tot hallucinaties, bv. spelers die allang niet meer bij die club
   // zitten). Dan krijgt de AI een simpeler, eerlijker verzoek dat alleen op
@@ -1627,7 +1642,7 @@ async function generateAiBet(m, odds, hLinup, aLinup){
   const prompt = hasLineups ? `Je bent een sportsbetting analist voor ${compLabel}. Alle kansen zijn wiskundig berekend met Poisson — gebruik deze EXACT.
 
 WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g, m)}, ${m.date} ${m.time} NL)
-
+${tieStr}
 ${realOddsStr ? `ECHTE MARKTODDS (gebruik deze voor waardebepaling en gecombineerde quote schatting):
 ${realOddsStr}
 ` : ''}
@@ -1658,7 +1673,7 @@ Antwoord ALLEEN in dit JSON formaat (array van tips):
   : `Je bent een sportsbetting analist voor ${compLabel}.
 
 WEDSTRIJD: ${m.h} vs ${m.a} (${RL(m.g, m)}, ${m.date} ${m.time} NL)
-
+${tieStr}
 ${realOddsStr ? `ECHTE MARKTODDS:\n${realOddsStr}\n` : ''}
 ${betsStr ? `PRE-BEREKENDE KANSEN (gebruik deze exact):\n${betsStr}\n` : ''}
 BELANGRIJK: er is GEEN spelersdata beschikbaar voor deze wedstrijd. Noem GEEN spelersnamen en verzin nooit statistieken — gebruik uitsluitend de odds/kansen hierboven.
@@ -1814,6 +1829,34 @@ function teamsMatch(a, b){
   if(!ta.length || !tb.length) return false;
   const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
   return shorter.every(t => longer.some(u => u.startsWith(t) || t.startsWith(u)));
+}
+
+// Zoekt de heenwedstrijd van een return-tie (Champions League-kwalificatie
+// e.d. wordt vaak over 2 wedstrijden gespeeld): zelfde 2 teams omgedraaid,
+// zelfde competitie, met een bekende uitslag, vóór de datum van deze
+// wedstrijd. We hebben geen per-wedstrijd spelersstats (alleen
+// seizoensgemiddelden), dus dit levert wel de heenwedstrijd-uitslag/
+// aggregaatstand op, maar geen "welke spelers speelden goed"-detail.
+function findFirstLeg(m){
+  if(!m.compId) return null;
+  return MATCHES.find(x =>
+    x.id !== m.id && x.compId === m.compId && x.result &&
+    x.date < m.date &&
+    teamsMatch(x.h, m.a) && teamsMatch(x.a, m.h)
+  ) || null;
+}
+// Geeft {label, aggH, aggA, done} terug voor een return-tie, of null.
+// aggH/aggA zijn t.o.v. m.h/m.a (het huidige thuis-/uitteam), niet leg1.
+function returnTieInfo(m){
+  const leg1 = findFirstLeg(m);
+  if(!leg1) return null;
+  const [l1h, l1a] = leg1.result.split('-').map(Number); // l1h=leg1.h, l1a=leg1.a
+  // leg1.h komt overeen met het huidige uitteam (m.a), leg1.a met het huidige thuisteam (m.h)
+  if(m.result){
+    const [l2h, l2a] = m.result.split('-').map(Number);
+    return { leg1, aggH: l2h + l1a, aggA: l2a + l1h, done: true };
+  }
+  return { leg1, aggH: l1a, aggA: l1h, done: false };
 }
 
 function mergeLive(liveMatches){
