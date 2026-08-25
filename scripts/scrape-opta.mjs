@@ -22,17 +22,31 @@ const SOURCE = 'https://optaplayerstats.statsperform.com';
 
 async function main() {
   const browser = await chromium.launch();
-  const page = await browser.newPage();
+  const page = await browser.newPage({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+  });
 
   // Eerst de gewone pagina bezoeken zodat de sessie/cookies die Akamai
   // verwacht al bestaan voordat we de API zelf aanroepen.
-  await page.goto(`${SOURCE}/en_GB/soccer`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  try {
+    const navRes = await page.goto(`${SOURCE}/en_GB/soccer`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    console.error(`navigatie status: ${navRes?.status()}`);
+  } catch (e) {
+    console.error(`navigatie FOUT: ${e.message}`);
+  }
 
-  const live = await page.evaluate(async () => {
-    const res = await fetch('/api/en_GB/soccer/livescores?offset=-120');
-    if (!res.ok) return null;
-    return res.json();
+  const liveRaw = await page.evaluate(async () => {
+    try {
+      const res = await fetch('/api/en_GB/soccer/livescores?offset=-120');
+      const text = await res.text();
+      return { ok: res.ok, status: res.status, text };
+    } catch (e) {
+      return { ok: false, status: 0, text: 'FETCH_THREW: ' + e.message };
+    }
   });
+  console.error(`livescores fetch: ok=${liveRaw.ok} status=${liveRaw.status}`);
+  if (!liveRaw.ok) console.error(liveRaw.text.slice(0, 500));
+  const live = liveRaw.ok ? JSON.parse(liveRaw.text) : null;
   const rawMatches = live?.matches || [];
 
   const matches = rawMatches.map(m => ({
