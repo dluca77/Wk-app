@@ -30,6 +30,18 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
+      - name: DEBUG probe spelersdata Bodo/Glimt + Nijmegen
+        run: |
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/players" | python3 -c "
+          import json,sys
+          d = json.load(sys.stdin)
+          teams = set()
+          for p in d['players']:
+              t = (p.get('team') or '').lower()
+              if 'glimt' in t or 'nijmegen' in t or 'nec' in t or 'bodo' in t:
+                  teams.add(p['team'])
+          print('gevonden teamnamen:', teams)
+          "
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
