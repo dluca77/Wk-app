@@ -308,14 +308,24 @@ const COUNTRY_BY_PREFIX = {
   uru:'Uruguay', ven:'Venezuela', bol:'Bolivia', crc:'Costa Rica', civ:'Ivory Coast', alg:'Algeria',
   tun:'Tunisia', qat:'Qatar', uae:'United Arab Emirates', ind:'India', chn2:'China',
 };
-const TOP5 = ['premier league','laliga','la liga','serie a','bundesliga','ligue 1'];
+// Tier 0: CL, EL, ECL (incl. hun kwalificatie) in die exacte volgorde, dan
+// interland-toernooien (WK/EK/Nations League).
+const TIER0_ORDER = ['champions league', 'europa league', 'conference league'];
+// Tier 1: Europese top 5, in exact deze volgorde.
+const TOP5 = ['premier league', 'laliga', 'la liga', 'serie a', 'bundesliga', 'ligue 1'];
+// Tier 2: lokale relevantie (NL) — Eredivisie + Keuken Kampioen Divisie.
+const NL_LEAGUES = ['eredivisie', 'eerste divisie', 'keuken kampioen divisie'];
+
 function compSortKey(compName, compId){
   const n = (compName||'').toLowerCase();
-  const isIntl = /champions league|europa league|conference league|world cup|european championship|euro qualifying|nations league/.test(n)
+  const tier0Idx = TIER0_ORDER.findIndex(t => n.includes(t));
+  if(tier0Idx !== -1) return `0${tier0Idx}_${n.includes('qualif') ? 1 : 0}_${n}`;
+  const isIntlTournament = /world cup|european championship|euro qualifying|nations league/.test(n)
     || /^uefa\.|^fifa\.|^concacaf\.|^conmebol\./.test(compId||'');
-  if(isIntl) return `0_${n}`;
-  if(TOP5.includes(n)) return `1_${TOP5.indexOf(n)}`;
-  if(n === 'eredivisie') return `2_`;
+  if(isIntlTournament) return `03_${n}`;
+  const top5Idx = TOP5.indexOf(n);
+  if(top5Idx !== -1) return `1${top5Idx}`;
+  if(NL_LEAGUES.includes(n)) return `2${NL_LEAGUES.indexOf(n)}`;
   const prefix = (compId||'').split('.')[0];
   const country = COUNTRY_BY_PREFIX[prefix] || compName || 'zzz';
   return `3_${country}_${compName}`;
