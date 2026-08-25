@@ -30,9 +30,14 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: DEBUG probe ECL fixtures-pagina ruw
+      - name: DEBUG probe ECL fixtures-pagina direct vanaf runner
         run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/debug-scrape?url=https://www.betexplorer.com/football/europe/europa-conference-league/fixtures/&offset=0&len=4000"
+          curl -sS -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
+            "https://www.betexplorer.com/football/europe/europa-conference-league/fixtures/" -o /tmp/ecl.html -w 'HTTP_STATUS:%{http_code}\n'
+          wc -c /tmp/ecl.html
+          grep -o 'table-main__datetime' /tmp/ecl.html | wc -l
+          grep -o '<title>[^<]*</title>' /tmp/ecl.html
+          grep -o 'canonical" href="[^"]*"' /tmp/ecl.html
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
