@@ -247,16 +247,21 @@ function renderFab(){
 
 function buildSidebar(){
   const sb = document.getElementById('sidebar');
-  const comps = new Map(); // name -> total match count across all loaded days
+  const comps = new Map(); // name -> {count, logo}
   for(const m of MATCHES){
     const key = m.compName || 'Other';
-    comps.set(key, (comps.get(key)||0) + 1);
+    if(!comps.has(key)) comps.set(key, {count:0, logo:m.compLogo});
+    comps.get(key).count++;
   }
   const names = [...comps.keys()].sort();
   sb.innerHTML = `
     <input class="sb-search" id="sbSearch" placeholder="Search competition…" oninput="filterSidebar(this.value)">
     <div class="sb-h">Competitions</div>
-    <div class="sb-list" id="sbList">${names.map(n=>`<div class="sb-item" onclick="jumpToComp('${n.replace(/'/g,"\\'")}')"><span class="ico">🌐</span><span>${n}</span><span class="cnt">${comps.get(n)}</span></div>`).join('')}</div>
+    <div class="sb-list" id="sbList">${names.map(n=>{
+      const c = comps.get(n);
+      const ico = c.logo ? `<img class="crest" src="${c.logo}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ico',textContent:'🌐'}))">` : `<span class="ico">🌐</span>`;
+      return `<div class="sb-item" onclick="jumpToComp('${n.replace(/'/g,"\\'")}')">${ico}<span>${n}</span><span class="cnt">${c.count}</span></div>`;
+    }).join('')}</div>
   `;
 }
 
@@ -326,9 +331,13 @@ function render(){
         </div>
       </div>`;
     }).join('');
+    const compLogo = list[0]?.compLogo;
+    const compIcon = compLogo
+      ? `<img class="crest" src="${compLogo}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'flag',textContent:'🌐'}))">`
+      : `<span class="flag">🌐</span>`;
     return `<div class="comp-group" style="animation-delay:${idx*30}ms">
       <div class="comp-hdr" onclick="groupOpen['${key}']=!groupOpen['${key}'];render()">
-        <span class="flag">🌐</span>
+        ${compIcon}
         <span class="name">${key}</span>
         <span class="count">${list.length}</span>
         <span class="chev ${open?'open':''}">›</span>

@@ -92,13 +92,14 @@ async function discoverActiveLeagues() {
   return active;
 }
 
-async function fetchLeagueName(slug) {
+async function fetchLeagueInfo(slug) {
   const d = await getJson(`${BASE}/${slug}?lang=en&region=us`);
-  return d?.displayName || d?.name || slug;
+  const logo = d?.logos?.find(l => l.rel?.includes('default'))?.href || d?.logos?.[0]?.href || null;
+  return { name: d?.displayName || d?.name || slug, logo };
 }
 
 // ---------- Fase 2a: wedstrijden voor één competitie (goedkoop) ----------
-async function scrapeMatches(slug, leagueName, teamIdToName) {
+async function scrapeMatches(slug, leagueName, leagueLogo, teamIdToName) {
   const range = dateRange();
   const eventsList = await getJson(`${BASE}/${slug}/events?lang=en&region=us&dates=${range}&limit=100`);
   const eventRefs = (eventsList?.items || []).map(i => i.$ref);
@@ -139,6 +140,7 @@ async function scrapeMatches(slug, leagueName, teamIdToName) {
       apiId: `espn_${ev.id}`,
       compId: slug,
       compName: leagueName,
+      compLogo: leagueLogo,
       h, a,
       date, time,
       status: finished ? 'played' : live ? 'live' : 'fixture',
@@ -190,7 +192,7 @@ async function scrapePlayers(leagueName, teams) {
 }
 
 async function processLeague(slug, isPriority) {
-  const leagueName = await fetchLeagueName(slug);
+  const { name: leagueName, logo: leagueLogo } = await fetchLeagueInfo(slug);
   let teamIdToName, teams;
   if (isPriority) {
     const teamsList = await getJson(`${BASE}/${slug}/seasons/${SEASON}/teams?lang=en&region=us&limit=50`);
@@ -199,7 +201,7 @@ async function processLeague(slug, isPriority) {
     teamIdToName = new Map(teams.map(t => [String(t.id), t.displayName || t.name]));
   }
 
-  const matches = await scrapeMatches(slug, leagueName, teamIdToName);
+  const matches = await scrapeMatches(slug, leagueName, leagueLogo, teamIdToName);
   const players = isPriority && teams?.length ? await scrapePlayers(leagueName, teams) : [];
   console.error(`${leagueName} (${slug}): ${matches.length} wedstrijden${isPriority ? `, ${players.length} spelers` : ''}`);
   return { matches, players };
