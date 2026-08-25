@@ -47,7 +47,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
   .layout{display:flex;align-items:flex-start;gap:0;max-width:1040px}
   .sidebar{display:block;width:230px;flex:none;position:sticky;top:96px;padding:14px 10px;border-right:1px solid var(--border);max-height:calc(100vh - 96px);overflow-y:auto}
   .wrap{flex:1;max-width:none;margin:0;padding:14px 20px}
-  .top-row,.tabs{max-width:none;margin-left:0}
+  .top-row,.tabs{max-width:1040px}
 }
 .sb-search{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:12.5px;margin-bottom:16px}
 .sb-search:focus{outline:none;border-color:var(--mint)}
@@ -64,7 +64,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .comp-group{position:relative;margin-bottom:0;border-radius:8px;overflow:hidden;background:var(--card);border:1px solid var(--border)}
 .comp-hdr{position:relative;display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;transition:background .12s;background:var(--card2)}
 .comp-hdr:active{background:rgba(255,255,255,.05)}
-.comp-hdr .crest{width:16px;height:16px;border-radius:3px;object-fit:contain;flex:none}
+.crest{width:16px;height:16px;border-radius:3px;object-fit:contain;flex:none}
 .comp-hdr .flag{font-size:13px;flex:none;opacity:.85}
 .comp-hdr .name{flex:1;font-weight:600;font-size:12px;letter-spacing:0;color:#c7d0dd}
 .comp-hdr .count{color:var(--muted2);font-size:10px;font-weight:600;background:transparent;padding:0}
