@@ -723,7 +723,7 @@ async function openMatch(apiId){
     }
     const extra = renderPredictionBlock(document.getElementById('predict-section'), m, d);
     let html = extra;
-    if(d.odds){
+    if(d.odds && d.odds.home != null){
       const imp = v => Math.round(100/v);
       const edgeChip = (label, decOdds, modelP) => {
         const impliedPct = imp(decOdds);

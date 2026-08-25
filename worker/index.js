@@ -184,6 +184,18 @@ async function fetchReferee(env, apiId, compId) {
 // terugval) — niet meegescraped omdat odds continu veranderen en dit alleen
 // zinvol is voor de wedstrijd die je daadwerkelijk bekijkt. Kort gecachet
 // (10 min) i.p.v. permanent, want de prijs verandert tot de aftrap.
+// DraftKings' overUnder-markt (totaal doelpunten hele wedstrijd) levert
+// overOdds/underOdds in Amerikaans moneyline-formaat (bv. -130, +100), niet
+// decimaal — in tegenstelling tot Bet365's odds.value en de propBets-markten
+// (BTTS, team-doelpunten), die al decimaal zijn. Zonder deze omzetting
+// toonden we bv. "-150" alsof het een decimale quotering was.
+function americanToDecimal(american) {
+  if (american == null) return null;
+  const n = Number(american);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return +(n > 0 ? 1 + n / 100 : 1 + 100 / Math.abs(n)).toFixed(2);
+}
+
 async function fetchOdds(env, apiId, compId) {
   const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
   if (!eventId || !compId) return null;
@@ -196,16 +208,18 @@ async function fetchOdds(env, apiId, compId) {
     const items = data?.items || [];
     const pick = items.find(i => /bet ?365/i.test(i.provider?.name || '')) || items.find(i => i.provider?.name === 'DraftKings') || items[0];
     const dk = items.find(i => i.provider?.name === 'DraftKings'); // alleen DraftKings heeft overUnder op dit niveau
+    const hasTotal = dk?.overUnder != null;
+    const has1x2 = pick?.homeTeamOdds?.odds?.value && pick?.awayTeamOdds?.odds?.value && pick?.drawOdds?.value;
     let odds = null;
-    if (pick?.homeTeamOdds?.odds?.value && pick?.awayTeamOdds?.odds?.value && pick?.drawOdds?.value) {
+    if (has1x2 || hasTotal) {
       odds = {
-        provider: pick.provider?.name || 'onbekend',
-        home: pick.homeTeamOdds.odds.value,
-        draw: pick.drawOdds.value,
-        away: pick.awayTeamOdds.odds.value,
-        totalLine: dk?.overUnder ?? null,
-        overOdds: dk?.overOdds ?? null,
-        underOdds: dk?.underOdds ?? null,
+        provider: pick?.provider?.name || 'onbekend',
+        home: has1x2 ? pick.homeTeamOdds.odds.value : null,
+        draw: has1x2 ? pick.drawOdds.value : null,
+        away: has1x2 ? pick.awayTeamOdds.odds.value : null,
+        totalLine: hasTotal ? dk.overUnder : null,
+        overOdds: hasTotal ? americanToDecimal(dk.overOdds) : null,
+        underOdds: hasTotal ? americanToDecimal(dk.underOdds) : null,
       };
     }
     await kvPut(env, cacheKey, { odds, fetchedAt: Date.now() });
@@ -460,7 +474,10 @@ export default {
 
       const standingLine = s => s ? `${s.team}: ${s.pts} pt uit ${s.played} (${s.win}-${s.draw}-${s.loss}), doelsaldo ${s.gd >= 0 ? '+' : ''}${s.gd}${s.position ? `, positie ${s.position}` : ''}` : null;
       const h2hLine = h2h.length ? h2h.map(m => `${m.date}: ${m.h} ${m.result} ${m.a}`).join('; ') : 'geen eerdere ontmoetingen bekend';
-      const oddsLine = odds ? `Bookmaker-odds (${odds.provider}): thuis ${odds.home}, gelijk ${odds.draw}, uit ${odds.away} (decimaal — lager = grotere favoriet).${odds.totalLine ? ` Totaal doelpunten over/under ${odds.totalLine}: over @${odds.overOdds}, under @${odds.underOdds}.` : ''}` : '';
+      const oddsLine = odds ? [
+        odds.home != null ? `Bookmaker-odds (${odds.provider}): thuis ${odds.home}, gelijk ${odds.draw}, uit ${odds.away} (decimaal — lager = grotere favoriet).` : '',
+        odds.totalLine ? `Totaal doelpunten hele wedstrijd over/under ${odds.totalLine}: over @${odds.overOdds}, under @${odds.underOdds}.` : '',
+      ].filter(Boolean).join(' ') : '';
       const bttsLine = btts ? `Beide teams scoren: ja @${btts.yes}, nee @${btts.no}.` : '';
       const teamGoalsLine = [
         teamGoals.home ? `${match.h} over ${teamGoals.home.line} eigen goals @${teamGoals.home.overOdds}` : null,
