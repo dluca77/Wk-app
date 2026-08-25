@@ -503,6 +503,22 @@ async function openMatch(apiId){
     if(d.h2h && d.h2h.length){
       html += `<div class="section"><h3>Head to head</h3><div class="plist">${d.h2h.map(x=>`<div class="prow"><div class="pn">${x.h} vs ${x.a}<div class="pp">${x.date} · ${x.compName||''}</div></div><div class="stat" style="font-size:14px">${x.result}</div></div>`).join('')}</div></div>`;
     }
+    if(d.props && (d.props.home?.length || d.props.away?.length)){
+      const propRow = p => `<div class="prow">
+        <div class="pn">${p.name}<div class="pp">${[
+          p.anytimeScorer?`scores @${p.anytimeScorer}`:null,
+          p.shots1plus?`1+ shot @${p.shots1plus}`:null,
+          p.sot1plus?`1+ on target @${p.sot1plus}`:null,
+          p.cardOdds?`card @${p.cardOdds}`:null,
+        ].filter(Boolean).join(' · ') || 'no props'}</div></div>
+      </div>`;
+      html += `<div class="section"><h3>Player props (DraftKings)</h3>
+        <div class="pp" style="margin-bottom:8px">${m.h}</div>
+        <div class="plist">${d.props.home.map(propRow).join('') || '<div class="empty" style="padding:6px 0">No data</div>'}</div>
+        <div class="pp" style="margin:12px 0 8px">${m.a}</div>
+        <div class="plist">${d.props.away.map(propRow).join('') || '<div class="empty" style="padding:6px 0">No data</div>'}</div>
+      </div>`;
+    }
     if(d.referee){
       html += `<div class="section"><h3>Referee</h3><div class="ai" style="padding:10px 14px">${d.referee}</div></div>`;
     }

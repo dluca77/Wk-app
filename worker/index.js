@@ -177,6 +177,69 @@ async function fetchOdds(env, apiId, compId) {
   }
 }
 
+// Speler-props (DraftKings): schoten 1+/2+/3+, schoten-op-doel, anytime
+// goalscorer, kaarten — per speler, direct van de bookmaker. Athlete-ID
+// wordt uit de $ref-URL gehaald (geen extra fetch nodig) en gekoppeld aan
+// onze eigen spelerslijst voor de naam.
+const PROP_TYPES = ['Anytime Goalscorer', 'Shots Milestones', 'Shots on Target Milestones', 'To Receive a Card', 'To Receive a Red Card'];
+const PLAYER_SEASON = '2026';
+
+async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
+  const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
+  if (!eventId || !compId) return [];
+  const cacheKey = `props_${eventId}`;
+  const cached = await kvGet(env, cacheKey, null);
+  let raw;
+  if (cached && (Date.now() - cached.fetchedAt) < 10 * 60 * 1000) {
+    raw = cached.raw;
+  } else {
+    try {
+      const oddsRes = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);
+      const oddsData = await oddsRes.json();
+      const dk = (oddsData?.items || []).find(i => i.provider?.name === 'DraftKings');
+      const propsRef = dk?.propBets?.$ref;
+      if (!propsRef) { raw = []; }
+      else {
+        const propsRes = await fetch(`${propsRef}&limit=1000`);
+        const propsData = await propsRes.json();
+        raw = (propsData?.items || [])
+          .filter(it => PROP_TYPES.includes(it.type?.name))
+          .map(it => ({
+            athleteId: it.athlete?.$ref?.match(/athletes\/(\d+)/)?.[1],
+            type: it.type?.name,
+            odds: it.current?.over?.value,
+            target: it.current?.target?.displayValue,
+          }))
+          .filter(it => it.athleteId && it.odds);
+      }
+      await kvPut(env, cacheKey, { raw, fetchedAt: Date.now() });
+    } catch {
+      raw = [];
+    }
+  }
+
+  // Namen koppelen via onze eigen (al opgehaalde) spelerslijst i.p.v. een
+  // fetch per speler.
+  const nameById = new Map();
+  for (const p of playersByTeam) {
+    const id = p.playerId?.match(/^espn_\d+_(\d+)$/)?.[1];
+    if (id) nameById.set(id, p.name);
+  }
+  const byPlayer = new Map();
+  for (const r of raw) {
+    const name = nameById.get(r.athleteId);
+    if (!name) continue;
+    if (!byPlayer.has(name)) byPlayer.set(name, { name });
+    const entry = byPlayer.get(name);
+    if (r.type === 'Anytime Goalscorer') entry.anytimeScorer = r.odds;
+    else if (r.type === 'Shots Milestones' && r.target === '1+') entry.shots1plus = r.odds;
+    else if (r.type === 'Shots on Target Milestones' && r.target === '1+') entry.sot1plus = r.odds;
+    else if (r.type === 'To Receive a Card') entry.cardOdds = r.odds;
+    else if (r.type === 'To Receive a Red Card') entry.redCardOdds = r.odds;
+  }
+  return [...byPlayer.values()];
+}
+
 function singleMatchPromptBlock(b) {
   const m = b.matchInfo;
   return `Wedstrijd: ${m.h} vs ${m.a} (${m.compName || ''}, ${m.date} ${m.time}).
@@ -322,20 +385,31 @@ export default {
 
       const base = buildMatchBase(match, standingsData.standings, playersData.players);
       const h2h = computeH2H(matchesData.matches || [], match.h, match.a);
-      const [referee, odds] = await Promise.all([
+      const relevantPlayers = (playersData.players || []).filter(p => p.team === match.h || p.team === match.a);
+      const [referee, odds, propsAll] = await Promise.all([
         fetchReferee(env, match.apiId, match.compId),
         fetchOdds(env, match.apiId, match.compId),
+        fetchPlayerProps(env, match.apiId, match.compId, relevantPlayers),
       ]);
+      const homeNames = new Set(relevantPlayers.filter(p => p.team === match.h).map(p => p.name));
+      const props = {
+        home: propsAll.filter(p => homeNames.has(p.name)),
+        away: propsAll.filter(p => !homeNames.has(p.name)),
+      };
 
       const standingLine = s => s ? `${s.team}: ${s.pts} pt uit ${s.played} (${s.win}-${s.draw}-${s.loss}), doelsaldo ${s.gd >= 0 ? '+' : ''}${s.gd}${s.position ? `, positie ${s.position}` : ''}` : null;
       const h2hLine = h2h.length ? h2h.map(m => `${m.date}: ${m.h} ${m.result} ${m.a}`).join('; ') : 'geen eerdere ontmoetingen bekend';
       const oddsLine = odds ? `Bookmaker-odds (${odds.provider}): thuis ${odds.home}, gelijk ${odds.draw}, uit ${odds.away} (decimaal — lager = grotere favoriet).` : '';
+      const propsLine = propsAll.length
+        ? `Speler-odds (DraftKings, decimaal): ${propsAll.slice(0, 10).map(p => `${p.name}${p.anytimeScorer ? ` scoort@${p.anytimeScorer}` : ''}${p.shots1plus ? ` schot1+@${p.shots1plus}` : ''}${p.sot1plus ? ` sot1+@${p.sot1plus}` : ''}${p.cardOdds ? ` kaart@${p.cardOdds}` : ''}`).join(', ')}.`
+        : '';
       const prompt = `Je bent een nuchtere voetbalanalist. ${singleMatchPromptBlock(base)}
 ${[standingLine(base.homeStanding), standingLine(base.awayStanding)].filter(Boolean).join('\n') || 'Geen officiële standdata beschikbaar.'}
 Laatste onderlinge duels: ${h2hLine}.
 ${referee ? `Scheidsrechter: ${referee}.` : ''}
 ${oddsLine}
-Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten (geel/rood/overtredingen). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
+${propsLine}
+Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), welke 1-2 spelers interessant zijn voor schoten/doelpunten (vergelijk hun eigen schoten-per-90 met wat de bookmaker-odds impliceren als dat er is), en of er spelers opvallen qua corners of kaarten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
       const analysis = await runAi(env, prompt);
 
       return json({
@@ -346,6 +420,7 @@ Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
         h2h,
         referee,
         odds,
+        props,
         analysis,
       });
     }
