@@ -296,29 +296,40 @@ Geef een Nederlandstalige analyse (max 6 zinnen): welke 1-2 wedstrijden uit dit 
       if (!team) return new Response('', { status: 400 });
       const cacheKey = `crest_${team.toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
       let cached = await kvGet(env, cacheKey, null);
+      const debug = url.searchParams.get('debug') === '1';
+      const dbg = {};
       if (!cached || !cached.badge) {
         let badge = null;
         try {
-          const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(team)}`);
+          const res = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encodeURIComponent(team)}`, { headers: { 'User-Agent': 'Mozilla/5.0 match-insights-app' } });
+          dbg.sdbStatus = res.status;
           const data = await res.json();
+          dbg.sdbData = data;
           badge = data?.teams?.[0]?.strBadge || data?.teams?.[0]?.strTeamBadge || null;
-        } catch { /* val door naar Wikipedia */ }
+        } catch (e) { dbg.sdbError = e.message; }
         if (!badge) {
           try {
-            const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(team + ' FC')}&limit=1&format=json`);
-            const [, , , urls] = await searchRes.json();
+            const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(team + ' FC')}&limit=1&format=json`, { headers: { 'User-Agent': 'match-insights-app/1.0 (https://dluca77.github.io/Wk-app/; contact: n/a)' } });
+            dbg.wikiSearchStatus = searchRes.status;
+            const searchJson = await searchRes.json();
+            dbg.wikiSearchJson = searchJson;
+            const [, , , urls] = searchJson;
             const pageUrl = urls?.[0];
             const title = pageUrl ? decodeURIComponent(pageUrl.split('/wiki/')[1] || '') : null;
+            dbg.wikiTitle = title;
             if (title) {
-              const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+              const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, { headers: { 'User-Agent': 'match-insights-app/1.0 (https://dluca77.github.io/Wk-app/; contact: n/a)' } });
+              dbg.wikiSumStatus = sumRes.status;
               const sum = await sumRes.json();
+              dbg.wikiSum = sum;
               badge = sum?.thumbnail?.source || sum?.originalimage?.source || null;
             }
-          } catch { /* geen logo gevonden */ }
+          } catch (e) { dbg.wikiError = e.message; }
         }
         cached = { badge, fetchedAt: new Date().toISOString() };
         if (badge) await kvPut(env, cacheKey, cached);
       }
+      if (debug) return json({ team, cached, dbg });
       if (cached.badge) return Response.redirect(cached.badge, 302);
       return new Response('', { status: 404 });
     }
