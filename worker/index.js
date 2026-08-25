@@ -138,7 +138,7 @@ function buildMatchBase(match, standings, players) {
     .filter(p => p.team === team && p.apps >= 1 && p.mins >= 20)
     .sort((a, b) => b.shotsAvg - a.shotsAvg)
     .slice(0, 5)
-    .map(p => ({ name: p.name, pos: p.pos, shotsAvg: p.shotsAvg, sotAvg: p.sotAvg, goals: p.goals, assists: p.assists, apps: p.apps, yellowCards: p.yellowCards, redCards: p.redCards, fouls: p.fouls, corners: p.corners }));
+    .map(p => ({ name: p.name, pos: p.pos, shots: p.shots, sot: p.sot, shotsAvg: p.shotsAvg, sotAvg: p.sotAvg, goals: p.goals, assists: p.assists, apps: p.apps, yellowCards: p.yellowCards, redCards: p.redCards, fouls: p.fouls, corners: p.corners }));
 
   return {
     matchInfo: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
