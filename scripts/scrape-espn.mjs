@@ -222,7 +222,7 @@ async function scrapeStandings(slug, leagueName, teamIdToName) {
     const overall = e.records?.find(r => r.name === 'overall')?.stats || e.stats || [];
     const val = name => overall.find(s => s.name === name)?.value ?? 0;
     return {
-      team, position: idx + 1,
+      team, position: idx + 1, compName: leagueName,
       played: val('gamesPlayed'), win: val('wins'), draw: val('ties'), loss: val('losses'),
       gf: val('pointsFor'), ga: val('pointsAgainst'), gd: val('pointDifferential'), pts: val('points'),
     };

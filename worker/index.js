@@ -161,6 +161,7 @@ async function fetchOdds(env, apiId, compId) {
     const data = await res.json();
     const items = data?.items || [];
     const pick = items.find(i => /bet ?365/i.test(i.provider?.name || '')) || items.find(i => i.provider?.name === 'DraftKings') || items[0];
+    const dk = items.find(i => i.provider?.name === 'DraftKings'); // alleen DraftKings heeft overUnder op dit niveau
     let odds = null;
     if (pick?.homeTeamOdds?.odds?.value && pick?.awayTeamOdds?.odds?.value && pick?.drawOdds?.value) {
       odds = {
@@ -168,6 +169,9 @@ async function fetchOdds(env, apiId, compId) {
         home: pick.homeTeamOdds.odds.value,
         draw: pick.drawOdds.value,
         away: pick.awayTeamOdds.odds.value,
+        totalLine: dk?.overUnder ?? null,
+        overOdds: dk?.overOdds ?? null,
+        underOdds: dk?.underOdds ?? null,
       };
     }
     await kvPut(env, cacheKey, { odds, fetchedAt: Date.now() });
@@ -182,39 +186,42 @@ async function fetchOdds(env, apiId, compId) {
 // wordt uit de $ref-URL gehaald (geen extra fetch nodig) en gekoppeld aan
 // onze eigen spelerslijst voor de naam.
 const PROP_TYPES = ['Anytime Goalscorer', 'Shots Milestones', 'Shots on Target Milestones', 'To Receive a Card', 'To Receive a Red Card'];
-const PLAYER_SEASON = '2026';
+const MATCH_MARKET_TYPES = ['Both Teams To Score', 'Team Total Goals'];
 
 async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
   const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
   if (!eventId || !compId) return [];
   const cacheKey = `props_${eventId}`;
   const cached = await kvGet(env, cacheKey, null);
-  let raw;
+  let raw, homeTeamId, awayTeamId;
   if (cached && (Date.now() - cached.fetchedAt) < 10 * 60 * 1000) {
-    raw = cached.raw;
+    raw = cached.raw; homeTeamId = cached.homeTeamId; awayTeamId = cached.awayTeamId;
   } else {
     try {
       const oddsRes = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);
       const oddsData = await oddsRes.json();
       const dk = (oddsData?.items || []).find(i => i.provider?.name === 'DraftKings');
+      homeTeamId = dk?.homeTeamOdds?.team?.$ref?.match(/teams\/(\d+)/)?.[1] || null;
+      awayTeamId = dk?.awayTeamOdds?.team?.$ref?.match(/teams\/(\d+)/)?.[1] || null;
       const propsRef = dk?.propBets?.$ref;
       if (!propsRef) { raw = []; }
       else {
         const propsRes = await fetch(`${propsRef}&limit=1000`);
         const propsData = await propsRes.json();
         raw = (propsData?.items || [])
-          .filter(it => PROP_TYPES.includes(it.type?.name))
+          .filter(it => PROP_TYPES.includes(it.type?.name) || MATCH_MARKET_TYPES.includes(it.type?.name))
           .map(it => ({
             athleteId: it.athlete?.$ref?.match(/athletes\/(\d+)/)?.[1],
+            teamId: it.team?.$ref?.match(/teams\/(\d+)/)?.[1],
             type: it.type?.name,
             odds: it.current?.over?.value,
             target: it.current?.target?.displayValue,
           }))
-          .filter(it => it.athleteId && it.odds);
+          .filter(it => it.odds);
       }
-      await kvPut(env, cacheKey, { raw, fetchedAt: Date.now() });
+      await kvPut(env, cacheKey, { raw, homeTeamId, awayTeamId, fetchedAt: Date.now() });
     } catch {
-      raw = [];
+      raw = []; homeTeamId = null; awayTeamId = null;
     }
   }
 
@@ -237,7 +244,23 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
     else if (r.type === 'To Receive a Card') entry.cardOdds = r.odds;
     else if (r.type === 'To Receive a Red Card') entry.redCardOdds = r.odds;
   }
-  return [...byPlayer.values()];
+
+  // Wedstrijd-brede markten: BTTS (ja/nee) en doelpunten over/under per team
+  // (eerste gevonden lijn — DraftKings levert soms meerdere lijnen per team,
+  // we pakken gewoon de eerste als "primaire" lijn).
+  const bttsItems = raw.filter(r => r.type === 'Both Teams To Score');
+  const btts = bttsItems.length >= 2 ? { yes: bttsItems[0].odds, no: bttsItems[1].odds } : null;
+  const teamGoalsByTeamId = new Map();
+  for (const r of raw) {
+    if (r.type !== 'Team Total Goals' || !r.teamId) continue;
+    if (!teamGoalsByTeamId.has(r.teamId)) teamGoalsByTeamId.set(r.teamId, { line: r.target, overOdds: r.odds });
+  }
+  const teamGoals = {
+    home: homeTeamId ? teamGoalsByTeamId.get(homeTeamId) || null : null,
+    away: awayTeamId ? teamGoalsByTeamId.get(awayTeamId) || null : null,
+  };
+
+  return { players: [...byPlayer.values()], btts, teamGoals };
 }
 
 function singleMatchPromptBlock(b) {
@@ -384,13 +407,17 @@ export default {
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
 
       const base = buildMatchBase(match, standingsData.standings, playersData.players);
+      const fullTable = (standingsData.standings || [])
+        .filter(s => s.compName === match.compName)
+        .sort((a, b) => a.position - b.position);
       const h2h = computeH2H(matchesData.matches || [], match.h, match.a);
       const relevantPlayers = (playersData.players || []).filter(p => p.team === match.h || p.team === match.a);
-      const [referee, odds, propsAll] = await Promise.all([
+      const [referee, odds, propsResult] = await Promise.all([
         fetchReferee(env, match.apiId, match.compId),
         fetchOdds(env, match.apiId, match.compId),
         fetchPlayerProps(env, match.apiId, match.compId, relevantPlayers),
       ]);
+      const { players: propsAll, btts, teamGoals } = propsResult;
       const homeNames = new Set(relevantPlayers.filter(p => p.team === match.h).map(p => p.name));
       const props = {
         home: propsAll.filter(p => homeNames.has(p.name)),
@@ -399,7 +426,12 @@ export default {
 
       const standingLine = s => s ? `${s.team}: ${s.pts} pt uit ${s.played} (${s.win}-${s.draw}-${s.loss}), doelsaldo ${s.gd >= 0 ? '+' : ''}${s.gd}${s.position ? `, positie ${s.position}` : ''}` : null;
       const h2hLine = h2h.length ? h2h.map(m => `${m.date}: ${m.h} ${m.result} ${m.a}`).join('; ') : 'geen eerdere ontmoetingen bekend';
-      const oddsLine = odds ? `Bookmaker-odds (${odds.provider}): thuis ${odds.home}, gelijk ${odds.draw}, uit ${odds.away} (decimaal — lager = grotere favoriet).` : '';
+      const oddsLine = odds ? `Bookmaker-odds (${odds.provider}): thuis ${odds.home}, gelijk ${odds.draw}, uit ${odds.away} (decimaal — lager = grotere favoriet).${odds.totalLine ? ` Totaal doelpunten over/under ${odds.totalLine}: over @${odds.overOdds}, under @${odds.underOdds}.` : ''}` : '';
+      const bttsLine = btts ? `Beide teams scoren: ja @${btts.yes}, nee @${btts.no}.` : '';
+      const teamGoalsLine = [
+        teamGoals.home ? `${match.h} over ${teamGoals.home.line} eigen goals @${teamGoals.home.overOdds}` : null,
+        teamGoals.away ? `${match.a} over ${teamGoals.away.line} eigen goals @${teamGoals.away.overOdds}` : null,
+      ].filter(Boolean).join(', ');
       const propsLine = propsAll.length
         ? `Speler-odds (DraftKings, decimaal): ${propsAll.slice(0, 10).map(p => `${p.name}${p.anytimeScorer ? ` scoort@${p.anytimeScorer}` : ''}${p.shots1plus ? ` schot1+@${p.shots1plus}` : ''}${p.sot1plus ? ` sot1+@${p.sot1plus}` : ''}${p.cardOdds ? ` kaart@${p.cardOdds}` : ''}`).join(', ')}.`
         : '';
@@ -408,18 +440,22 @@ ${[standingLine(base.homeStanding), standingLine(base.awayStanding)].filter(Bool
 Laatste onderlinge duels: ${h2hLine}.
 ${referee ? `Scheidsrechter: ${referee}.` : ''}
 ${oddsLine}
+${bttsLine}
+${teamGoalsLine ? `Doelpunten per team: ${teamGoalsLine}.` : ''}
 ${propsLine}
-Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), welke 1-2 spelers interessant zijn voor schoten/doelpunten (vergelijk hun eigen schoten-per-90 met wat de bookmaker-odds impliceren als dat er is), en of er spelers opvallen qua corners of kaarten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
+Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), of beide teams waarschijnlijk scoren en hoeveel doelpunten er ongeveer verwacht worden, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
       const analysis = await runAi(env, prompt);
 
       return json({
         match: base.matchInfo,
         model: base.model,
         players: { home: base.homePlayers, away: base.awayPlayers },
-        standings: { home: base.homeStanding, away: base.awayStanding },
+        standings: { home: base.homeStanding, away: base.awayStanding, table: fullTable },
         h2h,
         referee,
         odds,
+        btts,
+        teamGoals,
         props,
         analysis,
       });

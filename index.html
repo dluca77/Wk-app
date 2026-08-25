@@ -496,9 +496,47 @@ async function openMatch(apiId){
     if(d.analysis){
       html += `<div class="section"><h3>Analysis</h3><div class="ai">${d.analysis}</div></div>`;
     }
-    const standingRow = s => s ? `<div class="prow"><div class="pn">${s.team}<div class="pp">P${s.position||'-'} · ${s.win}-${s.draw}-${s.loss} · GD ${s.gd>=0?'+':''}${s.gd}</div></div><div class="stat">${s.pts}<div class="pp">pts</div></div></div>` : '';
-    if(d.standings && (d.standings.home || d.standings.away)){
+    if(d.standings && d.standings.table && d.standings.table.length){
+      const rows = d.standings.table.map(s=>{
+        const hl = s.team===m.h || s.team===m.a;
+        return `<tr style="${hl?'background:var(--card2)':''}">
+          <td style="padding:6px 8px;color:var(--muted)">${s.position}</td>
+          <td style="padding:6px 8px;font-weight:${hl?'700':'500'};color:${hl?'#fff':'#c7d0dd'}">${s.team}</td>
+          <td style="padding:6px 8px;text-align:center;color:var(--muted)">${s.played}</td>
+          <td style="padding:6px 8px;text-align:center;color:var(--muted)">${s.win}-${s.draw}-${s.loss}</td>
+          <td style="padding:6px 8px;text-align:center;color:var(--muted)">${s.gd>=0?'+':''}${s.gd}</td>
+          <td style="padding:6px 8px;text-align:center;font-weight:700">${s.pts}</td>
+        </tr>`;
+      }).join('');
+      html += `<div class="section"><h3>League standing</h3>
+        <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="color:var(--muted2);font-size:11px;text-transform:uppercase">
+            <th style="padding:6px 8px;text-align:left">#</th><th style="padding:6px 8px;text-align:left">Team</th>
+            <th style="padding:6px 8px">P</th><th style="padding:6px 8px">W-D-L</th><th style="padding:6px 8px">GD</th><th style="padding:6px 8px">Pts</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </div>`;
+    } else if(d.standings && (d.standings.home || d.standings.away)){
+      const standingRow = s => s ? `<div class="prow"><div class="pn">${s.team}<div class="pp">P${s.position||'-'} · ${s.win}-${s.draw}-${s.loss} · GD ${s.gd>=0?'+':''}${s.gd}</div></div><div class="stat">${s.pts}<div class="pp">pts</div></div></div>` : '';
       html += `<div class="section"><h3>League standing</h3><div class="plist">${standingRow(d.standings.home)}${standingRow(d.standings.away)}</div></div>`;
+    }
+    if(d.odds && d.odds.totalLine){
+      html += `<div class="section"><h3>Goals over/under ${d.odds.totalLine}</h3><div class="probrow">
+        <div class="probchip"><div class="l">Over</div><div class="v">${d.odds.overOdds}</div></div>
+        <div class="probchip"><div class="l">Under</div><div class="v">${d.odds.underOdds}</div></div>
+      </div></div>`;
+    }
+    if(d.btts){
+      html += `<div class="section"><h3>Both teams to score</h3><div class="probrow">
+        <div class="probchip"><div class="l">Yes</div><div class="v">${d.btts.yes}</div></div>
+        <div class="probchip"><div class="l">No</div><div class="v">${d.btts.no}</div></div>
+      </div></div>`;
+    }
+    if(d.teamGoals && (d.teamGoals.home || d.teamGoals.away)){
+      const tg = (name,t) => t ? `<div class="probchip"><div class="l">${name} over ${t.line}</div><div class="v">${t.overOdds}</div></div>` : '';
+      html += `<div class="section"><h3>Team goals</h3><div class="probrow">${tg(m.h,d.teamGoals.home)}${tg(m.a,d.teamGoals.away)}</div></div>`;
     }
     if(d.h2h && d.h2h.length){
       html += `<div class="section"><h3>Head to head</h3><div class="plist">${d.h2h.map(x=>`<div class="prow"><div class="pn">${x.h} vs ${x.a}<div class="pp">${x.date} · ${x.compName||''}</div></div><div class="stat" style="font-size:14px">${x.result}</div></div>`).join('')}</div></div>`;
