@@ -122,6 +122,7 @@ function normTeam(s) {
     .normalize('NFD').replace(/\p{Diacritic}/gu, '') // diacritics weg (ç→c, é→e, ...)
     .toLowerCase()
     .replace(/\./g, '')
+    .replace(/['’]/g, '') // apostrof WEGHALEN i.p.v. naar spatie omzetten — "Be'er" moet "beer" worden, niet "be er" (anders valt het woordenaantal met "Beer" uit elkaar)
     .replace(/\b(fc|sc|afc|cf|vv|ud|cd|ac|sk|nk|fk|gnk|ol|if|bk|ik|ca|sd|kf|as|ss|us|cs|ssc|ssd)\b/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
@@ -158,10 +159,17 @@ function teamsMatch(a, b) {
   if (!na || !nb) return false;
   if (na === nb) return true;
   if (na.length > 3 && nb.length > 3 && (na.includes(nb) || nb.includes(na))) return true;
-  // Woord-voor-woord met afkortingen toestaan, bv. "Din. Zagreb" vs "Dinamo Zagreb"
-  const ta = na.split(' '), tb = nb.split(' ');
-  if (ta.length !== tb.length) return false;
-  return ta.every((t, i) => t === tb[i] || (t.length >= 3 && tb[i].startsWith(t)) || (tb[i].length >= 3 && t.startsWith(tb[i])));
+  // Woord-voor-woord vergelijken, robuust tegen afkortingen EN ontbrekende
+  // woorden (bv. "H. Beer Sheva" vs "Hapoel Be'er Sheva" vs "Hap Beer
+  // Sheva" — verschillend aantal woorden, dus geen 1-op-1 index-vergelijking
+  // meer maar: elk betekenisvol woord (≥3 letters) van de kortste naam moet
+  // als prefix voorkomen in een woord van de langste naam, ongeacht volgorde
+  // of aantal). Losse letters/initialen ("H.") worden genegeerd.
+  const ta = na.split(' ').filter(t => t.length >= 3);
+  const tb = nb.split(' ').filter(t => t.length >= 3);
+  if (!ta.length || !tb.length) return false;
+  const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  return shorter.every(t => longer.some(u => u.startsWith(t) || t.startsWith(u)));
 }
 
 async function fetchOddsPage(path) {
@@ -592,7 +600,23 @@ async function refreshAll(env, { force = false } = {}) {
     }
   }
 
-  const all = [...byId.values()];
+  // Volledige cross-dedup over ALLE wedstrijden (niet alleen de net
+  // binnengehaalde globale data hierboven) — ruimt oude/verweesde entries op
+  // die met een inmiddels niet meer geproduceerd apiId-formaat zijn
+  // opgeslagen (bv. uit een eerdere versie van de globale scraper) en
+  // daardoor nooit meer als duplicaat van de actueel gescrapete versie
+  // werden herkend, met steeds wisselende afkortingen tot gevolg (bv.
+  // "Sabah FK", "Sabah", "Sabah Baku" als 3 losse kaarten).
+  const sourceRank = m => (m.source === 'odds1x2' || m.source === 'betexplorer') ? 3 : m.source === 'betexplorer_global' ? 2 : 1;
+  const deduped = [];
+  for (const m of [...byId.values()].sort((a, b) => sourceRank(b) - sourceRank(a))) {
+    const existing = deduped.find(x => x.date === m.date && x.compId === m.compId && teamsMatch(x.h, m.h) && teamsMatch(x.a, m.a));
+    if (!existing) { deduped.push(m); continue; }
+    if (!existing.result && m.result) existing.result = m.result;
+    if (!existing.venue && m.venue) existing.venue = m.venue;
+  }
+
+  const all = deduped;
   await kvPut(env, 'matches_all', { matches: all, updatedAt: now.toISOString() });
   const form = computeForm(all);
   await kvPut(env, 'standings_all', { standings: form, updatedAt: now.toISOString() });

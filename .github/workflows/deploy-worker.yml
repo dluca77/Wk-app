@@ -30,15 +30,6 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: DEBUG probe /matches CL
-        run: |
-          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
-          import json,sys
-          d = json.load(sys.stdin)
-          for m in d['matches']:
-              if m.get('compId') == 7:
-                  print(m.get('apiId'), '|', m.get('h'), 'vs', m.get('a'), '|', m.get('date'), m.get('time'), '|', m.get('source'))
-          "
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
