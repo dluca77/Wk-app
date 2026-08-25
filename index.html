@@ -711,16 +711,20 @@ function buildBestBet(m, _unused, odds){
   // dan de vaak schaarse per-wedstrijd WK-data hieronder (zie
   // scrape-players.mjs, dagelijks ververst voor de 6 grote competities)
   if(m.compId){
-    const norm = t => (t||'').toLowerCase().trim();
+    // Wedstrijden en spelersdata komen uit verschillende bronnen met soms
+    // net andere schrijfwijzen ("Bodø/Glimt" vs "Bodo Glimt") — teamsMatch()
+    // (dezelfde fuzzy-matcher als bij het ontdubbelen van wedstrijden) i.p.v.
+    // exacte gelijkheid, anders wordt bestaande spelersdata stilzwijgend
+    // gemist en toont de app onterecht "geen spelersdata".
     const understatPool = (ALL_PLAYERS||[])
-      .filter(p => (norm(p.team) === norm(m.h) || norm(p.team) === norm(m.a)) && p.min > 0)
+      .filter(p => (teamsMatch(p.team, m.h) || teamsMatch(p.team, m.a)) && p.min > 0)
       .sort((a,b) => (blendedRate(b,'xg90')+blendedRate(b,'xa90')) - (blendedRate(a,'xg90')+blendedRate(a,'xa90')));
     const up = understatPool[0];
     if(up){
       const bXg90 = blendedRate(up,'xg90'), bSh90 = blendedRate(up,'sh90');
       const pGoal = Math.round((1 - Math.exp(-bXg90)) * 100);
       const pSot = Math.round((1 - Math.exp(-(bSh90*0.45))) * 100);
-      const teamFlag = norm(up.team)===norm(m.h) ? TF(m,m.h) : TF(m,m.a);
+      const teamFlag = teamsMatch(up.team, m.h) ? TF(m,m.h) : TF(m,m.a);
       const hasPrev = !!findPrevSeason(up);
       return {
         label:'⭐ Beste Bet — Seizoensdreiging (Understat)',
@@ -1521,8 +1525,7 @@ function openModal(id){
     </div>`;
   };
   const propBlock = team => {
-    const norm = t => (t||'').toLowerCase().trim();
-    const players = ALL_PLAYERS.filter(p => norm(p.team) === norm(team) && p.min > 0)
+    const players = ALL_PLAYERS.filter(p => teamsMatch(p.team, team) && p.min > 0)
       .sort((a,b) => (b.xg90+b.xa90) - (a.xg90+a.xa90)).slice(0,3);
     if(!players.length) return '';
     return `<div class="shdr"><span class="sname">${team}</span><span class="slbl">Speler kansen dit seizoen</span></div>${players.map(propRow).join('')}<div class="snote" style="margin-top:6px">Kansschatting o.b.v. Understat seizoensgemiddelden (xG/xA/schoten per 90 min) — geen garantie, check je boekmaker</div>`;
@@ -2121,9 +2124,8 @@ function calculateBetProbs(m, odds, hLinup, aLinup) {
   // ── Speler bets via Understat-seizoensdata (clubcompetities) ──
   // Vult aan naast/i.p.v. de WK-only PLAYER_STATS hierboven — dekt de 6
   // door de scraper ondersteunde clubcompetities (zie scrape-players.mjs).
-  const norm = t => (t||'').toLowerCase().trim();
   const understatPlayers = (ALL_PLAYERS||[])
-    .filter(p => (norm(p.team) === norm(m.h) || norm(p.team) === norm(m.a)) && p.min > 0)
+    .filter(p => (teamsMatch(p.team, m.h) || teamsMatch(p.team, m.a)) && p.min > 0)
     .sort((a,b) => (blendedRate(b,'xg90')+blendedRate(b,'xa90')) - (blendedRate(a,'xg90')+blendedRate(a,'xa90'))).slice(0,6);
   for(const p of understatPlayers){
     const bXg90 = blendedRate(p,'xg90'), bXa90 = blendedRate(p,'xa90'), bSh90 = blendedRate(p,'sh90');
