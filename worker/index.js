@@ -117,8 +117,14 @@ const ODDS_SEEDS = {
 };
 const SCRAPE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
+// Sommige clubs worden door bookmakers/scrapers met een bijnaam aangeduid die
+// geen woord gemeen heeft met de "echte" naam (dus ook niet via prefix-matching
+// te herleiden is) — bv. "Linz" voor LASK (Linzer ASK). Losse lijst i.p.v.
+// een algoritme, want dit is per definitie niet generiek af te leiden.
+const TEAM_ALIASES = { linz: 'lask' };
+
 function normTeam(s) {
-  return (s || '')
+  const n = (s || '')
     .normalize('NFD').replace(/\p{Diacritic}/gu, '') // diacritics weg (ç→c, é→e, ...)
     .toLowerCase()
     .replace(/\./g, '')
@@ -126,6 +132,7 @@ function normTeam(s) {
     .replace(/\b(fc|sc|afc|cf|vv|ud|cd|ac|sk|nk|fk|gnk|ol|if|bk|ik|ca|sd|kf|as|ss|us|cs|ssc|ssd)\b/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+  return TEAM_ALIASES[n] || n;
 }
 
 // De wereldwijde BetExplorer-scrape (parse-global-matches.mjs) kent geen
@@ -137,6 +144,9 @@ function normTeam(s) {
 function canonicalCompId(league, country) {
   const l = (league || '').toLowerCase();
   const c = (country || '').toLowerCase();
+  // Vrouwencompetities zijn een aparte competitie — niet meetellen bij de
+  // mannen-groep (bv. "Champions League Women" hoorde anders ook bij compId 7).
+  if (/\bwomen'?s?\b|\bvrouwen\b|\(w\)$|\bw$/.test(l)) return null;
   if (l.includes('champions league')) return 7;
   if (l.includes('conference league')) return 17015;
   if (l.includes('europa league')) return 679;

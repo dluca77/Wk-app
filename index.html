@@ -1785,8 +1785,9 @@ const WORKER_URL = 'https://wk2026-proxy.isaak-elia.workers.dev';
 // clubprefix als "GNK", afkortingen als "Din." i.p.v. "Dinamo", of een
 // verkorte naam als "Lyon" i.p.v. "Olympique Lyonnais") — vandaar fuzzy-match
 // i.p.v. exacte string-gelijkheid, anders ontstaan dubbele wedstrijdkaarten.
+const TEAM_ALIASES = { linz: 'lask' }; // bijnamen zonder gedeeld woord, niet algoritmisch af te leiden
 function normTeam(s){
-  return (s||'')
+  const n = (s||'')
     .normalize('NFD').replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
     .replace(/\./g, '')
@@ -1794,6 +1795,7 @@ function normTeam(s){
     .replace(/\b(fc|sc|afc|cf|vv|ud|cd|ac|sk|nk|fk|gnk|ol|if|bk|ik|ca|sd|kf|as|ss|us|cs|ssc|ssd)\b/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+  return TEAM_ALIASES[n] || n;
 }
 function teamsMatch(a, b){
   const na = normTeam(a), nb = normTeam(b);
