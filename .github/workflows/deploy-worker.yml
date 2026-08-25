@@ -30,18 +30,14 @@ jobs:
           apiToken: ${{ steps.cf.outputs.token }}
           accountId: ${{ steps.cf.outputs.account }}
           workingDirectory: worker
-      - name: DEBUG probe alternatieve ECL-slugs
+      - name: DEBUG verifieer nieuwe ECL-slug
         run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          for SLUG in "europe/conference-league" "europe/uefa-europa-conference-league" "europe/europa-conference-league-qualification" "europe/europa-conference-league-qual"; do
-            echo "=== $SLUG ==="
-            curl -sS -A "$UA" -L -w 'FINAL_URL:%{url_effective}\nHTTP_STATUS:%{http_code}\n' \
-              "https://www.betexplorer.com/football/$SLUG/fixtures/" -o /tmp/probe.html
-            grep -oc 'table-main__datetime' /tmp/probe.html || echo 0
-          done
-          echo "=== zoek link op homepage ==="
-          curl -sS -A "$UA" "https://www.betexplorer.com/football/" -o /tmp/home.html
-          grep -o 'href="/football/europe/[a-z0-9-]*conference[a-z0-9-]*/"' /tmp/home.html | sort -u
+          curl -sS "https://wk2026-proxy.isaak-elia.workers.dev/matches" | python3 -c "
+          import json,sys,collections
+          d = json.load(sys.stdin)
+          c = collections.Counter(m.get('compId') for m in d['matches'])
+          print('ECL wedstrijden:', c.get(17015,0))
+          "
       - name: Ververs live data
         env:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}

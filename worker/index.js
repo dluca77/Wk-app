@@ -352,7 +352,7 @@ const BETEXPLORER_COMPS = {
   23:    'italy/serie-a',                   // Serie A
   34:    'france/ligue-1',                  // Ligue 1
   679:   'europe/europa-league',            // Europa League
-  17015: 'europe/europa-conference-league', // Conference League
+  17015: 'europe/conference-league',        // Conference League (BetExplorer's slug is zonder "europa-" — de oude slug redirect(te) naar de homepage, waardoor deze competitie stilzwijgend 0 wedstrijden teruggaf)
 };
 
 async function fetchBetExplorerPage(path) {
