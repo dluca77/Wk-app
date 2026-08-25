@@ -101,7 +101,7 @@ function buildMatchBase(match, standings, players) {
   const model = matchProbabilities(homeStats, awayStats);
 
   const topFor = team => (players || [])
-    .filter(p => p.team === team && p.apps >= 2)
+    .filter(p => p.team === team && p.apps >= 1 && p.mins >= 20)
     .sort((a, b) => b.shots90 - a.shots90)
     .slice(0, 5)
     .map(p => ({ name: p.name, pos: p.pos, shots90: p.shots90, sot90: p.sot90, goals: p.goals, assists: p.assists, apps: p.apps }));
