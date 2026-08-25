@@ -28,13 +28,14 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 
 .bg-blobs{display:none}
 
-.top{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:calc(10px + var(--safe-t)) 14px 8px;box-shadow:0 4px 14px -8px rgba(0,0,0,.45)}
+.top{position:sticky;top:0;z-index:10;background:rgba(10,14,20,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:calc(10px + var(--safe-t)) 14px 8px;box-shadow:0 4px 14px -8px rgba(0,0,0,.45)}
 .top-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;max-width:760px;margin-left:auto;margin-right:auto;width:100%}
-.top h1{font-size:16px;margin:0;font-weight:800;letter-spacing:-.01em;color:var(--text);display:flex;align-items:center;gap:7px}
-.top h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--mint)}
-.selbtn{font-size:13px;font-weight:700;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .12s ease;user-select:none}
+.top h1{font-size:16px;margin:0;font-weight:800;letter-spacing:-.01em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;display:flex;align-items:center;gap:7px}
+.top h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px 1px rgba(46,230,174,.7);animation:pulseDot 2s ease-in-out infinite}
+.selbtn{font-size:13px;font-weight:700;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:7px 14px;border-radius:7px;cursor:pointer;transition:all .15s cubic-bezier(.2,.8,.3,1);user-select:none}
+.selbtn:hover{border-color:var(--mint2);color:var(--text)}
 .selbtn:active{transform:scale(.94)}
-.selbtn.on{background:var(--mint);color:#04231b;border-color:var(--mint)}
+.selbtn.on{background:var(--mint);color:#04231b;border-color:var(--mint);box-shadow:0 3px 12px -3px rgba(46,230,174,.5)}
 .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;max-width:760px;margin:0 auto}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:none;padding:7px 15px;border-radius:7px;background:var(--card);color:var(--muted);font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer;white-space:nowrap;transition:all .15s cubic-bezier(.2,.8,.3,1)}
@@ -61,37 +62,44 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .empty{color:var(--muted);text-align:center;padding:64px 20px;font-size:14px;animation:fadeIn .3s ease}
 .empty .big{font-size:36px;display:block;margin-bottom:12px;opacity:.6}
 
-.comp-group{position:relative;margin-bottom:0;border-radius:10px;overflow:hidden;background:var(--card);border:1px solid var(--border);box-shadow:0 1px 2px rgba(0,0,0,.18),0 6px 16px -10px rgba(0,0,0,.35);transition:box-shadow .18s ease}
-.comp-hdr{position:relative;display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;transition:background .15s ease;background:linear-gradient(180deg,var(--card2),color-mix(in srgb,var(--card2) 92%,black))}
-.comp-hdr .crest{width:20px;height:20px;background:rgba(255,255,255,.05);border-radius:50%;padding:2px}
+.comp-group{position:relative;margin-bottom:0;border-radius:12px;overflow:hidden;background:var(--card);border:1px solid var(--border);box-shadow:0 1px 2px rgba(0,0,0,.18),0 8px 20px -12px rgba(0,0,0,.45);transition:box-shadow .2s ease,transform .2s ease;animation:fadeInUp .45s cubic-bezier(.16,1,.3,1) backwards}
+@media (hover:hover){.comp-group:hover{box-shadow:0 1px 2px rgba(0,0,0,.2),0 14px 28px -14px rgba(0,0,0,.55);transform:translateY(-2px)}}
+.comp-hdr{position:relative;display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;transition:background .15s ease;background:linear-gradient(180deg,var(--card2),color-mix(in srgb,var(--card2) 92%,black));overflow:hidden}
+.comp-hdr::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--comp-accent,var(--mint))}
+.comp-hdr .crest{width:20px;height:20px;background:rgba(255,255,255,.06);border-radius:50%;padding:2px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .comp-hdr:hover{background:linear-gradient(180deg,color-mix(in srgb,var(--card2) 96%,white),var(--card2))}
 .comp-hdr:active{background:rgba(255,255,255,.05)}
 .crest{width:16px;height:16px;border-radius:3px;object-fit:contain;flex:none}
 .comp-hdr .flag{font-size:13px;flex:none;opacity:.85}
 .comp-hdr .name{flex:1;font-weight:700;font-size:14px;letter-spacing:-.005em;color:#dbe4f0}
-.comp-hdr .count{color:var(--muted2);font-size:10px;font-weight:600;background:transparent;padding:0}
-.comp-hdr .chev{color:var(--muted2);transition:transform .2s ease;font-size:14px}
+.comp-hdr .count{color:var(--muted2);font-size:10px;font-weight:700;background:rgba(255,255,255,.06);padding:2px 7px;border-radius:20px}
+.comp-hdr .chev{color:var(--muted2);transition:transform .25s cubic-bezier(.34,1.56,.64,1);font-size:14px}
 .comp-hdr .chev.open{transform:rotate(90deg)}
 .group-body{position:relative}
-.card{padding:12px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:12px;transition:background .15s ease,transform .15s ease;position:relative;min-height:66px}
+.card{padding:12px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:12px;transition:background .15s ease,transform .15s ease;position:relative;min-height:66px;border-left:3px solid transparent;animation:fadeInUp .35s cubic-bezier(.16,1,.3,1) backwards}
 .card:hover{background:var(--card2)}
 .card:active{background:rgba(255,255,255,.06);transform:scale(.995)}
-@media (hover:hover){.card:hover{transform:translateY(-1px)}}
+@media (hover:hover){.card:hover{transform:translateY(-1px) translateX(1px)}}
+.card.is-live{border-left-color:var(--red)}
+.card.is-done{border-left-color:var(--border)}
+.card.is-upcoming{border-left-color:var(--mint2)}
 .card.sel-mode{padding-left:48px}
 .card .checkbox{position:absolute;left:16px;top:50%;transform:translateY(-50%);width:20px;height:20px;border-radius:50%;border:2px solid var(--muted2);transition:all .2s cubic-bezier(.34,1.56,.64,1);display:flex;align-items:center;justify-content:center;font-size:11px}
 .card .checkbox.checked{background:var(--grad);border-color:transparent;color:#04231b;font-weight:900;transform:translateY(-50%) scale(1.1);box-shadow:0 0 10px -2px rgba(46,230,174,.7)}
-.card .time-col{width:46px;flex:none;font-size:13px;color:var(--muted);font-weight:700;text-align:left}
-.card .time-col .livewrap{color:var(--red);font-weight:800;display:flex;flex-direction:column;align-items:flex-start;gap:2px}
-.card .time-col .dot{width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 7px 1px rgba(255,92,108,.8);animation:pulseDot 1.2s ease-in-out infinite}
+.card .time-col{width:50px;flex:none;font-size:13px;color:var(--muted);font-weight:700;text-align:left}
+.card .time-col .livewrap{color:#fff;font-weight:800;display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,var(--red),#c93a4a);padding:3px 7px;border-radius:20px;font-size:10.5px;box-shadow:0 2px 8px -2px rgba(255,92,108,.6)}
+.card .time-col .dot{width:6px;height:6px;border-radius:50%;background:#fff;animation:pulseDot 1.2s ease-in-out infinite}
 .card .time-col .ft{color:var(--muted2);font-weight:700}
 .card .teams{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
 .trow{display:flex;align-items:center;gap:10px;font-size:16px}
-.trow img.crest{width:26px;height:26px;object-fit:contain;flex:none;border-radius:6px;background:rgba(255,255,255,.04);padding:2px}
+.trow img.crest{width:26px;height:26px;object-fit:contain;flex:none;border-radius:6px;background:rgba(255,255,255,.04);padding:2px;transition:transform .15s ease}
 .trow img.crest.hide{display:none}
-.trow .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d5dce6}
+.card:hover .trow img.crest{transform:scale(1.08)}
+.trow .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d5dce6;transition:color .15s ease}
 .trow .n.w{font-weight:700;color:#fff}
 .score-col{display:flex;flex-direction:column;gap:8px;align-items:flex-end;min-width:22px}
-.score-col .s{font-size:16px;font-weight:800;line-height:1}
+.score-col .s{font-size:17px;font-weight:800;line-height:1;color:var(--muted);transition:color .15s ease}
+.score-col .s.w{color:var(--mint)}
 .pbar{display:flex;height:4px;border-radius:3px;overflow:hidden;margin-top:6px;background:var(--card2)}
 .pbar div{height:100%;transition:width .6s cubic-bezier(.16,1,.3,1)}
 .p1{background:var(--mint)} .px{background:var(--muted2)} .p2{background:var(--blue)}
@@ -121,18 +129,20 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .prow .pn{flex:1;font-size:13px;font-weight:600}
 .prow .pp{font-size:11px;color:var(--muted2);font-weight:500;margin-top:1px}
 .prow .stat{font-size:14px;font-weight:800;color:var(--mint);min-width:48px;text-align:right}
-.ai{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:14px;padding:14px;font-size:13.5px;line-height:1.6;color:#dbe3ee;position:relative}
+.ai{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:14px;padding:14px;font-size:13.5px;line-height:1.6;color:#dbe3ee;position:relative;box-shadow:0 4px 18px -10px rgba(77,159,255,.25)}
+.ai::before{content:'✨';position:absolute;top:-9px;left:14px;background:var(--bg2);padding:0 6px;font-size:13px}
 .ai.loading{color:var(--muted)}
 .skeleton{background:linear-gradient(90deg,var(--card) 25%,var(--card2) 37%,var(--card) 63%);background-size:400% 100%;animation:shimmer 1.4s ease infinite;border-radius:12px}
 .bottomnav{position:fixed;bottom:0;left:0;right:0;background:rgba(19,26,36,.9);backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;z-index:20;padding-bottom:var(--safe-b)}
 .bnbtn{flex:1;text-align:center;padding:9px 0 8px;color:var(--muted);font-size:11px;cursor:pointer;font-weight:600;transition:color .15s}
 .bnbtn.on{color:var(--mint)}
 .bnbtn .ic{font-size:19px;display:block;margin-bottom:2px;transition:transform .2s cubic-bezier(.34,1.56,.64,1)}
-.bnbtn.on .ic{transform:translateY(-2px) scale(1.1)}
+.bnbtn.on .ic{transform:translateY(-2px) scale(1.1);filter:drop-shadow(0 2px 6px rgba(46,230,174,.5))}
 .search{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:var(--card2);color:var(--text);font-size:15px;margin-bottom:12px;transition:border-color .15s}
 .search:focus{outline:none;border-color:var(--mint)}
 .fab-wrap{position:fixed;left:0;right:0;bottom:calc(64px + var(--safe-b) + 10px);display:flex;justify-content:center;z-index:15;pointer-events:none}
-.fab{pointer-events:auto;background:var(--mint);color:#04231b;font-weight:800;font-size:14px;padding:13px 24px;border-radius:10px;box-shadow:0 4px 16px -4px rgba(0,0,0,.5);cursor:pointer;animation:popIn .25s cubic-bezier(.34,1.56,.64,1);display:flex;align-items:center;gap:8px}
+.fab{pointer-events:auto;background:var(--grad);color:#04231b;font-weight:800;font-size:14px;padding:13px 24px;border-radius:12px;box-shadow:0 8px 24px -6px rgba(46,230,174,.5);cursor:pointer;animation:popIn .25s cubic-bezier(.34,1.56,.64,1);display:flex;align-items:center;gap:8px;transition:transform .15s ease,box-shadow .15s ease}
+.fab:hover{box-shadow:0 10px 28px -6px rgba(46,230,174,.65);transform:translateY(-1px)}
 .fab:active{transform:scale(.95)}
 </style>
 </head>
@@ -358,18 +368,18 @@ function render(){
     const list = groups.get(key);
     if(!(key in groupOpen)) groupOpen[key] = true;
     const open = groupOpen[key];
-    const cards = list.map(m=>{
+    const cards = list.map((m,ci)=>{
       const live = isLive(m), done = isDone(m);
-      let timeHtml;
-      if(live){ timeHtml = '<div class="livewrap"><span class="dot"></span>LIVE</div>'; }
-      else if(done){ timeHtml = '<span class="ft">FT</span>'; }
-      else { timeHtml = fmtTime(m.time); }
+      let timeHtml, statusClass;
+      if(live){ timeHtml = '<div class="livewrap"><span class="dot"></span>LIVE</div>'; statusClass = 'is-live'; }
+      else if(done){ timeHtml = '<span class="ft">FT</span>'; statusClass = 'is-done'; }
+      else { timeHtml = fmtTime(m.time); statusClass = 'is-upcoming'; }
       const [hs,as] = m.result ? m.result.split('-') : [null,null];
       const hW = m.result && +hs > +as;
       const aW = m.result && +as > +hs;
       const checked = selectedIds.has(m.apiId);
       const clickAction = selectMode ? `toggleSelected('${m.apiId}')` : `openMatch('${m.apiId}')`;
-      return `<div class="card ${selectMode?'sel-mode':''}" onclick="${clickAction}">
+      return `<div class="card ${statusClass} ${selectMode?'sel-mode':''}" style="animation-delay:${Math.min(ci,10)*25}ms" onclick="${clickAction}">
         ${selectMode ? `<div class="checkbox ${checked?'checked':''}">${checked?'✓':''}</div>` : ''}
         <div class="time-col">${timeHtml}</div>
         <div class="teams">
@@ -377,8 +387,8 @@ function render(){
           <div class="trow">${crestImg(m.a)}<span class="n ${aW?'w':''}">${m.a}</span></div>
         </div>
         <div class="score-col">
-          <div class="s">${hs ?? ''}</div>
-          <div class="s">${as ?? ''}</div>
+          <div class="s ${hW?'w':''}">${hs ?? ''}</div>
+          <div class="s ${aW?'w':''}">${as ?? ''}</div>
         </div>
       </div>`;
     }).join('');
@@ -386,8 +396,9 @@ function render(){
     const compIcon = compLogo
       ? `<img class="crest" src="${compLogo}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'flag',textContent:'🌐'}))">`
       : `<span class="flag">🌐</span>`;
-    return `<div class="comp-group" style="animation-delay:${idx*30}ms">
-      <div class="comp-hdr" onclick="groupOpen['${key}']=!groupOpen['${key}'];render()">
+    const accent = compAccent(key);
+    return `<div class="comp-group" style="animation-delay:${Math.min(idx,14)*30}ms">
+      <div class="comp-hdr" style="--comp-accent:${accent}" onclick="groupOpen['${key}']=!groupOpen['${key}'];render()">
         ${compIcon}
         <span class="name">${key}</span>
         <span class="count">${list.length}</span>
@@ -408,6 +419,19 @@ function teamHue(name){
   let h = 0;
   for(const c of (name||'?')) h = (h*31 + c.charCodeAt(0)) >>> 0;
   return h % 360;
+}
+function compAccent(compName){
+  const n = (compName||'').toLowerCase();
+  if(/women'?s?\b|\bfrauen\b|\bdames\b/.test(n)) return '#e0559e';
+  if(/champions league/.test(n)) return '#4d9fff';
+  if(/europa league/.test(n)) return '#ff8a3d';
+  if(/conference league/.test(n)) return '#2ee6ae';
+  if(/world cup|european championship|nations league/.test(n)) return '#ffd23d';
+  const top5 = ['premier league','laliga','serie a','bundesliga','ligue 1'];
+  if(top5.some(t=>n.includes(t))) return '#2ee6ae';
+  if(/dutch|eredivisie/.test(n)) return '#ff6b4d';
+  const hue = teamHue(compName);
+  return `hsl(${hue} 55% 55%)`;
 }
 function crestFallback(team){
   const hue = teamHue(team);
