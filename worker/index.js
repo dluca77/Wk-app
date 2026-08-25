@@ -111,7 +111,39 @@ function buildMatchBase(match, standings, players) {
     model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
     homePlayers: topFor(match.h),
     awayPlayers: topFor(match.a),
+    homeStanding: homeStats || null,
+    awayStanding: awayStats || null,
   };
+}
+
+// Onderlinge duels: gewoon uit onze eigen opgebouwde wedstrijdgeschiedenis
+// gehaald (geen aparte ESPN-aanroep nodig) — laatste 5, nieuwste eerst.
+function computeH2H(allMatches, h, a) {
+  return allMatches
+    .filter(m => m.finished && m.result && ((m.h === h && m.a === a) || (m.h === a && m.a === h)))
+    .sort((x, y) => y.date.localeCompare(x.date))
+    .slice(0, 5)
+    .map(m => ({ date: m.date, h: m.h, a: m.a, result: m.result, compName: m.compName }));
+}
+
+// Scheidsrechter: op aanvraag bij ESPN opgehaald (niet meegescraped, want
+// dat zou 1 extra request per wedstrijd × alle competities kosten) en
+// permanent gecachet per wedstrijd, want dit verandert nooit meer terug.
+async function fetchReferee(env, apiId, compId) {
+  const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
+  if (!eventId || !compId) return null;
+  const cacheKey = `ref_${eventId}`;
+  const cached = await kvGet(env, cacheKey, null);
+  if (cached) return cached.name || null;
+  try {
+    const res = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/officials?lang=en&region=us`);
+    const data = await res.json();
+    const name = data?.items?.[0]?.displayName || null;
+    await kvPut(env, cacheKey, { name });
+    return name;
+  } catch {
+    return null;
+  }
 }
 
 function singleMatchPromptBlock(b) {
@@ -139,6 +171,7 @@ async function ingestEspn(env, body) {
   const now = new Date();
   const incomingMatches = Array.isArray(body.matches) ? body.matches : [];
   const incomingPlayers = Array.isArray(body.players) ? body.players : [];
+  const incomingStandings = Array.isArray(body.standings) ? body.standings : [];
 
   // Wedstrijden mergen op apiId zodat oudere, inmiddels buiten het scrape-
   // venster gevallen wedstrijden (voor vormberekening) bewaard blijven.
@@ -148,8 +181,14 @@ async function ingestEspn(env, body) {
   const matches = [...byId.values()];
   await kvPut(env, 'espn_matches', { matches, updatedAt: now.toISOString() });
 
-  const form = computeForm(matches);
-  await kvPut(env, 'espn_standings', { standings: form, updatedAt: now.toISOString() });
+  // Officiële stand (punten/GD, van ESPN) heeft voorrang boven onze eigen
+  // zelfberekende vorm — die laatste dekt alleen het 20-dagen scrape-
+  // venster en is dus minder compleet. Teams zonder officiële stand
+  // (competities buiten de prioriteitslijst) vallen terug op computeForm().
+  const officialTeams = new Set(incomingStandings.map(s => s.team));
+  const fallbackForm = computeForm(matches).filter(f => !officialTeams.has(f.team));
+  const standings = [...incomingStandings, ...fallbackForm];
+  await kvPut(env, 'espn_standings', { standings, updatedAt: now.toISOString() });
 
   // Spelers zijn al season-cumulatieve totalen (ESPN levert dat direct) —
   // gewoon overschrijven, geen eigen opstapeling nodig.
@@ -225,14 +264,25 @@ export default {
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
 
       const base = buildMatchBase(match, standingsData.standings, playersData.players);
+      const h2h = computeH2H(matchesData.matches || [], match.h, match.a);
+      const referee = await fetchReferee(env, match.apiId, match.compId);
+
+      const standingLine = s => s ? `${s.team}: ${s.pts} pt uit ${s.played} (${s.win}-${s.draw}-${s.loss}), doelsaldo ${s.gd >= 0 ? '+' : ''}${s.gd}${s.position ? `, positie ${s.position}` : ''}` : null;
+      const h2hLine = h2h.length ? h2h.map(m => `${m.date}: ${m.h} ${m.result} ${m.a}`).join('; ') : 'geen eerdere ontmoetingen bekend';
       const prompt = `Je bent een nuchtere voetbalanalist. ${singleMatchPromptBlock(base)}
-Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten (geel/rood/overtredingen). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
+${[standingLine(base.homeStanding), standingLine(base.awayStanding)].filter(Boolean).join('\n') || 'Geen officiële standdata beschikbaar.'}
+Laatste onderlinge duels: ${h2hLine}.
+${referee ? `Scheidsrechter: ${referee}.` : ''}
+Geef in maximaal 5 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand en het onderlinge duel-verleden), welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten (geel/rood/overtredingen). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
       const analysis = await runAi(env, prompt);
 
       return json({
         match: base.matchInfo,
         model: base.model,
         players: { home: base.homePlayers, away: base.awayPlayers },
+        standings: { home: base.homeStanding, away: base.awayStanding },
+        h2h,
+        referee,
         analysis,
       });
     }

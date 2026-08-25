@@ -198,6 +198,37 @@ async function scrapePlayers(leagueName, teams) {
   return players;
 }
 
+// ---------- Fase 2c: officiële stand (punten/GD/positie) — alleen prioriteitscompetities ----------
+async function scrapeStandings(slug, leagueName, teamIdToName) {
+  if (!teamIdToName) return [];
+  let entries = null;
+  try {
+    const d = await getJson(`${BASE}/${slug}/seasons/${SEASON}/types/1/groups/1/standings/0?lang=en&region=us`);
+    entries = d?.standings || null;
+  } catch { /* val door op alternatieve route hieronder */ }
+  if (!entries) {
+    const list = await getJson(`${BASE}/${slug}/seasons/${SEASON}/types/1/standings?lang=en&region=us`);
+    const first = list?.items?.[0]?.$ref;
+    if (first) {
+      const d = await getJson(first);
+      entries = d?.standings || null;
+    }
+  }
+  if (!entries) return [];
+
+  return entries.map((e, idx) => {
+    const teamId = e.team?.$ref?.match(/teams\/(\d+)/)?.[1];
+    const team = teamIdToName.get(teamId);
+    const overall = e.records?.find(r => r.name === 'overall')?.stats || e.stats || [];
+    const val = name => overall.find(s => s.name === name)?.value ?? 0;
+    return {
+      team, position: idx + 1,
+      played: val('gamesPlayed'), win: val('wins'), draw: val('ties'), loss: val('losses'),
+      gf: val('pointsFor'), ga: val('pointsAgainst'), gd: val('pointDifferential'), pts: val('points'),
+    };
+  }).filter(s => s.team);
+}
+
 async function processLeague(slug, isPriority) {
   const { name: leagueName, logo: leagueLogo } = await fetchLeagueInfo(slug);
   let teamIdToName, teams;
@@ -210,8 +241,13 @@ async function processLeague(slug, isPriority) {
 
   const matches = await scrapeMatches(slug, leagueName, leagueLogo, teamIdToName);
   const players = isPriority && teams?.length ? await scrapePlayers(leagueName, teams) : [];
-  console.error(`${leagueName} (${slug}): ${matches.length} wedstrijden${isPriority ? `, ${players.length} spelers` : ''}`);
-  return { matches, players };
+  let standings = [];
+  if (isPriority) {
+    try { standings = await scrapeStandings(slug, leagueName, teamIdToName); }
+    catch (e) { console.error(`${leagueName} standen FOUT: ${e.message}`); }
+  }
+  console.error(`${leagueName} (${slug}): ${matches.length} wedstrijden${isPriority ? `, ${players.length} spelers, ${standings.length} standen` : ''}`);
+  return { matches, players, standings };
 }
 
 async function main() {
@@ -232,8 +268,9 @@ async function main() {
 
   const allMatches = results.flatMap(r => r.matches);
   const allPlayers = results.flatMap(r => r.players);
-  console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers uit ${allSlugs.length} competities`);
-  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, updatedAt: new Date().toISOString() }));
+  const allStandings = results.flatMap(r => r.standings || []);
+  console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers, ${allStandings.length} standen uit ${allSlugs.length} competities`);
+  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, updatedAt: new Date().toISOString() }));
 }
 
 main();
