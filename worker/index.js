@@ -614,18 +614,6 @@ Geef een Nederlandstalige analyse (max 6 zinnen): welke 1-2 wedstrijden uit dit 
       return json(meta);
     }
 
-    // TIJDELIJK: testen of site.api.espn.com/news bereikbaar is vanuit
-    // Cloudflare Workers (andere IP-pool dan GitHub Actions, apart checken).
-    if (url.pathname === '/debug-news-test') {
-      try {
-        const res = await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/news');
-        const text = await res.text();
-        return json({ status: res.status, bodyPreview: text.slice(0, 500) });
-      } catch (e) {
-        return json({ error: String(e) });
-      }
-    }
-
     // Clublogo's: TheSportsDB (gratis test-key "3") dekt vooral bekende
     // clubs uit de grote competities — lagere divisies/reserveteams/kleinere
     // landen staan er meestal niet in. Wikipedia heeft van vrijwel elke club
