@@ -632,6 +632,11 @@ Geef een Nederlandstalige analyse (max 6 zinnen): welke 1-2 wedstrijden uit dit 
       return json(meta);
     }
 
+    if (url.pathname === '/debug-news') {
+      const d = await kvGet(env, 'espn_news', { news: [] });
+      return json({ count: (d.news || []).length, sample: (d.news || []).slice(0, 5) });
+    }
+
     // Clublogo's: TheSportsDB (gratis test-key "3") dekt vooral bekende
     // clubs uit de grote competities — lagere divisies/reserveteams/kleinere
     // landen staan er meestal niet in. Wikipedia heeft van vrijwel elke club
