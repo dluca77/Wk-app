@@ -43,7 +43,13 @@ async function getJson(url) {
 // niet los als gestructureerde data — het is vrije-tekst nieuws.
 async function fetchNews(slug, leagueName) {
   try {
-    const data = await getJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/news`);
+    // Let op: GEEN browser-UA meesturen hier (anders dan getJson() voor de
+    // core-API) — site.api.espn.com blokkeert deze /news-route juist mét een
+    // browser-achtige User-Agent (403), maar staat 'm toe met de standaard-
+    // UA van fetch()/curl. Contra-intuïtief, maar bevestigd getest.
+    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/news`);
+    if (!res.ok) return [];
+    const data = await res.json();
     const articles = data?.articles || [];
     return articles.slice(0, 8).map(a => ({
       compName: leagueName,
