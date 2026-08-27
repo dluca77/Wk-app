@@ -128,25 +128,37 @@ function mergePlayersByName(players) {
 }
 
 // ---------- Gedeelde opbouw voor /predict en /predict-multi ----------
-function buildMatchBase(match, standings, players) {
+// lineups (optioneel): { home:[athleteId,...], away:[athleteId,...] } van
+// fetchLineups() — als bekend, worden spelerspredicties (schoten enz.)
+// beperkt tot bevestigde starters i.p.v. blind op seizoensgemiddelde te
+// gokken; is de opstelling nog niet bekend, valt dit terug op het gewone
+// seizoensgemiddelde-lijstje (met een vlag zodat de AI dat ook weet).
+function buildMatchBase(match, standings, players, lineups = null) {
   const homeStats = standings.find(t => t.team === match.h);
   const awayStats = standings.find(t => t.team === match.a);
   const model = matchProbabilities(homeStats, awayStats);
 
+  const idOf = p => Number((p.playerId || '').match(/_(\d+)$/)?.[1]);
   const merged = mergePlayersByName(players);
-  const topFor = team => merged
-    .filter(p => p.team === team && p.apps >= 1 && p.mins >= 20)
-    .sort((a, b) => b.shotsAvg - a.shotsAvg)
-    .slice(0, 5)
-    .map(p => ({ name: p.name, pos: p.pos, shots: p.shots, sot: p.sot, shotsAvg: p.shotsAvg, sotAvg: p.sotAvg, goals: p.goals, assists: p.assists, apps: p.apps, yellowCards: p.yellowCards, redCards: p.redCards, fouls: p.fouls, corners: p.corners }));
+  const topFor = (team, starterIds) => {
+    const pool = merged.filter(p => p.team === team && p.apps >= 1 && p.mins >= 20);
+    const starterPool = starterIds ? pool.filter(p => starterIds.includes(idOf(p))) : null;
+    const isStarterKnown = !!(starterPool && starterPool.length);
+    const finalPool = isStarterKnown ? starterPool : pool;
+    return finalPool
+      .sort((a, b) => b.shotsAvg - a.shotsAvg)
+      .slice(0, 5)
+      .map(p => ({ name: p.name, pos: p.pos, shots: p.shots, sot: p.sot, shotsAvg: p.shotsAvg, sotAvg: p.sotAvg, goals: p.goals, assists: p.assists, apps: p.apps, yellowCards: p.yellowCards, redCards: p.redCards, fouls: p.fouls, corners: p.corners, starter: isStarterKnown }));
+  };
 
   return {
     matchInfo: { apiId: match.apiId, h: match.h, a: match.a, date: match.date, time: match.time, compName: match.compName },
     model: { pHome: model.pHome, pDraw: model.pDraw, pAway: model.pAway },
-    homePlayers: topFor(match.h),
-    awayPlayers: topFor(match.a),
+    homePlayers: topFor(match.h, lineups?.home || null),
+    awayPlayers: topFor(match.a, lineups?.away || null),
     homeStanding: homeStats || null,
     awayStanding: awayStats || null,
+    lineupKnown: !!lineups,
   };
 }
 
@@ -175,6 +187,42 @@ async function fetchReferee(env, apiId, compId) {
     const name = data?.items?.[0]?.displayName || null;
     await kvPut(env, cacheKey, { name });
     return name;
+  } catch {
+    return null;
+  }
+}
+
+// Basisopstelling: ESPN publiceert deze meestal 30-60 min voor aftrap
+// (competition.lineupAvailable wordt dan true). Op aanvraag opgehaald i.p.v.
+// meegescraped (verandert nog tot vlak voor aftrap door late wijzigingen),
+// kort gecachet. Geeft per team de set athlete-ID's die in de basis staan —
+// buildMatchBase gebruikt dit om spelerspredicties te beperken tot spelers
+// die ook echt spelen, i.p.v. blind op seizoensgemiddelde te gokken.
+async function fetchLineups(env, apiId, compId) {
+  const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
+  if (!eventId || !compId) return null;
+  const cacheKey = `lineup_${eventId}`;
+  const cached = await kvGet(env, cacheKey, null);
+  if (cached && (Date.now() - cached.fetchedAt) < 15 * 60 * 1000) return cached.lineups;
+  try {
+    const res = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}?lang=en&region=us`);
+    const comp = await res.json();
+    if (!comp?.lineupAvailable) {
+      await kvPut(env, cacheKey, { lineups: null, fetchedAt: Date.now() });
+      return null;
+    }
+    const rosters = await Promise.all((comp.competitors || []).map(async c => {
+      try {
+        const r = await fetch(c.roster.$ref).then(x => x.json());
+        const starters = (r.entries || []).filter(e => e.starter).map(e => e.playerId);
+        return { homeAway: c.homeAway, starters };
+      } catch { return { homeAway: c.homeAway, starters: [] }; }
+    }));
+    const home = rosters.find(r => r.homeAway === 'home')?.starters || [];
+    const away = rosters.find(r => r.homeAway === 'away')?.starters || [];
+    const lineups = (home.length || away.length) ? { home, away } : null;
+    await kvPut(env, cacheKey, { lineups, fetchedAt: Date.now() });
+    return lineups;
   } catch {
     return null;
   }
@@ -313,10 +361,15 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
 
 function singleMatchPromptBlock(b) {
   const m = b.matchInfo;
+  const lineupNote = b.lineupKnown
+    ? 'De onderstaande spelerslijsten zijn al gefilterd op de BEVESTIGDE basisopstelling — dit zijn dus alleen spelers die ook echt starten.'
+    : 'Basisopstelling is nog niet bekend (komt meestal ~30-60 min voor aftrap) — onderstaande spelerslijsten zijn op seizoensgemiddelde, dus het is nog niet zeker dat deze spelers ook daadwerkelijk starten.';
+  const playerLine = p => `${p.name} (${p.shotsAvg}/wedstrijd, ${p.sotAvg} op doel/wedstrijd, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen, ${p.apps} wedstrijden gespeeld)`;
   return `Wedstrijd: ${m.h} vs ${m.a} (${m.compName || ''}, ${m.date} ${m.time}).
 Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(b.model.pHome * 100).toFixed(1)}%, gelijk ${(b.model.pDraw * 100).toFixed(1)}%, uit ${(b.model.pAway * 100).toFixed(1)}%.
-Spelers met de meeste schoten per wedstrijd bij ${m.h}: ${b.homePlayers.map(p => `${p.name} (${p.shotsAvg}/wedstrijd, ${p.sotAvg} op doel/wedstrijd, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen, ${p.apps} wedstrijden gespeeld)`).join(', ') || 'nog geen data'}.
-Spelers met de meeste schoten per wedstrijd bij ${m.a}: ${b.awayPlayers.map(p => `${p.name} (${p.shotsAvg}/wedstrijd, ${p.sotAvg} op doel/wedstrijd, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen, ${p.apps} wedstrijden gespeeld)`).join(', ') || 'nog geen data'}.`;
+${lineupNote}
+Spelers met de meeste schoten per wedstrijd bij ${m.h}: ${b.homePlayers.map(playerLine).join(', ') || 'nog geen data'}.
+Spelers met de meeste schoten per wedstrijd bij ${m.a}: ${b.awayPlayers.map(playerLine).join(', ') || 'nog geen data'}.`;
 }
 
 async function runAi(env, prompt) {
@@ -454,17 +507,18 @@ export default {
       const match = (matchesData.matches || []).find(m => String(m.apiId) === String(apiId));
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
 
-      const base = buildMatchBase(match, standingsData.standings, playersData.players);
       const fullTable = (standingsData.standings || [])
         .filter(s => s.compName === match.compName)
         .sort((a, b) => a.position - b.position);
       const h2h = computeH2H(matchesData.matches || [], match.h, match.a);
       const relevantPlayers = (playersData.players || []).filter(p => p.team === match.h || p.team === match.a);
-      const [referee, odds, propsResult] = await Promise.all([
+      const [referee, odds, propsResult, lineups] = await Promise.all([
         fetchReferee(env, match.apiId, match.compId),
         fetchOdds(env, match.apiId, match.compId),
         fetchPlayerProps(env, match.apiId, match.compId, relevantPlayers),
+        fetchLineups(env, match.apiId, match.compId),
       ]);
+      const base = buildMatchBase(match, standingsData.standings, playersData.players, lineups);
       const { players: propsAll, btts, teamGoals } = propsResult;
       const homeNames = new Set(relevantPlayers.filter(p => p.team === match.h).map(p => p.name));
       const props = {
@@ -494,7 +548,7 @@ ${oddsLine}
 ${bttsLine}
 ${teamGoalsLine ? `Doelpunten per team: ${teamGoalsLine}.` : ''}
 ${propsLine}
-Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), of beide teams waarschijnlijk scoren en hoeveel doelpunten er ongeveer verwacht worden, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten. Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
+Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), of beide teams waarschijnlijk scoren en hoeveel doelpunten er ongeveer verwacht worden, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten. Als de basisopstelling nog niet bevestigd is, benoem dat expliciet als risico bij elke speler-suggestie (die speler moet dan nog wel echt starten). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
       const analysis = await runAi(env, prompt);
 
       return json({
@@ -526,10 +580,11 @@ Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
         kvGet(env, 'espn_players', { players: [] }),
       ]);
 
-      const bases = ids
+      const matchesFound = ids
         .map(id => (matchesData.matches || []).find(m => String(m.apiId) === String(id)))
-        .filter(Boolean)
-        .map(match => buildMatchBase(match, standingsData.standings, playersData.players));
+        .filter(Boolean);
+      const lineupsPerMatch = await Promise.all(matchesFound.map(m => fetchLineups(env, m.apiId, m.compId)));
+      const bases = matchesFound.map((match, i) => buildMatchBase(match, standingsData.standings, playersData.players, lineupsPerMatch[i]));
 
       if (!bases.length) return json({ error: 'geen van de opgegeven wedstrijden gevonden' }, 404);
 
