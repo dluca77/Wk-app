@@ -1,0 +1,15 @@
+name: TEMP - Test ESPN news endpoint reachability
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl ESPN site.api news endpoint
+        run: |
+          echo "--- HTTP status ---"
+          curl -s -o /dev/null -w "%{http_code}\n" "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/news"
+          echo "--- Body (first 500 chars) ---"
+          curl -s "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/news" | head -c 500
