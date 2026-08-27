@@ -133,10 +133,16 @@ function mergePlayersByName(players) {
 // beperkt tot bevestigde starters i.p.v. blind op seizoensgemiddelde te
 // gokken; is de opstelling nog niet bekend, valt dit terug op het gewone
 // seizoensgemiddelde-lijstje (met een vlag zodat de AI dat ook weet).
-function buildMatchBase(match, standings, players, lineups = null) {
+function buildMatchBase(match, standings, players, lineups = null, news = []) {
   const homeStats = standings.find(t => t.team === match.h);
   const awayStats = standings.find(t => t.team === match.a);
   const model = matchProbabilities(homeStats, awayStats);
+
+  // Nieuws: alleen van deze competitie, artikelen die één van beide
+  // clubnamen noemen eerst (transfers, blessures, schorsingen e.d.).
+  const compNews = (news || []).filter(n => n.compName === match.compName);
+  const mentionsTeam = n => [match.h, match.a].some(t => `${n.headline} ${n.description}`.toLowerCase().includes(t.toLowerCase()));
+  const relevantNews = [...compNews.filter(mentionsTeam), ...compNews.filter(n => !mentionsTeam(n))].slice(0, 5);
 
   const idOf = p => Number((p.playerId || '').match(/_(\d+)$/)?.[1]);
   const merged = mergePlayersByName(players);
@@ -159,6 +165,7 @@ function buildMatchBase(match, standings, players, lineups = null) {
     homeStanding: homeStats || null,
     awayStanding: awayStats || null,
     lineupKnown: !!lineups,
+    relevantNews,
   };
 }
 
@@ -365,11 +372,15 @@ function singleMatchPromptBlock(b) {
     ? 'De onderstaande spelerslijsten zijn al gefilterd op de BEVESTIGDE basisopstelling — dit zijn dus alleen spelers die ook echt starten.'
     : 'Basisopstelling is nog niet bekend (komt meestal ~30-60 min voor aftrap) — onderstaande spelerslijsten zijn op seizoensgemiddelde, dus het is nog niet zeker dat deze spelers ook daadwerkelijk starten.';
   const playerLine = p => `${p.name} (${p.shotsAvg}/wedstrijd, ${p.sotAvg} op doel/wedstrijd, ${p.goals} goals, ${p.corners||0} corners, ${p.yellowCards||0} geel/${p.redCards||0} rood, ${p.fouls||0} overtredingen dit seizoen, ${p.apps} wedstrijden gespeeld)`;
+  const newsLine = (b.relevantNews || []).length
+    ? `Recent nieuws over ${m.compName}: ${b.relevantNews.map(n => `"${n.headline}"${n.description ? ` — ${n.description}` : ''}`).join(' | ')}.`
+    : '';
   return `Wedstrijd: ${m.h} vs ${m.a} (${m.compName || ''}, ${m.date} ${m.time}).
 Modelkansen (Poisson, op basis van eigen vormberekening): thuis ${(b.model.pHome * 100).toFixed(1)}%, gelijk ${(b.model.pDraw * 100).toFixed(1)}%, uit ${(b.model.pAway * 100).toFixed(1)}%.
 ${lineupNote}
 Spelers met de meeste schoten per wedstrijd bij ${m.h}: ${b.homePlayers.map(playerLine).join(', ') || 'nog geen data'}.
-Spelers met de meeste schoten per wedstrijd bij ${m.a}: ${b.awayPlayers.map(playerLine).join(', ') || 'nog geen data'}.`;
+Spelers met de meeste schoten per wedstrijd bij ${m.a}: ${b.awayPlayers.map(playerLine).join(', ') || 'nog geen data'}.
+${newsLine}`;
 }
 
 async function runAi(env, prompt) {
@@ -416,6 +427,7 @@ async function ingestEspn(env, body) {
   const incomingMatches = fixMojibakeDeep(Array.isArray(body.matches) ? body.matches : []);
   const incomingPlayers = fixMojibakeDeep(Array.isArray(body.players) ? body.players : []);
   const incomingStandings = fixMojibakeDeep(Array.isArray(body.standings) ? body.standings : []);
+  const incomingNews = fixMojibakeDeep(Array.isArray(body.news) ? body.news : []);
 
   // Wedstrijden mergen op apiId zodat oudere, inmiddels buiten het scrape-
   // venster gevallen wedstrijden (voor vormberekening) bewaard blijven.
@@ -437,6 +449,10 @@ async function ingestEspn(env, body) {
   // Spelers zijn al season-cumulatieve totalen (ESPN levert dat direct) —
   // gewoon overschrijven, geen eigen opstapeling nodig.
   await kvPut(env, 'espn_players', { players: incomingPlayers, updatedAt: now.toISOString() });
+
+  // Nieuws: gewoon overschrijven met de laatste scrape (geen geschiedenis
+  // nodig, alleen de meest recente koppen zijn relevant als AI-context).
+  await kvPut(env, 'espn_news', { news: incomingNews, updatedAt: now.toISOString() });
 
   await kvPut(env, 'meta_espn', { lastRun: now.toISOString(), totalMatches: matches.length, totalPlayers: incomingPlayers.length });
   return { ok: true, matches: matches.length, players: incomingPlayers.length };
@@ -499,10 +515,11 @@ export default {
     // odds — deze databron levert die niet.
     if (url.pathname === '/predict') {
       const apiId = url.searchParams.get('apiId');
-      const [matchesData, standingsData, playersData] = await Promise.all([
+      const [matchesData, standingsData, playersData, newsData] = await Promise.all([
         kvGet(env, 'espn_matches', { matches: [] }),
         kvGet(env, 'espn_standings', { standings: [] }),
         kvGet(env, 'espn_players', { players: [] }),
+        kvGet(env, 'espn_news', { news: [] }),
       ]);
       const match = (matchesData.matches || []).find(m => String(m.apiId) === String(apiId));
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
@@ -518,7 +535,7 @@ export default {
         fetchPlayerProps(env, match.apiId, match.compId, relevantPlayers),
         fetchLineups(env, match.apiId, match.compId),
       ]);
-      const base = buildMatchBase(match, standingsData.standings, playersData.players, lineups);
+      const base = buildMatchBase(match, standingsData.standings, playersData.players, lineups, newsData.news);
       const { players: propsAll, btts, teamGoals } = propsResult;
       const homeNames = new Set(relevantPlayers.filter(p => p.team === match.h).map(p => p.name));
       const props = {
@@ -548,7 +565,7 @@ ${oddsLine}
 ${bttsLine}
 ${teamGoalsLine ? `Doelpunten per team: ${teamGoalsLine}.` : ''}
 ${propsLine}
-Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), of beide teams waarschijnlijk scoren en hoeveel doelpunten er ongeveer verwacht worden, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten. Als de basisopstelling nog niet bevestigd is, benoem dat expliciet als risico bij elke speler-suggestie (die speler moet dan nog wel echt starten). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
+Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), of beide teams waarschijnlijk scoren en hoeveel doelpunten er ongeveer verwacht worden, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten. Als het nieuws hierboven iets relevants meldt (blessure, schorsing, transfer, rust geven aan een speler, trainerswissel) weeg dat expliciet mee en noem het kort. Als de basisopstelling nog niet bevestigd is, benoem dat expliciet als risico bij elke speler-suggestie (die speler moet dan nog wel echt starten). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
       const analysis = await runAi(env, prompt);
 
       return json({
@@ -574,17 +591,18 @@ Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
       const ids = (url.searchParams.get('ids') || '').split(',').map(s => s.trim()).filter(Boolean);
       if (!ids.length) return json({ error: 'geen apiId\'s opgegeven (?ids=a,b,c)' }, 400);
 
-      const [matchesData, standingsData, playersData] = await Promise.all([
+      const [matchesData, standingsData, playersData, newsData] = await Promise.all([
         kvGet(env, 'espn_matches', { matches: [] }),
         kvGet(env, 'espn_standings', { standings: [] }),
         kvGet(env, 'espn_players', { players: [] }),
+        kvGet(env, 'espn_news', { news: [] }),
       ]);
 
       const matchesFound = ids
         .map(id => (matchesData.matches || []).find(m => String(m.apiId) === String(id)))
         .filter(Boolean);
       const lineupsPerMatch = await Promise.all(matchesFound.map(m => fetchLineups(env, m.apiId, m.compId)));
-      const bases = matchesFound.map((match, i) => buildMatchBase(match, standingsData.standings, playersData.players, lineupsPerMatch[i]));
+      const bases = matchesFound.map((match, i) => buildMatchBase(match, standingsData.standings, playersData.players, lineupsPerMatch[i], newsData.news));
 
       if (!bases.length) return json({ error: 'geen van de opgegeven wedstrijden gevonden' }, 404);
 

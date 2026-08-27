@@ -34,6 +34,28 @@ async function getJson(url) {
   try { return await res.json(); } catch { return null; }
 }
 
+// Competitienieuws: ESPN's "site.api" (i.t.t. de core-API hierboven, NIET
+// geblokkeerd voor dit specifieke /news-pad — apart getest vanuit deze
+// GitHub Actions-omgeving, in tegenstelling tot bv. /scoreboard). Alleen
+// voor PRIORITY_LEAGUES gescraped, want dit voegt geen waarde toe voor
+// obscure competities en houdt de looptijd bewaakt. Wordt in de Worker
+// gebruikt als extra AI-context (transfers, blessures, schorsingen e.d.),
+// niet los als gestructureerde data — het is vrije-tekst nieuws.
+async function fetchNews(slug, leagueName) {
+  try {
+    const data = await getJson(`https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/news`);
+    const articles = data?.articles || [];
+    return articles.slice(0, 8).map(a => ({
+      compName: leagueName,
+      headline: a.headline || '',
+      description: a.description || '',
+      published: a.published || '',
+    })).filter(a => a.headline);
+  } catch {
+    return [];
+  }
+}
+
 async function pool(items, limit, fn) {
   const results = [];
   let i = 0;
@@ -249,8 +271,13 @@ async function processLeague(slug, isPriority) {
     try { standings = await scrapeStandings(slug, leagueName, teamIdToName); }
     catch (e) { console.error(`${leagueName} standen FOUT: ${e.message}`); }
   }
-  console.error(`${leagueName} (${slug}): ${matches.length} wedstrijden${isPriority ? `, ${players.length} spelers, ${standings.length} standen` : ''}`);
-  return { matches, players, standings };
+  let news = [];
+  if (isPriority) {
+    try { news = await fetchNews(slug, leagueName); }
+    catch (e) { console.error(`${leagueName} nieuws FOUT: ${e.message}`); }
+  }
+  console.error(`${leagueName} (${slug}): ${matches.length} wedstrijden${isPriority ? `, ${players.length} spelers, ${standings.length} standen, ${news.length} nieuwsartikelen` : ''}`);
+  return { matches, players, standings, news };
 }
 
 async function main() {
@@ -272,8 +299,9 @@ async function main() {
   const allMatches = results.flatMap(r => r.matches);
   const allPlayers = results.flatMap(r => r.players);
   const allStandings = results.flatMap(r => r.standings || []);
-  console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers, ${allStandings.length} standen uit ${allSlugs.length} competities`);
-  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, updatedAt: new Date().toISOString() }));
+  const allNews = results.flatMap(r => r.news || []);
+  console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers, ${allStandings.length} standen, ${allNews.length} nieuwsartikelen uit ${allSlugs.length} competities`);
+  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, news: allNews, updatedAt: new Date().toISOString() }));
 }
 
 main();
