@@ -134,8 +134,19 @@ function mergePlayersByName(players) {
 // gokken; is de opstelling nog niet bekend, valt dit terug op het gewone
 // seizoensgemiddelde-lijstje (met een vlag zodat de AI dat ook weet).
 function buildMatchBase(match, standings, players, lineups = null, news = []) {
-  const homeStats = standings.find(t => t.team === match.h);
-  const awayStats = standings.find(t => t.team === match.a);
+  // Een team kan in meerdere standenlijsten voorkomen (bv. Premier League
+  // + Champions League-kwalificatie die nog moet beginnen) — zonder filter
+  // op compName pakte .find() soms de verkeerde (0 gespeeld) stand, waardoor
+  // het model met lege data rekende terwijl de competitiestand er wél was.
+  // Eerst matchen op zelfde competitie als de wedstrijd, met team-only als
+  // terugval (voor het geval compName net iets anders gespeld is).
+  const findStanding = team =>
+    standings.find(t => t.team === team && t.compName === match.compName)
+    || standings.find(t => t.team === team && t.played > 0)
+    || standings.find(t => t.team === team)
+    || null;
+  const homeStats = findStanding(match.h);
+  const awayStats = findStanding(match.a);
   const model = matchProbabilities(homeStats, awayStats);
 
   // Nieuws: alleen van deze competitie, artikelen die één van beide
