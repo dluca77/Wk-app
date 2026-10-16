@@ -304,9 +304,11 @@ async function fetchOdds(env, apiId, compId) {
   const cached = await kvGet(env, cacheKey, null);
   if (cached && (Date.now() - cached.fetchedAt) < 10 * 60 * 1000) return cached.odds;
   try {
-    const res = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);
-    if (!res.ok) throw new Error(`ESPN HTTP ${res.status}`);
-    const data = await res.json();
+    const snapshot=await kvGet(env,`market_document_${eventId}`,null);
+    const usable=snapshot && Date.now()-snapshot.fetchedAt<30*60*1000;
+    let data;
+    if(usable) data=snapshot.odds;
+    else {const res=await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);if(!res.ok)throw new Error(`ESPN HTTP ${res.status}`);data=await res.json();}
     const items = data?.items || [];
     const pick = items.find(i => /bet ?365/i.test(i.provider?.name || '')) || items.find(i => i.provider?.name === 'DraftKings') || items[0];
     const dk = items.find(i => i.provider?.name === 'DraftKings'); // alleen DraftKings heeft overUnder op dit niveau
@@ -324,7 +326,7 @@ async function fetchOdds(env, apiId, compId) {
         draw: has1x2 ? draw : null,
         away: has1x2 ? away : null,
         totalProvider: dk?.provider?.name || null,
-        fetchedAt: new Date().toISOString(),
+        fetchedAt: new Date(usable?snapshot.fetchedAt:Date.now()).toISOString(),
         sourceUpdatedAt: pick?.lastUpdated || null,
         freshness: quoteFreshness(pick?.lastUpdated),
         totalLine: hasTotal ? dk.overUnder : null,
@@ -370,18 +372,20 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
     raw = cached.raw; homeTeamId = cached.homeTeamId; awayTeamId = cached.awayTeamId;
   } else {
     try {
-      const oddsRes = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);
-      if (!oddsRes.ok) throw new Error(`ESPN HTTP ${oddsRes.status}`);
-      const oddsData = await oddsRes.json();
+      const snapshot=await kvGet(env,`market_document_${eventId}`,null);
+      const usable=snapshot && Date.now()-snapshot.fetchedAt<30*60*1000;
+      let oddsData;
+      if(usable) oddsData=snapshot.odds;
+      else {const oddsRes=await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);if(!oddsRes.ok)throw new Error(`ESPN HTTP ${oddsRes.status}`);oddsData=await oddsRes.json();}
       const dk = (oddsData?.items || []).find(i => i.provider?.name === 'DraftKings');
       homeTeamId = dk?.homeTeamOdds?.team?.$ref?.match(/teams\/(\d+)/)?.[1] || null;
       awayTeamId = dk?.awayTeamOdds?.team?.$ref?.match(/teams\/(\d+)/)?.[1] || null;
       const propsRef = dk?.propBets?.$ref;
       if (!propsRef) { raw = []; }
       else {
-        const propsRes = await fetch(`${propsRef.replace(/^http:/,'https:')}&limit=1000`);
-        if (!propsRes.ok) throw new Error(`ESPN props HTTP ${propsRes.status}`);
-        const propsData = await propsRes.json();
+        let propsData;
+        if(usable && snapshot.props) propsData=snapshot.props;
+        else {const propsRes=await fetch(`${propsRef.replace(/^http:/,'https:')}&limit=1000`);if(!propsRes.ok)throw new Error(`ESPN props HTTP ${propsRes.status}`);propsData=await propsRes.json();}
         const propItems = [...(propsData?.items || [])];
         for(let page=2;page <= (propsData.pageCount || 1);page++){
           const pageRes = await fetch(`${propsRef.replace(/^http:/,'https:')}&limit=1000&page=${page}`);
@@ -510,6 +514,10 @@ function fixMojibakeDeep(val) {
 
 // ---------- Refresh: nieuwe scrape-data mergen met opgebouwde geschiedenis ----------
 async function ingestEspn(env, body) {
+  for(const doc of (body.marketDocuments || [])){
+    if(/^\d+$/.test(String(doc.eventId)) && Array.isArray(doc.odds?.items) && Number.isFinite(doc.fetchedAt))
+      await env.WK_CACHE.put(`market_document_${doc.eventId}`,JSON.stringify(doc),{expirationTtl:3600});
+  }
   const now = new Date();
   const incomingMatches = fixMojibakeDeep(Array.isArray(body.matches) ? body.matches : []);
   const incomingPlayers = fixMojibakeDeep(Array.isArray(body.players) ? body.players : []);

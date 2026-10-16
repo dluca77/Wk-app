@@ -311,8 +311,32 @@ async function main() {
   const allPlayers = results.flatMap(r => r.players);
   const allStandings = results.flatMap(r => r.standings || []);
   const allNews = results.flatMap(r => r.news || []);
+  const oddsMatches = allMatches.filter(m=>!m.finished && PRIORITY_LEAGUES.has(m.compId))
+    .sort((a,b)=>a.date.localeCompare(b.date)).slice(0,100);
+  const marketDocuments = (await pool(oddsMatches,4,async m=>{
+    try {
+      const id=String(m.apiId).replace(/^espn_/,'');
+      const response=await fetch(`${BASE}/${m.compId}/events/${id}/competitions/${id}/odds?lang=en&region=us`,{signal:AbortSignal.timeout(15000)});
+      if(!response.ok) return null;
+      const odds=await response.json();
+      const ref=odds.items?.find(i=>i.provider?.name==='DraftKings')?.propBets?.$ref;
+      let props=null;
+      if(ref){
+        const res=await fetch(ref.replace(/^http:/,'https:')+'&limit=1000',{signal:AbortSignal.timeout(15000)});
+        if(res.ok){ props=await res.json();
+          for(let page=2;page<=(props.pageCount||1);page++){
+            const next=await fetch(ref.replace(/^http:/,'https:')+`&limit=1000&page=${page}`,{signal:AbortSignal.timeout(15000)});
+            if(!next.ok){props=null;break;}
+            props.items.push(...((await next.json()).items||[]));
+          }
+          if(props) props.pageCount=1;
+        }
+      }
+      return {eventId:id,odds,props,fetchedAt:Date.now()};
+    }catch(e){console.error(`Odds ${m.apiId}: ${e.message}`);return null;}
+  })).filter(Boolean);
   console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers, ${allStandings.length} standen, ${allNews.length} nieuwsartikelen uit ${allSlugs.length} competities`);
-  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, news: allNews, updatedAt: new Date().toISOString() }));
+  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, news: allNews, marketDocuments, updatedAt: new Date().toISOString() }));
 }
 
 main();
