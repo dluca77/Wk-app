@@ -760,6 +760,7 @@ function renderQuickPicks(target,d){
   const status=document.createElement('p'); status.className='pp';
   status.textContent=d.marketStatus?.odds==='fetch_failed'?'Bookmakergegevens ophalen mislukt.':d.odds?.provider?`Oddsbron: ${d.odds.provider}. Actualiteit: ${d.odds.freshness==='recent'?'minder dan 1 uur oud':d.odds.freshness==='stale'?'verouderd':'brontijd onbekend'}.`:'Geen bookmaker-odds beschikbaar.';
   target.append(status);
+  if(d.marketStatus?.odds==='source_blocked') status.textContent='ESPN weigert odds-aanvragen vanaf onze hosting (HTTP 403). Modelkansen zijn wel beschikbaar; bookmaker-odds niet.';
   const note=document.createElement('p'); note.className='pp'; note.textContent='Suggesties op basis van beschikbare cijfers. Zonder actuele odds geen bewezen beste bet. De vier opties zijn geen aanbevolen combinatie.'; target.append(note);
 }
 

@@ -336,8 +336,8 @@ async function fetchOdds(env, apiId, compId) {
     }
     await kvPut(env, cacheKey, { odds:odds || {status:'unavailable'}, fetchedAt: Date.now() });
     return odds || {status:'unavailable'};
-  } catch {
-    return {status:'fetch_failed'};
+  } catch (error) {
+    return {status:String(error.message).includes('403') ? 'source_blocked' : 'fetch_failed'};
   }
 }
 
@@ -406,8 +406,8 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
           .filter(it => it.odds);
       }
       await kvPut(env, cacheKey, { raw, homeTeamId, awayTeamId, fetchedAt: Date.now() });
-    } catch {
-      return {players:[],btts:null,teamGoals:{home:null,away:null},status:'fetch_failed'};
+    } catch (error) {
+      return {players:[],btts:null,teamGoals:{home:null,away:null},status:String(error.message).includes('403') ? 'source_blocked' : 'fetch_failed'};
     }
   }
 
