@@ -17,6 +17,7 @@
 //    uit niet-prioritaire competities worden dus wel getoond, alleen zonder
 //    speler-schotenvoorspelling.
 import {collectPlayerHistory} from './player-history.mjs';
+import {readFile} from 'node:fs/promises';
 const PRIORITY_LEAGUES = new Set([
   'ned.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf',
   'uefa.champions_qual', 'uefa.europa_qual', 'uefa.europa.conf_qual',
@@ -315,7 +316,13 @@ async function main() {
   const allPlayers = results.flatMap(r => r.players);
   const allStandings = results.flatMap(r => r.standings || []);
   const allNews = results.flatMap(r => r.news || []);
-  const playerGames=await collectPlayerHistory(allMatches,allPlayers,getJson,pool);
+  const livePlayerGames=await collectPlayerHistory(allMatches,allPlayers,getJson,pool);
+  let snapshot={rows:[]};
+  try{snapshot=JSON.parse(await readFile('data/player-history.json','utf8'));}catch{}
+  const historicalRows=new Map((snapshot.rows||[]).map(g=>[`${g.eventId}:${g.playerId}`,g]));
+  for(const row of livePlayerGames)historicalRows.set(`${row.eventId}:${row.playerId}`,row);
+  const playerGames=[...historicalRows.values()];
+  console.error(`Player history ingestion: ${playerGames.length} observations; live ${livePlayerGames.length}; fallback fetched ${snapshot.fetchedAt||'unavailable'}`);
   const oddsMatches = allMatches.filter(m=>!m.finished && m.date >= new Date().toISOString().slice(0,10) && PRIORITY_LEAGUES.has(m.compId))
     .sort((a,b)=>a.date.localeCompare(b.date)).slice(0,100);
   const marketDocuments = (await pool(oddsMatches,4,async m=>{

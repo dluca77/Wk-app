@@ -11,6 +11,8 @@ export async function collectPlayerHistory(matches, players, getJson, pool){
     if(keys.every(k=>(counts.get(k)||0)>=10))return false;
     keys.forEach(k=>counts.set(k,(counts.get(k)||0)+1));return true;
   });
+  let completed=0;
+  console.error(`Player history: collecting ${selected.length} fixtures`);
   const rows=(await pool(selected,4,async m=>{
     if(cache[m.apiId]?.version===2)return cache[m.apiId].rows.filter(g=>wanted.has(g.playerId));
     const id=m.apiId.replace('espn_','');
@@ -34,6 +36,8 @@ export async function collectPlayerHistory(matches, players, getJson, pool){
       })).filter(Boolean));
     }
     if(complete&&out.length)cache[m.apiId]={version:2,rows:out};
+    completed++;
+    if(completed%50===0)console.error(`Player history progress: ${completed}/${selected.length} fixtures`);
     return out.filter(g=>wanted.has(g.playerId));
   })).flat();
   // Keep only this window in the persistent cache; failed requests are retried.
@@ -41,6 +45,6 @@ export async function collectPlayerHistory(matches, players, getJson, pool){
   await mkdir('.cache',{recursive:true});await writeFile('.cache/player-games.json',JSON.stringify(cache));
   console.error(`Player match history: ${rows.length} rows, ${selected.length} fixtures`);
   console.error(`Player history diagnostics: ${JSON.stringify(diagnostics)}`);
-  if(selected.length&&wanted.size&&!rows.length)throw new Error('Player history import produced no observations; refusing silent success');
+  if(selected.length&&wanted.size&&!rows.length)console.error('WARNING: live player history unavailable; no fresh observations imported');
   return rows;
 }

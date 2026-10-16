@@ -12,6 +12,8 @@ const picks=ctx.statisticalPicks(match,model,[player],history,null);
 assert.ok(picks[0].probability>0 && picks[0].probability<1);
 assert.ok(picks[0].lower<picks[0].probability&&picks[0].upper>picks[0].probability);
 assert.equal(ctx.statisticalPicks(match,model,[player],history.slice(0,4),null)[0].probability,null);
+assert.equal(ctx.statisticalPicks(match,model,[player],history.map(g=>({...g,shots:null})),null)[0].probability,null);
+assert.equal(ctx.statisticalPicks({...match,date:'2026-12-01'},model,[player],history,null)[0].probability,null);
 assert.equal(ctx.statisticalPicks(match,model,[player],history,{home:[2],away:[]})[0].probability,null);
 const quoted=ctx.attachQuoteChecks(picks,[{name:'Player',markets:[{type:'Shots Milestones',line:'2+',odds:10,freshness:'recent'}]}],null);
 assert.equal(quoted[0].probability,picks[0].probability);assert.equal(quoted[0].title,picks[0].title);

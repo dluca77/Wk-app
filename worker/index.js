@@ -234,17 +234,17 @@ function statisticalPicks(match,model,players,history,lineups){
         if(g.playerId!==id||g.team!==p.team||g.compId!==match.compId||!g.starter||!(g.minutes>0)||!(age>0&&age<=180)||!Number.isFinite(g[field])||g[field]<0||seen.has(g.eventId))return false;
         seen.add(g.eventId);return true;
       }).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12);
-      if(games.length<5)continue;
+      if(games.length<5 || (Date.parse(match.date)-Date.parse(games[0].date))/86400000>30)continue;
       let w=0,w2=0,hits=0;
       for(const g of games){const a=2**(-((Date.parse(match.date)-Date.parse(g.date))/86400000)/45);w+=a;w2+=a*a;if(g[field]>=line)hits+=a;}
       const n=w*w/w2,rate=hits/w;
       const probability=(rate*n+0.5)/(n+1);
       const z=1.96,den=1+z*z/n,center=(rate+z*z/(2*n))/den,margin=z*Math.sqrt(rate*(1-rate)/n+z*z/(4*n*n))/den;
       candidates.push({market,title:`${p.name} · ${line}+ ${label}`,player:p.name,line:`${line}+`,type:field==='shots'?'Shots Milestones':'Shots on Target Milestones',probability,lower:Math.max(0,center-margin),upper:Math.min(1,center+margin),
-        detail:`${games.filter(g=>g[field]>=line).length}/${games.length} eerdere basiswedstrijden raak · gemiddeld ${Math.round(games.reduce((s,g)=>s+g.minutes,0)/games.length)} minuten. ${starters?'Bevestigde starter.':'Alleen geldig als hij start.'} Recente duels wegen zwaarder; onzekerheidsband is indicatief. Tegenstanderspecifieke schotcorrectie ontbreekt.`,games:games.length,conditionalOnStarting:true});
+        detail:`${games.filter(g=>g[field]>=line).length}/${games.length} eerdere basiswedstrijden raak · gemiddeld ${Math.round(games.reduce((s,g)=>s+g.minutes,0)/games.length)} minuten. Laatste meegenomen duel: ${games[0].date}. ${starters?'Bevestigde starter.':'Alleen geldig als hij start.'} Recente duels wegen zwaarder; onzekerheidsband is indicatief. Tegenstanderspecifieke schotcorrectie ontbreekt.`,games:games.length,conditionalOnStarting:true});
     }
     candidates.sort((a,b)=>b.lower-a.lower||b.games-a.games||a.title.localeCompare(b.title));
-    picks.push(candidates[0]||{market,title:'Onvoldoende wedstrijddata',detail:'Minimaal 5 eerdere basiswedstrijden met geregistreerde schoten nodig; seizoensgemiddelden worden niet als trefkans gebruikt.',probability:null});
+    picks.push(candidates[0]||{market,title:'Onvoldoende wedstrijddata',detail:'Minimaal 5 eerdere basiswedstrijden met geregistreerde schoten nodig, waarvan één in de afgelopen 30 dagen; seizoensgemiddelden worden niet als trefkans gebruikt.',probability:null});
   }
   if(model.available){
     const yes=(1-Math.exp(-model.lambdaHome))*(1-Math.exp(-model.lambdaAway));
