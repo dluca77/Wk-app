@@ -715,7 +715,9 @@ function quickMatchPicks(d){
     const p = players[0];
     if(p){
       const line = field === 'shotsAvg' && p[field] >= 2.5 ? 2 : 1;
-      picks.push({market, title:`${p.name} · ${line}+ ${label}`, detail:`${p[field].toFixed(2)} gemiddeld per wedstrijd · ${p.apps} wedstrijden. ${p.starter ? 'Bevestigde starter.' : 'Alleen overwegen als hij start; opstelling onbevestigd.'} Gemiddelde is geen trefkans.`, probability:null});
+      const prop=[...(d.props?.home||[]),...(d.props?.away||[])].find(x=>x.name===p.name);
+      const quote=prop?.markets?.find(x=>x.line===`${line}+` && x.type===(field==='shotsAvg'?'Shots Milestones':'Shots on Target Milestones'));
+      picks.push({market, quote, title:`${p.name} · ${line}+ ${label}`, detail:`${p[field].toFixed(2)} gemiddeld per wedstrijd · ${p.apps} wedstrijden. ${p.starter ? 'Bevestigde starter.' : 'Alleen overwegen als hij start; opstelling onbevestigd.'} Gemiddelde is geen trefkans.`, probability:null});
     } else picks.push({market,title:'Nog geen onderbouwde keuze',detail:'Minimaal 5 wedstrijden en voldoende geregistreerde schoten nodig.',probability:null});
   }
   const model = d.model;
@@ -746,7 +748,13 @@ function renderQuickPicks(target,d){
     if(pick.probability != null){
       const prob = document.createElement('div'); prob.textContent=`${Math.round(pick.probability*100)}% modelkans · faire odd ${(1/pick.probability).toFixed(2)}`; prob.style.marginBottom='7px'; card.append(prob);
     }
-    card.append(detail); grid.append(card);
+    card.append(detail);
+    if(pick.market.startsWith('Speler')){
+      const quote=document.createElement('p');quote.className='pp';
+      quote.textContent=pick.quote ? `${pick.quote.provider} @${pick.quote.odds} · ${pick.quote.freshness==='recent'?'recent':pick.quote.freshness==='stale'?'verouderde quote':'actualiteit onbekend'} · bron: ${pick.quote.sourceUpdatedAt || 'tijd onbekend'}` : 'Geen bookmakerquote voor precies deze spelerlijn.';
+      card.append(quote);
+    }
+    grid.append(card);
   }
   target.append(grid);
   const status=document.createElement('p'); status.className='pp';
