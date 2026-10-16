@@ -706,29 +706,82 @@ function renderPredictionBlock(target, m, d){
   return extra;
 }
 
+function quickMatchPicks(d){
+  const picks = [];
+  for(const [field,label,market] of [['shotsAvg','schoten','Speler-schoten'],['sotAvg','schoten op doel','Speler op doel']]){
+    const players = [...(d.players?.home || []),...(d.players?.away || [])]
+      .filter(p=>p.apps >= 5 && Number.isFinite(p[field]) && p[field] >= 1)
+      .sort((a,b)=>Number(b.starter)-Number(a.starter) || b[field]-a[field]);
+    const p = players[0];
+    if(p){
+      const line = field === 'shotsAvg' && p[field] >= 2.5 ? 2 : 1;
+      picks.push({market, title:`${p.name} · ${line}+ ${label}`, detail:`${p[field].toFixed(2)} gemiddeld per wedstrijd · ${p.apps} wedstrijden. ${p.starter ? 'Bevestigde starter.' : 'Alleen overwegen als hij start; opstelling onbevestigd.'} Gemiddelde is geen trefkans.`, probability:null});
+    } else picks.push({market,title:'Nog geen onderbouwde keuze',detail:'Minimaal 5 wedstrijden en voldoende geregistreerde schoten nodig.',probability:null});
+  }
+  const model = d.model;
+  if(model?.available !== false && Number.isFinite(model?.lambdaHome) && Number.isFinite(model?.lambdaAway)){
+    const yes = (1-Math.exp(-model.lambdaHome))*(1-Math.exp(-model.lambdaAway));
+    picks.push({market:'Beide teams scoren', title:yes >= .5 ? 'Ja' : 'Nee', probability:Math.max(yes,1-yes),detail:'Poisson-model op basis van competitiedoelpunten.'});
+    const sum = model.lambdaHome + model.lambdaAway;
+    const under = Math.exp(-sum)*(1+sum+sum*sum/2);
+    picks.push({market:'Totaal doelpunten', title:under >= .5 ? 'Under 2,5 goals' : 'Over 2,5 goals',probability:Math.max(under,1-under),detail:`${sum.toFixed(2)} verwachte goals volgens model; geen gemeten xG.`});
+  } else {
+    for(const market of ['Beide teams scoren','Totaal doelpunten']) picks.push({market,title:'Onvoldoende data',detail:'Geen kansberekening beschikbaar.',probability:null});
+  }
+  return picks;
+}
+
+function renderQuickPicks(target,d){
+  target.replaceChildren();
+  const heading = document.createElement('h3'); heading.textContent = 'In één oogopslag · bet-opties'; target.append(heading);
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px';
+  for(const pick of quickMatchPicks(d)){
+    const card = document.createElement('div');
+    card.style.cssText = 'padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card2)';
+    const label = document.createElement('div'); label.className='pp'; label.textContent=pick.market;
+    const title = document.createElement('div'); title.style.cssText='font-weight:800;font-size:17px;margin:7px 0;color:var(--mint)'; title.textContent=pick.title;
+    const detail = document.createElement('div'); detail.className='pp'; detail.textContent=pick.detail;
+    card.append(label,title);
+    if(pick.probability != null){
+      const prob = document.createElement('div'); prob.textContent=`${Math.round(pick.probability*100)}% modelkans · faire odd ${(1/pick.probability).toFixed(2)}`; prob.style.marginBottom='7px'; card.append(prob);
+    }
+    card.append(detail); grid.append(card);
+  }
+  target.append(grid);
+  const note=document.createElement('p'); note.className='pp'; note.textContent='Suggesties op basis van beschikbare cijfers. Zonder actuele odds geen bewezen beste bet. De vier opties zijn geen aanbevolen combinatie.'; target.append(note);
+}
+
 async function openMatch(apiId){
   const m = MATCHES.find(x=>x.apiId===apiId);
   if(!m) return;
   const modal = document.getElementById('modal');
+  modal.dataset.matchId = String(apiId);
   modal.innerHTML = `
     <div class="handle"></div>
     <span class="close" onclick="closeModal()">✕</span>
     <h2>${m.h} vs ${m.a}</h2>
     <div class="sub">${m.compName || ''} · ${m.date} ${m.time}</div>
+    <div class="section" id="quick-picks"><h3>Bet-opties ophalen…</h3><div class="skeleton" style="height:100px"></div></div>
+    <details id="match-details"><summary style="cursor:pointer;padding:14px 0;font-weight:700">Bekijk volledige analyse en statistieken</summary>
     <div class="section" id="predict-section">
       <h3>Win probability</h3>
       <div class="skeleton" style="height:60px"></div>
     </div>
+    </details>
   `;
   document.getElementById('overlay').classList.add('on');
 
   try{
     const res = await fetch(`${API}/predict?apiId=${encodeURIComponent(apiId)}`);
     const d = await res.json();
+    if(modal.dataset.matchId !== String(apiId)) return;
     if(d.error){
+      document.getElementById('quick-picks').textContent = 'Geen bet-opties beschikbaar voor deze wedstrijd.';
       document.getElementById('predict-section').innerHTML = `<h3>Win probability</h3><div class="empty" style="padding:12px 0">${d.error}</div>`;
       return;
     }
+    renderQuickPicks(document.getElementById('quick-picks'),d);
     const extra = renderPredictionBlock(document.getElementById('predict-section'), m, d);
     let html = extra;
     if(d.odds && d.odds.home != null && d.model?.available !== false){
@@ -826,8 +879,9 @@ async function openMatch(apiId){
     if(d.referee){
       html += `<div class="section"><h3>Referee</h3><div class="ai" style="padding:10px 14px">${d.referee}</div></div>`;
     }
-    modal.insertAdjacentHTML('beforeend', html);
+    document.getElementById('match-details').insertAdjacentHTML('beforeend', html);
   }catch(e){
+    document.getElementById('quick-picks').textContent = 'Bet-opties konden niet worden geladen. Probeer opnieuw.';
     document.getElementById('predict-section').innerHTML = `<h3>Win probability</h3><div class="empty" style="padding:12px 0">Could not load prediction.</div>`;
   }
 }
