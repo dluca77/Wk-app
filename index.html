@@ -533,6 +533,9 @@ const TOP5 = ['premier league', 'laliga', 'la liga', 'serie a', 'bundesliga', 'l
 const NL_LEAGUES = ['eredivisie', 'eerste divisie', 'keuken kampioen divisie'];
 
 function compSortKey(compName, compId){
+  const priority = ['uefa.champions','eng.1','esp.1','ita.1','ger.1','fra.1','ned.1','uefa.europa','uefa.europa.conf','fifa.world','uefa.euro','por.1','bel.1','ned.2','eng.2'];
+  const rank = priority.indexOf(compId);
+  if(rank !== -1) return `00_${String(rank).padStart(2,'0')}`;
   const n = (compName||'').toLowerCase();
   // Vrouwenvoetbal altijd helemaal onderaan, ongeacht welke competitie —
   // overruled alle andere tiers hierboven (ook Champions League etc.).
@@ -663,6 +666,10 @@ function probChip(label, pct, isFav){
 }
 
 function renderPredictionBlock(target, m, d){
+  if(d.model?.available === false){
+    target.textContent = d.model.reason;
+    return '';
+  }
   const p1 = Math.round(d.model.pHome*100), px = Math.round(d.model.pDraw*100), p2 = 100-p1-px;
   const favIdx = [p1,px,p2].indexOf(Math.max(p1,px,p2));
   const cardsBadge = p => {
@@ -685,6 +692,7 @@ function renderPredictionBlock(target, m, d){
     </div>
     <div class="pbar"><div class="p1" style="width:0" data-w="${p1}"></div><div class="px" style="width:0" data-w="${px}"></div><div class="p2" style="width:0" data-w="${p2}"></div></div>
   `;
+  if(d.model?.evidence) html += `<p class="pp">Bron: ESPN · ${d.model.evidence.homeGames} / ${d.model.evidence.awayGames} gespeelde wedstrijden · competitiegemiddelde ${d.model.evidence.leagueAvgGoals.toFixed(2)} goals per team. Modelschatting, geen gemeten xG.</p>`;
   target.innerHTML = html;
   requestAnimationFrame(()=>{
     target.querySelectorAll('.pbar div').forEach(el=>{ el.style.width = el.dataset.w + '%'; });
@@ -723,7 +731,7 @@ async function openMatch(apiId){
     }
     const extra = renderPredictionBlock(document.getElementById('predict-section'), m, d);
     let html = extra;
-    if(d.odds && d.odds.home != null){
+    if(d.odds && d.odds.home != null && d.model?.available !== false){
       const imp = v => Math.round(100/v);
       const edgeChip = (label, decOdds, modelP) => {
         const impliedPct = imp(decOdds);
@@ -848,6 +856,7 @@ async function openMultiAnalysis(){
       <div class="stat">${p.shots}<div class="pp">schoten in ${p.apps} wedstrijden</div><div class="pp">${p.sot} op doel</div></div>
     </div>`;
     html += d.matches.map((entry,i) => {
+      if(entry.model?.available === false) return `<div class="section"><h3>${entry.match.h} vs ${entry.match.a}</h3><p>Onvoldoende echte competitiegegevens voor een kansberekening.</p></div>`;
       const p1 = Math.round(entry.model.pHome*100), px = Math.round(entry.model.pDraw*100), p2 = 100-p1-px;
       const favIdx = [p1,px,p2].indexOf(Math.max(p1,px,p2));
       const topPlayers = [
