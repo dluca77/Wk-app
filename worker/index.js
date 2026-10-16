@@ -134,7 +134,7 @@ function mergePlayersByName(players) {
 // beperkt tot bevestigde starters i.p.v. blind op seizoensgemiddelde te
 // gokken; is de opstelling nog niet bekend, valt dit terug op het gewone
 // seizoensgemiddelde-lijstje (met een vlag zodat de AI dat ook weet).
-function buildMatchBase(match, standings, players, lineups = null, news = [], history = [], updatedAt = null) {
+function buildMatchBase(match, standings, players, lineups = null, news = [], history = [], updatedAt = null, playerGames = []) {
   // Een team kan in meerdere standenlijsten voorkomen (bv. Premier League
   // + Champions League-kwalificatie die nog moet beginnen) — zonder filter
   // op compName pakte .find() soms de verkeerde (0 gespeeld) stand, waardoor
@@ -151,11 +151,12 @@ function buildMatchBase(match, standings, players, lineups = null, news = [], hi
   const table = standings.filter(s => s.compName === match.compName && valid(s));
   const games = table.reduce((sum, s) => sum + s.played, 0);
   const avg = games ? table.reduce((sum, s) => sum + s.gf, 0) / games : 0;
-  const model = valid(homeStats) && valid(awayStats) && avg > 0
+  let model = valid(homeStats) && valid(awayStats) && avg > 0
     ? { available: true, ...matchProbabilities(homeStats, awayStats, avg),
         evidence: { source: 'ESPN', homeGames: homeStats.played, awayGames: awayStats.played,
           leagueAvgGoals: avg, priorGames: 6, homeMultiplier: 1.1, awayMultiplier: 0.95 } }
     : { available: false, reason: 'Onvoldoende echte competitiegegevens: beide teams moeten minstens 3 gespeelde wedstrijden met doelpuntencijfers hebben.' };
+  if(history.length) model=historicalGoalModel(match,history);
 
   // Nieuws: alleen van deze competitie, artikelen die één van beide
   // clubnamen noemen eerst (transfers, blessures, schorsingen e.d.).
@@ -187,7 +188,80 @@ function buildMatchBase(match, standings, players, lineups = null, news = [], hi
     relevantNews,
     recentForm: { home: recentTeamForm(history, match, match.h, 'home'), away: recentTeamForm(history, match, match.a, 'away') },
     dataSource: { name: 'ESPN', updatedAt },
+    recommendations: statisticalPicks(match,model,players,playerGames,lineups),
   };
+}
+
+// No bookmaker fields enter these estimators. Only observations before kickoff.
+function historicalGoalModel(match,history){
+  const seen=new Set();
+  const rows=history.filter(m=>{
+    const age=(Date.parse(match.date)-Date.parse(m.date))/86400000;
+    const key=m.apiId||`${m.compId}:${m.date}:${m.h}:${m.a}`;
+    if(seen.has(key)||!m.finished||m.compId!==match.compId||!(age>0&&age<=180)||!/^\d+-\d+$/.test(m.result||''))return false;
+    seen.add(key);return true;
+  }).map(m=>({...m,score:m.result.split('-').map(Number),weight:2**(-((Date.parse(match.date)-Date.parse(m.date))/86400000)/45)}));
+  const home=rows.filter(m=>m.h===match.h),away=rows.filter(m=>m.a===match.a);
+  if(rows.length<20||home.length<3||away.length<3)return {available:false,reason:'Onvoldoende historische thuis-/uitresultaten: minstens 20 competitieduels en 3 per team op de relevante locatie nodig.'};
+  const sum=rows.reduce((s,m)=>s+m.weight,0);
+  const avgH=rows.reduce((s,m)=>s+m.weight*m.score[0],0)/sum;
+  const avgA=rows.reduce((s,m)=>s+m.weight*m.score[1],0)/sum;
+  if(!(avgH>0&&avgA>0))return {available:false,reason:'Onvoldoende doelpuntendata voor dit model.'};
+  const rate=(rs,index,prior)=>(rs.reduce((s,m)=>s+m.weight*m.score[index],0)+4*prior)/(rs.reduce((s,m)=>s+m.weight,0)+4);
+  const lambdaHome=rate(home,0,avgH)*rate(away,0,avgH)/avgH;
+  const lambdaAway=rate(away,1,avgA)*rate(home,1,avgA)/avgA;
+  let pHome=0,pDraw=0,pAway=0;
+  for(let h=0;h<=30;h++)for(let a=0;a<=30;a++){
+    const p=poissonP(h,lambdaHome)*poissonP(a,lambdaAway);
+    if(h>a)pHome+=p;else if(h===a)pDraw+=p;else pAway+=p;
+  }
+  const total=pHome+pDraw+pAway;
+  return {available:true,pHome:pHome/total,pDraw:pDraw/total,pAway:pAway/total,lambdaHome,lambdaAway,
+    evidence:{source:'ESPN completed fixtures',homeGames:home.length,awayGames:away.length,leagueGames:rows.length,leagueAvgGoals:(avgH+avgA)/2,halfLifeDays:45,priorGames:4,windowDays:180,method:'time-weighted venue attack/defence Poisson',calibrated:false}};
+}
+
+function statisticalPicks(match,model,players,history,lineups){
+  const picks=[];
+  for(const [field,line,market,label] of [['shots',2,'Speler-schoten','schoten'],['sot',1,'Speler op doel','schot op doel']]){
+    const candidates=[];
+    for(const p of players.filter(p=>[match.h,match.a].includes(p.team)&&p.compName===match.compName)){
+      const id=String(p.playerId).split('_').at(-1);
+      const starters=p.team===match.h?lineups?.home:lineups?.away;
+      if(starters&&!starters.map(String).includes(id))continue;
+      const seen=new Set();
+      const games=history.filter(g=>{
+        const age=(Date.parse(match.date)-Date.parse(g.date))/86400000;
+        if(g.playerId!==id||g.team!==p.team||g.compId!==match.compId||!g.starter||!(g.minutes>0)||!(age>0&&age<=180)||!Number.isFinite(g[field])||g[field]<0||seen.has(g.eventId))return false;
+        seen.add(g.eventId);return true;
+      }).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12);
+      if(games.length<5)continue;
+      let w=0,w2=0,hits=0;
+      for(const g of games){const a=2**(-((Date.parse(match.date)-Date.parse(g.date))/86400000)/45);w+=a;w2+=a*a;if(g[field]>=line)hits+=a;}
+      const n=w*w/w2,rate=hits/w;
+      const probability=(rate*n+0.5)/(n+1);
+      const z=1.96,den=1+z*z/n,center=(rate+z*z/(2*n))/den,margin=z*Math.sqrt(rate*(1-rate)/n+z*z/(4*n*n))/den;
+      candidates.push({market,title:`${p.name} · ${line}+ ${label}`,player:p.name,line:`${line}+`,type:field==='shots'?'Shots Milestones':'Shots on Target Milestones',probability,lower:Math.max(0,center-margin),upper:Math.min(1,center+margin),
+        detail:`${games.filter(g=>g[field]>=line).length}/${games.length} eerdere basiswedstrijden raak · gemiddeld ${Math.round(games.reduce((s,g)=>s+g.minutes,0)/games.length)} minuten. ${starters?'Bevestigde starter.':'Alleen geldig als hij start.'} Recente duels wegen zwaarder; onzekerheidsband is indicatief. Tegenstanderspecifieke schotcorrectie ontbreekt.`,games:games.length,conditionalOnStarting:true});
+    }
+    candidates.sort((a,b)=>b.lower-a.lower||b.games-a.games||a.title.localeCompare(b.title));
+    picks.push(candidates[0]||{market,title:'Onvoldoende wedstrijddata',detail:'Minimaal 5 eerdere basiswedstrijden met geregistreerde schoten nodig; seizoensgemiddelden worden niet als trefkans gebruikt.',probability:null});
+  }
+  if(model.available){
+    const yes=(1-Math.exp(-model.lambdaHome))*(1-Math.exp(-model.lambdaAway));
+    const t=model.lambdaHome+model.lambdaAway,under=Math.exp(-t)*(1+t+t*t/2);
+    picks.push({market:'Beide teams scoren',title:yes>=.5?'Ja':'Nee',probability:Math.max(yes,1-yes),detail:'Recente aanval/verdediging en thuis-/uitresultaten. Model nog niet gekalibreerd.'},
+      {market:'Totaal doelpunten',title:under>=.5?'Under 2,5 goals':'Over 2,5 goals',probability:Math.max(under,1-under),detail:`${t.toFixed(2)} verwachte goals uit historische uitslagen; geen gemeten xG.`});
+  }else for(const market of ['Beide teams scoren','Totaal doelpunten'])picks.push({market,title:'Onvoldoende data',detail:model.reason,probability:null});
+  return picks;
+}
+
+function attachQuoteChecks(picks,props,odds){
+  return picks.map(p=>{
+    const quote=p.player?props.find(x=>x.name===p.player)?.markets?.find(x=>x.type===p.type&&x.line===p.line):
+      p.market==='Totaal doelpunten'&&odds?.totalLine===2.5?{odds:p.title.startsWith('Over')?odds.overOdds:odds.underOdds,provider:odds.totalProvider,freshness:quoteFreshness(odds.totalSourceUpdatedAt)}:null;
+    const valid=quote?.freshness==='recent'&&Number.isFinite(quote.odds)&&quote.odds>1&&p.probability!=null;
+    return {...p,quote:quote||null,valueCheck:valid?{expectedReturn:p.probability*quote.odds-1,conservativeReturn:p.lower!=null?p.lower*quote.odds-1:null,status:'uncalibrated_estimate'}:{status:'no_verified_current_quote'}};
+  });
 }
 
 // Use only completed, dated fixtures strictly before this match. Dates alone
@@ -326,6 +400,7 @@ async function fetchOdds(env, apiId, compId) {
         draw: has1x2 ? draw : null,
         away: has1x2 ? away : null,
         totalProvider: dk?.provider?.name || null,
+        totalSourceUpdatedAt: dk?.lastUpdated || null,
         fetchedAt: new Date(usable?snapshot.fetchedAt:Date.now()).toISOString(),
         sourceUpdatedAt: pick?.lastUpdated || null,
         freshness: quoteFreshness(pick?.lastUpdated),
@@ -548,6 +623,12 @@ async function ingestEspn(env, body) {
   // Nieuws: gewoon overschrijven met de laatste scrape (geen geschiedenis
   // nodig, alleen de meest recente koppen zijn relevant als AI-context).
   await kvPut(env, 'espn_news', { news: incomingNews, updatedAt: now.toISOString() });
+  if(Array.isArray(body.playerGames)){
+    const previous=await kvGet(env,'player_games',[]);
+    const rows=new Map(previous.map(g=>[`${g.eventId}:${g.playerId}`,g]));
+    for(const g of body.playerGames)rows.set(`${g.eventId}:${g.playerId}`,g);
+    await kvPut(env,'player_games',[...rows.values()].filter(g=>Date.now()-Date.parse(g.date)<180*86400000));
+  }
 
   await kvPut(env, 'meta_espn', { lastRun: now.toISOString(), totalMatches: matches.length, totalPlayers: incomingPlayers.length });
   return { ok: true, matches: matches.length, players: incomingPlayers.length };
@@ -610,11 +691,12 @@ export default {
     // odds — deze databron levert die niet.
     if (url.pathname === '/predict') {
       const apiId = url.searchParams.get('apiId');
-      const [matchesData, standingsData, playersData, newsData] = await Promise.all([
+      const [matchesData, standingsData, playersData, newsData, playerGames] = await Promise.all([
         kvGet(env, 'espn_matches', { matches: [] }),
         kvGet(env, 'espn_standings', { standings: [] }),
         kvGet(env, 'espn_players', { players: [] }),
         kvGet(env, 'espn_news', { news: [] }),
+        kvGet(env, 'player_games', []),
       ]);
       const match = (matchesData.matches || []).find(m => String(m.apiId) === String(apiId));
       if (!match) return json({ error: 'wedstrijd niet gevonden' }, 404);
@@ -622,7 +704,7 @@ export default {
       const fullTable = (standingsData.standings || [])
         .filter(s => s.compName === match.compName)
         .sort((a, b) => a.position - b.position);
-      const h2h = computeH2H(matchesData.matches || [], match.h, match.a);
+      const h2h = computeH2H((matchesData.matches || []).filter(m=>m.date<match.date), match.h, match.a);
       const relevantPlayers = (playersData.players || []).filter(p => p.team === match.h || p.team === match.a);
       const [referee, odds, propsResult, lineups] = await Promise.all([
         fetchReferee(env, match.apiId, match.compId),
@@ -630,7 +712,7 @@ export default {
         fetchPlayerProps(env, match.apiId, match.compId, relevantPlayers),
         fetchLineups(env, match.apiId, match.compId),
       ]);
-      const base = buildMatchBase(match, standingsData.standings, playersData.players, lineups, newsData.news, matchesData.matches, matchesData.updatedAt);
+      const base = buildMatchBase(match, standingsData.standings, playersData.players, lineups, newsData.news, matchesData.matches, matchesData.updatedAt,playerGames);
       const { players: propsAll, btts, teamGoals } = propsResult;
       const homeNames = new Set(relevantPlayers.filter(p => p.team === match.h).map(p => p.name));
       const props = {
@@ -666,6 +748,7 @@ Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
       return json({
         match: base.matchInfo,
         model: base.model,
+        recommendations:attachQuoteChecks(base.recommendations,propsAll,odds),
         recentForm: base.recentForm,
         dataSource: base.dataSource,
         players: { home: base.homePlayers, away: base.awayPlayers },
@@ -689,18 +772,19 @@ Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
       const ids = (url.searchParams.get('ids') || '').split(',').map(s => s.trim()).filter(Boolean);
       if (!ids.length) return json({ error: 'geen apiId\'s opgegeven (?ids=a,b,c)' }, 400);
 
-      const [matchesData, standingsData, playersData, newsData] = await Promise.all([
+      const [matchesData, standingsData, playersData, newsData, playerGames] = await Promise.all([
         kvGet(env, 'espn_matches', { matches: [] }),
         kvGet(env, 'espn_standings', { standings: [] }),
         kvGet(env, 'espn_players', { players: [] }),
         kvGet(env, 'espn_news', { news: [] }),
+        kvGet(env, 'player_games', []),
       ]);
 
       const matchesFound = ids
         .map(id => (matchesData.matches || []).find(m => String(m.apiId) === String(id)))
         .filter(Boolean);
       const lineupsPerMatch = await Promise.all(matchesFound.map(m => fetchLineups(env, m.apiId, m.compId)));
-      const bases = matchesFound.map((match, i) => buildMatchBase(match, standingsData.standings, playersData.players, lineupsPerMatch[i], newsData.news, matchesData.matches, matchesData.updatedAt));
+      const bases = matchesFound.map((match, i) => buildMatchBase(match, standingsData.standings, playersData.players, lineupsPerMatch[i], newsData.news, matchesData.matches, matchesData.updatedAt,playerGames));
 
       if (!bases.length) return json({ error: 'geen van de opgegeven wedstrijden gevonden' }, 404);
 

@@ -707,6 +707,7 @@ function renderPredictionBlock(target, m, d){
 }
 
 function quickMatchPicks(d){
+  if(Array.isArray(d.recommendations)) return d.recommendations;
   const picks = [];
   for(const [field,label,market] of [['shotsAvg','schoten','Speler-schoten'],['sotAvg','schoten op doel','Speler op doel']]){
     const players = [...(d.players?.home || []),...(d.players?.away || [])]
@@ -747,6 +748,9 @@ function renderQuickPicks(target,d){
     card.append(label,title);
     if(pick.probability != null){
       const prob = document.createElement('div'); prob.textContent=`${Math.round(pick.probability*100)}% modelkans · faire odd ${(1/pick.probability).toFixed(2)}`; prob.style.marginBottom='7px'; card.append(prob);
+      if(pick.lower!=null){const band=document.createElement('p');band.className='pp';band.textContent=`Indicatieve 95%-band: ${Math.round(pick.lower*100)}–${Math.round(pick.upper*100)}%.`;card.append(band);}
+      const value=document.createElement('p');value.className='pp';
+      value.textContent=pick.valueCheck?.status==='uncalibrated_estimate'?`Daarna de odd-check: ${(pick.valueCheck.expectedReturn*100).toFixed(1)}% geschat rendement per inzet. Model nog niet gekalibreerd; geen bewezen voordeel.`:'Odd-check: niet beoordeelbaar zonder geverifieerde actuele quote. De statistische keuze staat hiervan los.';card.append(value);
     }
     card.append(detail);
     if(pick.market.startsWith('Speler')){

@@ -16,6 +16,7 @@
 //    scrape-run met 100+ actieve competities veel te lang duren. Wedstrijden
 //    uit niet-prioritaire competities worden dus wel getoond, alleen zonder
 //    speler-schotenvoorspelling.
+import {collectPlayerHistory} from './player-history.mjs';
 const PRIORITY_LEAGUES = new Set([
   'ned.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf',
   'uefa.champions_qual', 'uefa.europa_qual', 'uefa.europa.conf_qual',
@@ -29,9 +30,11 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const BASE = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues';
 
 async function getJson(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) return null;
-  try { return await res.json(); } catch { return null; }
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20000) });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
 }
 
 // Competitienieuws: ESPN's "site.api" (i.t.t. de core-API hierboven, NIET
@@ -311,6 +314,7 @@ async function main() {
   const allPlayers = results.flatMap(r => r.players);
   const allStandings = results.flatMap(r => r.standings || []);
   const allNews = results.flatMap(r => r.news || []);
+  const playerGames=await collectPlayerHistory(allMatches,allPlayers,getJson,pool);
   const oddsMatches = allMatches.filter(m=>!m.finished && m.date >= new Date().toISOString().slice(0,10) && PRIORITY_LEAGUES.has(m.compId))
     .sort((a,b)=>a.date.localeCompare(b.date)).slice(0,100);
   const marketDocuments = (await pool(oddsMatches,4,async m=>{
@@ -337,7 +341,7 @@ async function main() {
   })).filter(Boolean);
   console.error(`Odds documents: ${marketDocuments.length}/${oddsMatches.length}; events: ${marketDocuments.map(d=>d.eventId).join(',')}`);
   console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers, ${allStandings.length} standen, ${allNews.length} nieuwsartikelen uit ${allSlugs.length} competities`);
-  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, news: allNews, marketDocuments, updatedAt: new Date().toISOString() }));
+  process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, news: allNews, marketDocuments, playerGames, updatedAt: new Date().toISOString() }));
 }
 
 main();
