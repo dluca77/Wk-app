@@ -311,13 +311,13 @@ async function main() {
   const allPlayers = results.flatMap(r => r.players);
   const allStandings = results.flatMap(r => r.standings || []);
   const allNews = results.flatMap(r => r.news || []);
-  const oddsMatches = allMatches.filter(m=>!m.finished && PRIORITY_LEAGUES.has(m.compId))
+  const oddsMatches = allMatches.filter(m=>!m.finished && m.date >= new Date().toISOString().slice(0,10) && PRIORITY_LEAGUES.has(m.compId))
     .sort((a,b)=>a.date.localeCompare(b.date)).slice(0,100);
   const marketDocuments = (await pool(oddsMatches,4,async m=>{
     try {
       const id=String(m.apiId).replace(/^espn_/,'');
       const response=await fetch(`${BASE}/${m.compId}/events/${id}/competitions/${id}/odds?lang=en&region=us`,{signal:AbortSignal.timeout(15000)});
-      if(!response.ok) return null;
+      if(!response.ok){console.error(`Odds ${m.apiId}: HTTP ${response.status}`);return null;}
       const odds=await response.json();
       const ref=odds.items?.find(i=>i.provider?.name==='DraftKings')?.propBets?.$ref;
       let props=null;
@@ -335,6 +335,7 @@ async function main() {
       return {eventId:id,odds,props,fetchedAt:Date.now()};
     }catch(e){console.error(`Odds ${m.apiId}: ${e.message}`);return null;}
   })).filter(Boolean);
+  console.error(`Odds documents: ${marketDocuments.length}/${oddsMatches.length}; events: ${marketDocuments.map(d=>d.eventId).join(',')}`);
   console.error(`totaal: ${allMatches.length} wedstrijden, ${allPlayers.length} spelers, ${allStandings.length} standen, ${allNews.length} nieuwsartikelen uit ${allSlugs.length} competities`);
   process.stdout.write(JSON.stringify({ matches: allMatches, players: allPlayers, standings: allStandings, news: allNews, marketDocuments, updatedAt: new Date().toISOString() }));
 }
