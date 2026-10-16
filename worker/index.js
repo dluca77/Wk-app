@@ -300,34 +300,57 @@ function americanToDecimal(american) {
 async function fetchOdds(env, apiId, compId) {
   const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
   if (!eventId || !compId) return null;
-  const cacheKey = `odds_${eventId}`;
+  const cacheKey = `odds_v2_${eventId}`;
   const cached = await kvGet(env, cacheKey, null);
   if (cached && (Date.now() - cached.fetchedAt) < 10 * 60 * 1000) return cached.odds;
   try {
     const res = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);
+    if (!res.ok) throw new Error(`ESPN HTTP ${res.status}`);
     const data = await res.json();
     const items = data?.items || [];
     const pick = items.find(i => /bet ?365/i.test(i.provider?.name || '')) || items.find(i => i.provider?.name === 'DraftKings') || items[0];
     const dk = items.find(i => i.provider?.name === 'DraftKings'); // alleen DraftKings heeft overUnder op dit niveau
     const hasTotal = dk?.overUnder != null;
-    const has1x2 = pick?.homeTeamOdds?.odds?.value && pick?.awayTeamOdds?.odds?.value && pick?.drawOdds?.value;
+    const decimal = v => Number.isFinite(Number(v)) && Number(v) > 1 ? Number(v) : null;
+    const home = decimal(pick?.homeTeamOdds?.current?.moneyLine?.decimal ?? pick?.homeTeamOdds?.current?.moneyLine?.value) ?? americanToDecimal(pick?.homeTeamOdds?.moneyLine);
+    const away = decimal(pick?.awayTeamOdds?.current?.moneyLine?.decimal ?? pick?.awayTeamOdds?.current?.moneyLine?.value) ?? americanToDecimal(pick?.awayTeamOdds?.moneyLine);
+    const draw = decimal(pick?.current?.draw?.decimal ?? pick?.current?.draw?.value) ?? americanToDecimal(pick?.drawOdds?.moneyLine);
+    const has1x2 = home && away && draw;
     let odds = null;
     if (has1x2 || hasTotal) {
       odds = {
         provider: pick?.provider?.name || 'onbekend',
-        home: has1x2 ? pick.homeTeamOdds.odds.value : null,
-        draw: has1x2 ? pick.drawOdds.value : null,
-        away: has1x2 ? pick.awayTeamOdds.odds.value : null,
+        home: has1x2 ? home : null,
+        draw: has1x2 ? draw : null,
+        away: has1x2 ? away : null,
+        totalProvider: dk?.provider?.name || null,
+        fetchedAt: new Date().toISOString(),
+        sourceUpdatedAt: pick?.lastUpdated || null,
+        freshness: quoteFreshness(pick?.lastUpdated),
         totalLine: hasTotal ? dk.overUnder : null,
-        overOdds: hasTotal ? americanToDecimal(dk.overOdds) : null,
-        underOdds: hasTotal ? americanToDecimal(dk.underOdds) : null,
+        overOdds: hasTotal ? decimal(dk.current?.over?.decimal ?? dk.current?.over?.value) ?? americanToDecimal(dk.overOdds) : null,
+        underOdds: hasTotal ? decimal(dk.current?.under?.decimal ?? dk.current?.under?.value) ?? americanToDecimal(dk.underOdds) : null,
       };
     }
-    await kvPut(env, cacheKey, { odds, fetchedAt: Date.now() });
-    return odds;
+    await kvPut(env, cacheKey, { odds:odds || {status:'unavailable'}, fetchedAt: Date.now() });
+    return odds || {status:'unavailable'};
   } catch {
-    return null;
+    return {status:'fetch_failed'};
   }
+}
+
+function quoteFreshness(updatedAt, now = Date.now()) {
+  const time = Date.parse(updatedAt);
+  if (!Number.isFinite(time) || time > now + 60000) return 'unknown';
+  return now - time > 60 * 60 * 1000 ? 'stale' : 'recent';
+}
+
+function factualAnalysis(base) {
+  if(!base.model.available) return base.model.reason + ' Er wordt geen favoriet berekend.';
+  const m=base.model, total=m.lambdaHome+m.lambdaAway;
+  const over=1-Math.exp(-total)*(1+total+total*total/2);
+  const btts=(1-Math.exp(-m.lambdaHome))*(1-Math.exp(-m.lambdaAway));
+  return `Modelkansen thuis/gelijk/uit: ${(m.pHome*100).toFixed(1)}% / ${(m.pDraw*100).toFixed(1)}% / ${(m.pAway*100).toFixed(1)}%. Verwachte goals: ${m.lambdaHome.toFixed(2)} thuis en ${m.lambdaAway.toFixed(2)} uit, samen ${total.toFixed(2)}. Over 2,5 goals: ${(over*100).toFixed(1)}%; beide teams scoren: ${(btts*100).toFixed(1)}%. Gebaseerd op ${m.evidence.homeGames} en ${m.evidence.awayGames} competitiewedstrijden; dit is geen gemeten xG. ${base.lineupKnown ? 'Opstellingsinformatie beschikbaar.' : 'Basisopstelling onbevestigd.'} Spelergemiddelden zijn geen trefkansen; er is geen geverifieerde value-bet vastgesteld.`;
 }
 
 // Speler-props (DraftKings): schoten 1+/2+/3+, schoten-op-doel, anytime
@@ -339,8 +362,8 @@ const MATCH_MARKET_TYPES = ['Both Teams To Score', 'Team Total Goals'];
 
 async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
   const eventId = String(apiId || '').match(/^espn_(\d+)$/)?.[1];
-  if (!eventId || !compId) return [];
-  const cacheKey = `props_${eventId}`;
+  if (!eventId || !compId) return {players:[], btts:null, teamGoals:{home:null,away:null},status:'unavailable'};
+  const cacheKey = `props_v2_${eventId}`;
   const cached = await kvGet(env, cacheKey, null);
   let raw, homeTeamId, awayTeamId;
   if (cached && (Date.now() - cached.fetchedAt) < 10 * 60 * 1000) {
@@ -348,6 +371,7 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
   } else {
     try {
       const oddsRes = await fetch(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${compId}/events/${eventId}/competitions/${eventId}/odds?lang=en&region=us`);
+      if (!oddsRes.ok) throw new Error(`ESPN HTTP ${oddsRes.status}`);
       const oddsData = await oddsRes.json();
       const dk = (oddsData?.items || []).find(i => i.provider?.name === 'DraftKings');
       homeTeamId = dk?.homeTeamOdds?.team?.$ref?.match(/teams\/(\d+)/)?.[1] || null;
@@ -355,9 +379,16 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
       const propsRef = dk?.propBets?.$ref;
       if (!propsRef) { raw = []; }
       else {
-        const propsRes = await fetch(`${propsRef}&limit=1000`);
+        const propsRes = await fetch(`${propsRef.replace(/^http:/,'https:')}&limit=1000`);
+        if (!propsRes.ok) throw new Error(`ESPN props HTTP ${propsRes.status}`);
         const propsData = await propsRes.json();
-        raw = (propsData?.items || [])
+        const propItems = [...(propsData?.items || [])];
+        for(let page=2;page <= (propsData.pageCount || 1);page++){
+          const pageRes = await fetch(`${propsRef.replace(/^http:/,'https:')}&limit=1000&page=${page}`);
+          if(!pageRes.ok) throw new Error('ESPN props page failed');
+          propItems.push(...((await pageRes.json()).items || []));
+        }
+        raw = propItems
           .filter(it => PROP_TYPES.includes(it.type?.name) || MATCH_MARKET_TYPES.includes(it.type?.name))
           .map(it => ({
             athleteId: it.athlete?.$ref?.match(/athletes\/(\d+)/)?.[1],
@@ -365,12 +396,14 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
             type: it.type?.name,
             odds: it.current?.over?.value,
             target: it.current?.target?.displayValue,
+            updatedAt: it.lastUpdated || null,
+            selection: it.current?.target?.displayValue || it.description || null,
           }))
           .filter(it => it.odds);
       }
       await kvPut(env, cacheKey, { raw, homeTeamId, awayTeamId, fetchedAt: Date.now() });
     } catch {
-      raw = []; homeTeamId = null; awayTeamId = null;
+      return {players:[],btts:null,teamGoals:{home:null,away:null},status:'fetch_failed'};
     }
   }
 
@@ -385,8 +418,11 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
   for (const r of raw) {
     const name = nameById.get(r.athleteId);
     if (!name) continue;
-    if (!byPlayer.has(name)) byPlayer.set(name, { name });
+    if (!byPlayer.has(name)) byPlayer.set(name, { name, markets:[] });
     const entry = byPlayer.get(name);
+    entry.markets.push({type:r.type,line:r.target || null,odds:r.odds,provider:'DraftKings',sourceUpdatedAt:r.updatedAt,freshness:quoteFreshness(r.updatedAt)});
+    // Legacy scalar fields are retained only for recent, timestamped quotes.
+    if(quoteFreshness(r.updatedAt) !== 'recent') continue;
     if (r.type === 'Anytime Goalscorer') entry.anytimeScorer = r.odds;
     else if (r.type === 'Shots Milestones' && r.target === '1+') entry.shots1plus = r.odds;
     else if (r.type === 'Shots on Target Milestones' && r.target === '1+') entry.sot1plus = r.odds;
@@ -398,10 +434,12 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
   // (eerste gevonden lijn — DraftKings levert soms meerdere lijnen per team,
   // we pakken gewoon de eerste als "primaire" lijn).
   const bttsItems = raw.filter(r => r.type === 'Both Teams To Score');
-  const btts = bttsItems.length >= 2 ? { yes: bttsItems[0].odds, no: bttsItems[1].odds } : null;
+  const yes = bttsItems.find(r => /^yes$/i.test(r.selection || '') && quoteFreshness(r.updatedAt)==='recent');
+  const no = bttsItems.find(r => /^no$/i.test(r.selection || '') && quoteFreshness(r.updatedAt)==='recent');
+  const btts = yes && no ? {yes:yes.odds,no:no.odds,provider:'DraftKings'} : null;
   const teamGoalsByTeamId = new Map();
   for (const r of raw) {
-    if (r.type !== 'Team Total Goals' || !r.teamId) continue;
+    if (r.type !== 'Team Total Goals' || !r.teamId || !/^over\s+\d+(\.\d+)?$/i.test(r.target || '') || quoteFreshness(r.updatedAt)!=='recent') continue;
     if (!teamGoalsByTeamId.has(r.teamId)) teamGoalsByTeamId.set(r.teamId, { line: r.target, overOdds: r.odds });
   }
   const teamGoals = {
@@ -409,7 +447,7 @@ async function fetchPlayerProps(env, apiId, compId, playersByTeam) {
     away: awayTeamId ? teamGoalsByTeamId.get(awayTeamId) || null : null,
   };
 
-  return { players: [...byPlayer.values()], btts, teamGoals };
+  return { players: [...byPlayer.values()], btts, teamGoals, status:raw.length ? 'available' : 'unavailable', bttsStatus:btts ? 'available' : bttsItems.length ? 'unverified_or_stale' : 'unavailable' };
 }
 
 function singleMatchPromptBlock(b) {
@@ -615,7 +653,7 @@ ${bttsLine}
 ${teamGoalsLine ? `Doelpunten per team: ${teamGoalsLine}.` : ''}
 ${propsLine}
 Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook naar de stand, het onderlinge duel-verleden en de bookmaker-odds als die er zijn — is er een value bet, d.w.z. wijkt het model duidelijk af van wat de odds impliceren?), of beide teams waarschijnlijk scoren en hoeveel doelpunten er ongeveer verwacht worden, welke 1-2 spelers interessant zijn voor schoten/doelpunten, en of er spelers opvallen qua corners of kaarten. Als het nieuws hierboven iets relevants meldt (blessure, schorsing, transfer, rust geven aan een speler, trainerswissel) weeg dat expliciet mee en noem het kort. Als de basisopstelling nog niet bevestigd is, benoem dat expliciet als risico bij elke speler-suggestie (die speler moet dan nog wel echt starten). Wees kritisch — het model is simpel en geen garantie, en de speler-sample kan nog klein zijn.`;
-      const analysis = await runAi(env, prompt);
+      const analysis = factualAnalysis(base);
 
       return json({
         match: base.matchInfo,
@@ -630,6 +668,7 @@ Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
         btts,
         teamGoals,
         props,
+        marketStatus: {odds:odds?.status || (odds ? 'available' : 'unavailable'),props:propsResult.status,btts:propsResult.bttsStatus || 'unavailable'},
         analysis,
       });
     }
@@ -660,7 +699,7 @@ Geef in maximaal 6 zinnen Nederlandstalige analyse: wie is favoriet (kijk ook na
       const prompt = `Je bent een nuchtere voetbalanalist. Hieronder staan ${bases.length} wedstrijden met modelkansen en topschutters.
 ${bases.map((b, i) => `${i + 1}. ${singleMatchPromptBlock(b)}`).join('\n')}
 Geef een Nederlandstalige analyse (max 6 zinnen): welke 1-2 wedstrijden uit dit lijstje hebben de duidelijkste favoriet, en welke 1-2 spelers uit het geheel zijn het interessantst om op te letten voor schoten/doelpunten. Wees kritisch — het model is simpel en geen garantie.`;
-      const analysis = await runAi(env, prompt);
+      const analysis = bases.map(b => `${b.matchInfo.h} — ${b.matchInfo.a}: ${factualAnalysis(b)}`).join('\n\n');
 
       return json({
         matches: bases.map(b => ({ match: b.matchInfo, model: b.model, players: { home: b.homePlayers, away: b.awayPlayers } })),

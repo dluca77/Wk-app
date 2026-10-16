@@ -749,6 +749,9 @@ function renderQuickPicks(target,d){
     card.append(detail); grid.append(card);
   }
   target.append(grid);
+  const status=document.createElement('p'); status.className='pp';
+  status.textContent=d.marketStatus?.odds==='fetch_failed'?'Bookmakergegevens ophalen mislukt.':d.odds?.provider?`Oddsbron: ${d.odds.provider}. Actualiteit: ${d.odds.freshness==='recent'?'minder dan 1 uur oud':d.odds.freshness==='stale'?'verouderd':'brontijd onbekend'}.`:'Geen bookmaker-odds beschikbaar.';
+  target.append(status);
   const note=document.createElement('p'); note.className='pp'; note.textContent='Suggesties op basis van beschikbare cijfers. Zonder actuele odds geen bewezen beste bet. De vier opties zijn geen aanbevolen combinatie.'; target.append(note);
 }
 
@@ -789,8 +792,8 @@ async function openMatch(apiId){
       const edgeChip = (label, decOdds, modelP) => {
         const impliedPct = imp(decOdds);
         const edge = Math.round(modelP*100) - impliedPct;
-        const val = edge >= 5 ? ' style="border-color:var(--mint);box-shadow:0 0 0 1px var(--mint) inset"' : '';
-        return `<div class="probchip"${val}><div class="l">${label}</div><div class="v">${decOdds}</div><div class="pp" style="margin-top:2px">${impliedPct}% impl.${edge>=5?` · +${edge}%`:''}</div></div>`;
+        const val = '';
+        return `<div class="probchip"${val}><div class="l">${label}</div><div class="v">${decOdds ?? 'Niet beschikbaar'}</div><div class="pp" style="margin-top:2px">${impliedPct}% impliciet, inclusief bookmaker-marge</div></div>`;
       };
       html += `<div class="section"><h3>Odds (${d.odds.provider})</h3>
         <div class="probrow">
@@ -843,8 +846,8 @@ async function openMatch(apiId){
     }
     if(d.odds && d.odds.totalLine){
       html += `<div class="section"><h3>Goals over/under ${d.odds.totalLine}</h3><div class="probrow">
-        <div class="probchip"><div class="l">Over</div><div class="v">${d.odds.overOdds}</div></div>
-        <div class="probchip"><div class="l">Under</div><div class="v">${d.odds.underOdds}</div></div>
+        <div class="probchip"><div class="l">Over</div><div class="v">${d.odds.overOdds ?? 'Niet beschikbaar'}</div></div>
+        <div class="probchip"><div class="l">Under</div><div class="v">${d.odds.underOdds ?? 'Niet beschikbaar'}</div></div>
       </div></div>`;
     }
     if(d.btts){
@@ -880,6 +883,17 @@ async function openMatch(apiId){
       html += `<div class="section"><h3>Referee</h3><div class="ai" style="padding:10px 14px">${d.referee}</div></div>`;
     }
     document.getElementById('match-details').insertAdjacentHTML('beforeend', html);
+    const marketList=document.createElement('section'); marketList.className='section';
+    const marketTitle=document.createElement('h3'); marketTitle.textContent='Speler-odds · beschikbare lijnen'; marketList.append(marketTitle);
+    for(const p of [...(d.props?.home || []),...(d.props?.away || [])]){
+      const markets=(p.markets || []).filter(x=>['Shots Milestones','Shots on Target Milestones'].includes(x.type));
+      if(!markets.length) continue;
+      const row=document.createElement('p');
+      row.textContent=`${p.name}: `+markets.map(x=>`${x.line ?? 'lijn onbekend'} ${x.type==='Shots Milestones'?'schoten':'op doel'} @${x.odds} (${x.provider}; ${x.freshness==='recent'?'recent':x.freshness==='stale'?'verouderd':'actualiteit onbekend'}; ${x.sourceUpdatedAt || 'geen brontijd'})`).join(' · ');
+      marketList.append(row);
+    }
+    if(marketList.children.length===1){const p=document.createElement('p');p.textContent=d.marketStatus?.props==='fetch_failed'?'Spelermarkten ophalen mislukt.':'Geen verifieerbare speler-odds beschikbaar.';marketList.append(p);}
+    document.getElementById('match-details').append(marketList);
   }catch(e){
     document.getElementById('quick-picks').textContent = 'Bet-opties konden niet worden geladen. Probeer opnieuw.';
     document.getElementById('predict-section').innerHTML = `<h3>Win probability</h3><div class="empty" style="padding:12px 0">Could not load prediction.</div>`;
