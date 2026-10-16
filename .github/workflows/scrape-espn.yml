@@ -21,6 +21,6 @@ jobs:
           RAW_SECRET: ${{ secrets.WORKER_REFRESH_SECRET }}
         run: |
           CLEAN_SECRET=$(printf '%s' "$RAW_SECRET" | tr -d '[:space:]')
-          curl -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ingest?key=$CLEAN_SECRET" \
+          curl --fail-with-body -sS -X POST "https://wk2026-proxy.isaak-elia.workers.dev/ingest?key=$CLEAN_SECRET" \
             -H "Content-Type: application/json" \
             --data @espn-data.json

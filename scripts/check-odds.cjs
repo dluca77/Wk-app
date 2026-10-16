@@ -14,6 +14,12 @@ const env={WK_CACHE:{get:async()=>null,put:async()=>{}}};
   assert.equal((await ctx.fetchOdds(env,'espn_1','esp.1')).status,'fetch_failed');
   assert.equal((await ctx.fetchPlayerProps(env,'espn_1','esp.1',[])).status,'fetch_failed');
   assert.equal((await ctx.fetchPlayerProps(env,'bad','esp.1',[])).players.length,0);
+  const saved={eventId:'1',fetchedAt:Date.now(),odds:fixture,props:{items:[],pageCount:1}};
+  const stored={WK_CACHE:{get:async key=>key==='market_document_1'?saved:null,put:async()=>{}}};
+  // Network remains unavailable: ingestion snapshot must still serve quotes.
+  assert.equal((await ctx.fetchOdds(stored,'espn_1','esp.1')).home,2.1);
+  saved.fetchedAt=Date.now()-31*60*1000;
+  assert.equal((await ctx.fetchOdds(stored,'espn_1','esp.1')).status,'fetch_failed');
   ctx.fetch=fetch;
   if(process.argv.includes('--live')){
     const live=await ctx.fetchOdds(env,'espn_401882844','esp.1');
