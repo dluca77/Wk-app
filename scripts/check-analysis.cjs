@@ -45,9 +45,7 @@ const emptyPicks=context.quickMatchPicks({model:{available:false},players:{home:
 assert.equal(emptyPicks.length,4);
 assert.ok(emptyPicks.every(p=>p.probability===null));
 const picks=context.quickMatchPicks({model:{available:true,lambdaHome:1.5,lambdaAway:1},players:{home:[{name:'A',apps:10,shotsAvg:3,sotAvg:1.2,starter:true}],away:[]}});
-assert.equal(picks[0].title,'A · 2+ schoten');
-assert.equal(picks[1].title,'A · 1+ schoten op doel');
-assert.equal(picks[2].title,'Nee');
-assert.equal(picks[3].title,'Under 2,5 goals');
-assert.ok(picks[3].probability>.5 && picks[3].probability<1);
-console.log('Passed: quick picks, player thresholds, missing data and Poisson markets.');
+assert.ok(picks.every(p=>p.probability===null));
+const recommendations=[{title:'Historical choice',probability:.6}];
+assert.equal(context.quickMatchPicks({recommendations})[0].title,'Historical choice');
+console.log('Passed: quick picks use historical server estimates and never fall back to season averages.');

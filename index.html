@@ -708,30 +708,7 @@ function renderPredictionBlock(target, m, d){
 
 function quickMatchPicks(d){
   if(Array.isArray(d.recommendations)) return d.recommendations;
-  const picks = [];
-  for(const [field,label,market] of [['shotsAvg','schoten','Speler-schoten'],['sotAvg','schoten op doel','Speler op doel']]){
-    const players = [...(d.players?.home || []),...(d.players?.away || [])]
-      .filter(p=>p.apps >= 5 && Number.isFinite(p[field]) && p[field] >= 1)
-      .sort((a,b)=>Number(b.starter)-Number(a.starter) || b[field]-a[field]);
-    const p = players[0];
-    if(p){
-      const line = field === 'shotsAvg' && p[field] >= 2.5 ? 2 : 1;
-      const prop=[...(d.props?.home||[]),...(d.props?.away||[])].find(x=>x.name===p.name);
-      const quote=prop?.markets?.find(x=>x.line===`${line}+` && x.type===(field==='shotsAvg'?'Shots Milestones':'Shots on Target Milestones'));
-      picks.push({market, quote, title:`${p.name} · ${line}+ ${label}`, detail:`${p[field].toFixed(2)} gemiddeld per wedstrijd · ${p.apps} wedstrijden. ${p.starter ? 'Bevestigde starter.' : 'Alleen overwegen als hij start; opstelling onbevestigd.'} Gemiddelde is geen trefkans.`, probability:null});
-    } else picks.push({market,title:'Nog geen onderbouwde keuze',detail:'Minimaal 5 wedstrijden en voldoende geregistreerde schoten nodig.',probability:null});
-  }
-  const model = d.model;
-  if(model?.available !== false && Number.isFinite(model?.lambdaHome) && Number.isFinite(model?.lambdaAway)){
-    const yes = (1-Math.exp(-model.lambdaHome))*(1-Math.exp(-model.lambdaAway));
-    picks.push({market:'Beide teams scoren', title:yes >= .5 ? 'Ja' : 'Nee', probability:Math.max(yes,1-yes),detail:'Poisson-model op basis van competitiedoelpunten.'});
-    const sum = model.lambdaHome + model.lambdaAway;
-    const under = Math.exp(-sum)*(1+sum+sum*sum/2);
-    picks.push({market:'Totaal doelpunten', title:under >= .5 ? 'Under 2,5 goals' : 'Over 2,5 goals',probability:Math.max(under,1-under),detail:`${sum.toFixed(2)} verwachte goals volgens model; geen gemeten xG.`});
-  } else {
-    for(const market of ['Beide teams scoren','Totaal doelpunten']) picks.push({market,title:'Onvoldoende data',detail:'Geen kansberekening beschikbaar.',probability:null});
-  }
-  return picks;
+  return ['Speler-schoten','Speler op doel','Beide teams scoren','Totaal doelpunten'].map(market=>({market,title:'Onvoldoende data',detail:'Geen historische kansberekening ontvangen. Vernieuw de analyse; er wordt niet teruggevallen op gemiddelden of odds.',probability:null}));
 }
 
 function renderQuickPicks(target,d){
