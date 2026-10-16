@@ -94,10 +94,10 @@ function toNlDateTime(isoUtc) {
 
 // Datumvenster: 10 dagen terug (voor vorm/season-stats) t/m 10 dagen vooruit
 // (aankomende wedstrijden). ESPN's core API accepteert een dash-range.
-function dateRange() {
+function dateRange(lookback = 10) {
   const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '');
   const now = new Date();
-  const from = new Date(now); from.setDate(from.getDate() - 10);
+  const from = new Date(now); from.setDate(from.getDate() - lookback);
   const to = new Date(now); to.setDate(to.getDate() + 10);
   return `${fmt(from)}-${fmt(to)}`;
 }
@@ -128,9 +128,14 @@ async function fetchLeagueInfo(slug) {
 
 // ---------- Fase 2a: wedstrijden voor één competitie (goedkoop) ----------
 async function scrapeMatches(slug, leagueName, leagueLogo, teamIdToName) {
-  const range = dateRange();
+  const historyLeagues = new Set(['eng.1','esp.1','ita.1','ger.1','fra.1','ned.1','uefa.champions','uefa.europa','uefa.europa.conf']);
+  const range = dateRange(historyLeagues.has(slug) ? 60 : 10);
   const eventsList = await getJson(`${BASE}/${slug}/events?lang=en&region=us&dates=${range}&limit=100`);
   const eventRefs = (eventsList?.items || []).map(i => i.$ref);
+  for(let page = 2; page <= (eventsList?.pageCount || 1); page++) {
+    const next = await getJson(`${BASE}/${slug}/events?lang=en&region=us&dates=${range}&limit=100&page=${page}`);
+    eventRefs.push(...(next?.items || []).map(i => i.$ref));
+  }
   const matches = (await pool(eventRefs, 8, async (ref) => {
     const ev = await getJson(ref);
     if (!ev) return null;

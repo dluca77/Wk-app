@@ -25,3 +25,18 @@ vm.runInContext(html.slice(html.indexOf('const TIER0_ORDER'), html.indexOf('func
 assert.ok(context.compSortKey('English Premier League','eng.1') < context.compSortKey('Dutch Eredivisie','ned.1'));
 assert.ok(context.compSortKey('Spanish LALIGA','esp.1') < context.compSortKey('UEFA Europa League','uefa.europa'));
 console.log('Passed: evidence gating, competition isolation, missing values, probability normalization, lineup filtering, priority ordering and browser script syntax.');
+const history = [
+  {apiId:'1',h:'Home',a:'Away',date:'2026-10-01',finished:true,result:'2-0',compId:'eng.1'},
+  {apiId:'1',h:'Home',a:'Away',date:'2026-10-01',finished:true,result:'2-0',compId:'eng.1'},
+  {apiId:'2',h:'Other',a:'Home',date:'2026-10-10',finished:true,result:'1-1',compId:'eng.1'},
+  {apiId:'3',h:'Home',a:'Other',date:'2026-10-16',finished:true,result:'9-0',compId:'eng.1'},
+  {apiId:'4',h:'Home',a:'Other',date:'2026-10-12',finished:true,result:'0-1',compId:'cup'},
+];
+const form = context.recentTeamForm(history,{date:'2026-10-16',compId:'eng.1'},'Home','home');
+assert.equal(form.recent.played,2);
+assert.equal(form.recent.goalsFor,3);
+assert.equal(form.recent.points,4);
+assert.equal(form.venue.played,1);
+assert.equal(form.daysSinceLastKnownMatch,4);
+assert.equal(context.recentTeamForm([], {date:'2026-10-16'},'Home','home').daysSinceLastKnownMatch,null);
+console.log('Passed: recent form, duplicate fixtures, competition/venue separation, same-day exclusion, latest known match and missing history.');

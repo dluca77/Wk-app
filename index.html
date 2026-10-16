@@ -747,6 +747,18 @@ async function openMatch(apiId){
         </div>
       </div>`;
     }
+    if(d.recentForm){
+      const formLine = (name, f) => `${name}: ${f.recent.played ? f.recent.games.map(g=>g.outcome).join(' · ') + ` — ${f.recent.goalsFor} voor / ${f.recent.goalsAgainst} tegen in ${f.recent.played} wedstrijden` : 'geen eerdere competitiewedstrijden beschikbaar'}. ${f.venue.played} thuis-/uitwedstrijden beschikbaar. ${f.daysSinceLastKnownMatch != null ? `${f.daysSinceLastKnownMatch} dagen sinds laatst bekende wedstrijd.` : ''}`;
+      const section = document.createElement('div');
+      section.className = 'section';
+      const title = document.createElement('h3'); title.textContent = 'Recente vorm · ESPN'; section.append(title);
+      for(const [name, form] of [[m.h,d.recentForm.home],[m.a,d.recentForm.away]]){
+        const line = document.createElement('p'); line.textContent = formLine(name,form); section.append(line);
+      }
+      const note = document.createElement('p'); note.className = 'pp';
+      note.textContent = `Nieuwste eerst; alleen beschikbare afgeronde wedstrijden vóór deze wedstrijd. Laatste import: ${d.dataSource?.updatedAt || 'onbekend'}. Historie kan onvolledig zijn.`;
+      section.append(note); html += section.outerHTML;
+    }
     if(d.analysis){
       html += `<div class="section"><h3>Analysis</h3><div class="ai">${d.analysis}</div></div>`;
     }
