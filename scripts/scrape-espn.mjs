@@ -181,6 +181,7 @@ async function scrapeMatches(slug, leagueName, leagueLogo, teamIdToName) {
       date, time,
       status: finished ? 'played' : live ? 'live' : 'fixture',
       live, finished, result,
+      playerRosterRefs: (comp.competitors || []).map(t=>({homeAway:t.homeAway,roster:t.roster})),
       venue: comp.venue?.fullName || '',
     };
   })).filter(Boolean);

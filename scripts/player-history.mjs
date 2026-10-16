@@ -14,17 +14,18 @@ export async function collectPlayerHistory(matches, players, getJson, pool){
   const rows=(await pool(selected,4,async m=>{
     if(cache[m.apiId]?.version===2)return cache[m.apiId].rows.filter(g=>wanted.has(g.playerId));
     const id=m.apiId.replace('espn_','');
-    const c=await getJson(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${m.compId}/events/${id}/competitions/${id}?lang=en&region=us`);
+    // Reuse roster references returned by the event feed already collected.
+    const c=m.playerRosterRefs?.length?{competitors:m.playerRosterRefs}:await getJson(`https://sports.core.api.espn.com/v2/sports/soccer/leagues/${m.compId}/events/${id}/competitions/${id}?lang=en&region=us`);
     if(!c?.competitors?.length)diagnostics.competitionMissing++;
     const out=[];let complete=true;
     for(const team of c?.competitors||[]){
       if(!team.roster?.$ref){complete=false;continue;}
-      const roster=await getJson(team.roster.$ref.replace('http:','https:'));
+      const roster=await getJson(team.roster.$ref);
       if(!roster?.entries){diagnostics.rosterMissing++;complete=false;continue;}
       const entries=roster.entries.filter(e=>e.period===0 && e.starter===true && e.statistics?.$ref);
       diagnostics.entries+=entries.length;
       out.push(...(await pool(entries,6,async e=>{
-        const d=await getJson(e.statistics.$ref.replace('http:','https:'));
+        const d=await getJson(e.statistics.$ref);
         if(!d?.splits?.categories){diagnostics.statsMissing++;complete=false;return null;}
         const stats=d.splits.categories.flatMap(c=>c.stats||[]);
         const value=name=>{const v=stats.find(s=>s.name===name)?.value;return Number.isFinite(v)?v:null;};
